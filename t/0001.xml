@@ -68,7 +68,7 @@
     <t id="4003">Assign Ship To Station</t>
     <t id="4004">Max Jumps From Home</t>
     <t id="4005">Serve Source Only</t>
-    <t id="4006">Enable purchases from player factories</t>
+    <t id="4006">Prefer purchases from player factories</t>
     <t id="4007">Collect from AI Factions</t>
     <t id="4008">Allow Build Storage</t>
     <t id="4009">Allow Resources</t>
@@ -91,7 +91,7 @@
     <t id="4103">Assign to the home station if it's the players.</t>
     <t id="4104">Max gate distance to buy.</t>
     <t id="4105">Will only serve the configured source station.</t>
-    <t id="4106">Use owned factories or warehouses only when this ware stock exceeds the configured percentage. Disabling excludes owned sources; NPC sources have a separate switch.</t>
+    <t id="4106">When enabled, prefer eligible owned factories or warehouses for main and secondary lots; use NPC supply for unavailable or insufficient owned supply. When disabled, eligible owned and NPC sources compete under the same distance and price rules. The owned stock threshold and all range, path and trade checks apply in both modes. The NPC source switch controls NPC sources only.</t>
     <t id="4107">Allows buys from AI Faction Stations.</t>
     <t id="4108">Allows buys for Station Build Storages.</t>
     <t id="4109">Allows buys for Resources.</t>
@@ -133,7 +133,7 @@
     <t id="4312">Native quote unavailable to this ship: station=%s ware=%s. Trade rules, activity blacklists, withdrawn quotes or reservations may apply; native query gives no finer reason.</t>
     <t id="4313">No compatible trade dock at %s for this ship; temporarily occupied berths do not count as incompatible.</t>
     <t id="4314">Cargo drones missing: neither this ship nor trading station %s has cargo drones for freight transfer.</t>
-    <t id="4315">Source ownership switch excludes supplier %s.</t>
+    <t id="4315">NPC purchases are disabled; NPC supplier %s is excluded.</t>
     <t id="4316">Supplier quote is invalid or has no remaining quantity, possibly reserved by other transports.</t>
     <t id="4320">%s: liquidated %s, %s units at average %s Cr/unit; credited player %s Cr. No station delivery occurred.</t>
     <t id="4321">%s: commit revalidation failed; no orders created. See adjacent COMMIT_CHECK records.</t>

@@ -20,6 +20,7 @@
             <param name="maxTrades" value="$order.$maxTrades"/>
             <param name="minCargoUsed" value="$order.$minCargoUsed"/>
             <param name="playerBuyMod" value="$order.$playerBuyMod"/>
+            <param name="playerStockThreshold" value="if $order.$playerStockThreshold? then $order.$playerStockThreshold else 50"/>
             <param name="searchDepth" value="$order.$searchDepth"/>
             <param name="corridorDepth" value="if $order.$corridorDepth? then $order.$corridorDepth else 2"/>
             <param name="corridorMarkup" value="if $order.$corridorMarkup? then $order.$corridorMarkup else 5"/>

@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<aiscript name="mule.fleet.wave" version="5">
+<aiscript name="mule.fleet.wave" version="6">
   <params><param name="hub"/></params>
+  <patch sinceversion="6"><return/></patch>
   <patch sinceversion="5"><return/></patch>
   <patch sinceversion="4"><return/></patch>
   <attention min="unknown"><actions>

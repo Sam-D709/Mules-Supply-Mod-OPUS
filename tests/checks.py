@@ -661,8 +661,8 @@ class XMLDispatchChecks(unittest.TestCase):
                 self.assertEqual(bool(ship['orders']),accepted)
                 if accepted:self.assertEqual(ship['orders'][0]['amount'],80)
 
-    def test_low_owned_stock_falls_back_to_npc_and_switch_disables_owned_sources(self):
-        for enabled,stock in ((True,10),(False,100)):
+    def test_low_owned_stock_falls_back_to_npc_with_priority_on_or_off(self):
+        for enabled,stock in ((True,10),(False,10)):
             with self.subTest(enabled=enabled):
                 e,home,fleet,hub=self.setup_market([80],[100]);ware=e.wares[0];ship,cfg=fleet[0]
                 own=e.offer(e.station('Own',home['sector']),ware,100,200,False)
@@ -670,6 +670,101 @@ class XMLDispatchChecks(unittest.TestCase):
                 cfg['allowPlayerSuppliers']=enabled;ship['defaultorder']['allowPlayerSuppliers']=enabled
                 self.dispatch(e,e.hub(home,fleet))
                 self.assertIs(ship['orders'][0]['offer'],e.sources[0])
+
+    def test_owned_priority_overrides_main_distance_in_either_candidate_order(self):
+        for enabled in (False,True):
+            for owned_first in (False,True):
+                with self.subTest(enabled=enabled,owned_first=owned_first):
+                    e,home,fleet,hub=self.setup_market([80],[100]);ship,cfg=fleet[0]
+                    remote=e.sector('Remote');e.connect(home['sector'],remote)
+                    own=e.offer(e.station('Own',remote),e.wares[0],80,200,False)
+                    cfg['allowPlayerSuppliers']=enabled;ship['defaultorder']['allowPlayerSuppliers']=enabled
+                    if owned_first:e.sources.reverse()
+                    self.dispatch(e,e.hub(home,fleet))
+                    self.assertIs(ship['orders'][0]['offer'],own if enabled else next(s for s in e.sources if s is not own))
+
+    def test_priority_off_still_uses_owned_source_without_npc_permission(self):
+        e,home,fleet,hub=self.setup_market([80],[100]);ship,cfg=fleet[0]
+        source=e.sources[0];source['owner']['owner']='player';e.needs[0]['unitprice']=1
+        cfg.update(allowPlayerSuppliers=False,allowAiSuppliers=False);ship['defaultorder'].update(cfg)
+        self.dispatch(e,hub)
+        self.assertIs(ship['orders'][0]['offer'],source);self.assertEqual(ship['orders'][0]['amount'],80)
+
+    def test_owned_priority_skips_ineligible_sources_and_falls_back_to_npc(self):
+        for reason in ('threshold','equal_threshold','zero_target','empty','blocked','dock','range'):
+            with self.subTest(reason=reason):
+                e,home,fleet,hub=self.setup_market([80],[100]);ship,cfg=fleet[0];ware=e.wares[0]
+                remote=e.sector('Remote');e.connect(home['sector'],remote)
+                own=e.offer(e.station('Own',remote),ware,80,100,False)
+                if reason=='threshold':own['owner']['cargo'][ware]['count']=10
+                if reason=='equal_threshold':own['owner']['cargo'][ware]['count']=40
+                if reason=='zero_target':own['owner']['cargo'][ware]['target']=0
+                if reason=='empty':own['total']=0
+                if reason=='blocked':ship['blocked'].add(remote)
+                if reason=='dock':own['owner']['docks']=('XL',)
+                if reason=='range':cfg['maxDist']=0;ship['defaultorder']['maxDist']=0
+                self.dispatch(e,e.hub(home,fleet))
+                self.assertIs(ship['orders'][0]['offer'],e.sources[0])
+
+    def test_owned_priority_partial_supply_combines_npc_remainder(self):
+        e,home,fleet,hub=self.setup_market([100],[100]);ship,cfg=fleet[0];ware=e.wares[0]
+        remote=e.sector('Remote');e.connect(home['sector'],remote)
+        own=e.offer(e.station('Own',remote),ware,30,100,False)
+        self.dispatch(e,e.hub(home,fleet))
+        buys=[o for o in ship['orders'] if not o['offer']['isbuyoffer']]
+        self.assertEqual([(o['offer'],o['amount']) for o in buys],[(own,30),(e.sources[0],70)])
+
+    def test_owned_priority_still_ranks_owned_sources_by_distance(self):
+        e,home,fleet,hub=self.setup_market([80],[100]);ship,cfg=fleet[0]
+        remote=e.sector('Remote');e.connect(home['sector'],remote)
+        e.offer(e.station('FarOwn',remote),e.wares[0],80,100,False)
+        near=e.offer(e.station('NearOwn',home['sector']),e.wares[0],80,200,False)
+        self.dispatch(e,e.hub(home,fleet))
+        self.assertIs(ship['orders'][0]['offer'],near)
+
+    def test_secondary_owned_priority_respects_corridor_and_off_uses_normal_price(self):
+        for enabled,inside in ((True,True),(False,True),(True,False)):
+            with self.subTest(enabled=enabled,inside=inside):
+                e,home,fleet,off,far,p=self.corridor_market();ship,cfg=fleet[0]
+                cfg['allowPlayerSuppliers']=enabled;ship['defaultorder']['allowPlayerSuppliers']=enabled
+                on=e.offer(e.station('On',p,'ai'),off['ware'],200,90,False)
+                off['owner']['owner']='player'
+                if not inside:off['owner']['sector']=far['owner']['sector']
+                # A priced owned quote makes price and priority genuinely compete.
+                off.field=lambda key,field=off.field: Proxy(lambda buyer:False) if key=='buyfree' else field(key)
+                self.dispatch(e,e.hub(home,fleet))
+                buys=[o['offer'] for o in ship['orders'] if not o['offer']['isbuyoffer']]
+                self.assertIn(off if enabled and inside else on,buys)
+                self.assertNotIn(on if enabled and inside else off,buys)
+
+    def test_live_priority_toggle_rejects_old_plan_before_commit(self):
+        e,home,fleet,hub=self.setup_market([80],[100]);ship,cfg=fleet[0]
+        plan=e.runner.script('mule.fleet.plan',{'hub':hub,'cfg':cfg,'relaxed':True})['plan']
+        ship['defaultorder']['allowPlayerSuppliers']=False
+        self.assertFalse(e.runner.script('mule.fleet.commit',{'cfg':cfg,'plan':plan})['ok']);self.assertEqual(e.created,0)
+
+    def test_mimic_forwards_priority_and_stock_threshold_including_zero(self):
+        node=ET.parse(SRC/'aiscripts/order.assist.xml').getroot().find('./add/do_if/run_script')
+        for enabled,threshold in ((True,60),(False,0),(False,None)):
+            with self.subTest(enabled=enabled,threshold=threshold):
+                e,home,fleet,hub=self.setup_market([80],[100]);ship,cfg=fleet[0]
+                origin=Obj(ship['defaultorder']);origin['allowPlayerSuppliers']=enabled
+                if threshold is None:origin.pop('playerStockThreshold')
+                else:origin['playerStockThreshold']=threshold
+                captured={}
+                e.runner.script=lambda name,params: captured.update(params) or {}
+                e.runner.action(node,{'order':origin,'scriptname':'supplymule'})
+                self.assertEqual(captured['allowPlayerSuppliers'],enabled)
+                self.assertEqual(captured['playerStockThreshold'],50 if threshold is None else threshold)
+
+    def test_priority_upgrade_invalidates_old_configuration_signature(self):
+        e,home,fleet,hub=self.setup_market([80],[100]);ship,cfg=fleet[0]
+        fresh=e.runner.script('mule.fleet.config',{'cfg':Obj(cfg)})['cfg']
+        old=Obj(fresh);old['signature']=old['signature'].replace('/v16','/v15')
+        ship['pilot']['mwexFleetCfg']=old
+        resolved=e.runner.script('mule.fleet.config',{'cfg':Obj(cfg)})['cfg']
+        self.assertIsNot(resolved,old);self.assertTrue(resolved['allowPlayerSuppliers'])
+        self.assertEqual(resolved['playerStockThreshold'],50)
 
     def test_stock_trigger_is_per_ware_and_zero_target_does_not_divide(self):
         e,home,fleet,hub=self.setup_market([80,80],[200]);ship,cfg=fleet[0]
@@ -767,7 +862,7 @@ class XMLDispatchChecks(unittest.TestCase):
     def test_old_signature_cannot_reuse_config_without_new_stock_threshold(self):
         e,home,fleet,hub=self.setup_market([80],[100]);ship,cfg=fleet[0]
         fresh=e.runner.script('mule.fleet.config',{'cfg':Obj(cfg)})['cfg']
-        old=Obj(fresh);old.pop('playerStockThreshold');old['signature']=old['signature'].removesuffix('/v15')
+        old=Obj(fresh);old.pop('playerStockThreshold');old['signature']=old['signature'].removesuffix('/v16')
         ship['pilot']['mwexFleetCfg']=old
         incoming=Obj(cfg);incoming.pop('playerStockThreshold')
         resolved=e.runner.script('mule.fleet.config',{'cfg':incoming})['cfg']

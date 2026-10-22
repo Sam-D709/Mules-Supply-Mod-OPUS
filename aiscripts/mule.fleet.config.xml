@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<aiscript name="mule.fleet.config" version="3">
+<aiscript name="mule.fleet.config" version="4">
   <params><param name="cfg"/></params>
   <attention min="unknown"><actions>
     <set_value name="$ship" exact="$cfg.$ship"/>
@@ -7,7 +7,7 @@
     <set_value name="$cfg.$maxTrades" exact="[1,[$cfg.$maxTrades,10].min].max"/>
     <set_value name="$cfg.$corridorDepth" exact="[0,[$cfg.$corridorDepth,10].min].max"/>
     <set_value name="$cfg.$corridorMarkup" exact="[0,[$cfg.$corridorMarkup,50].min].max"/>
-    <set_value name="$cfg.$signature" exact="'%s/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s/v15'.[$cfg.$home,$cfg.$maxDist,$cfg.$dedicatedServe,$cfg.$allowPlayerSuppliers,$cfg.$allowAiSuppliers,$cfg.$allowBuildstorage,$cfg.$allowResources,$cfg.$allowIntermediates,$cfg.$allowTradewares,$cfg.$lockWares,$cfg.$maxTrades,$cfg.$minCargoUsed,$cfg.$playerStockThreshold,100,$cfg.$corridorDepth,$cfg.$corridorMarkup,$cfg.$wares]"/>
+    <set_value name="$cfg.$signature" exact="'%s/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s/v16'.[$cfg.$home,$cfg.$maxDist,$cfg.$dedicatedServe,$cfg.$allowPlayerSuppliers,$cfg.$allowAiSuppliers,$cfg.$allowBuildstorage,$cfg.$allowResources,$cfg.$allowIntermediates,$cfg.$allowTradewares,$cfg.$lockWares,$cfg.$maxTrades,$cfg.$minCargoUsed,$cfg.$playerStockThreshold,100,$cfg.$corridorDepth,$cfg.$corridorMarkup,$cfg.$wares]"/>
     <do_if value="@$ship.pilot.$mwexFleetCfg? and $ship.pilot.$mwexFleetCfg.$origin == $cfg.$origin and $ship.pilot.$mwexFleetCfg.$signature == $cfg.$signature">
       <return><retval name="cfg" value="$ship.pilot.$mwexFleetCfg"/></return>
     </do_if>
