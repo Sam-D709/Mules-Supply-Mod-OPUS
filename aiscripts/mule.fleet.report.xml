@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<aiscript name="mule.fleet.report" version="1">
+  <params><param name="cfg"/><param name="reason" default="null"/></params>
+  <attention min="unknown"><actions>
+    <set_value name="$ship" exact="$cfg.$ship"/>
+    <do_if value="not $ship.isoperational or not $ship.pilot.exists or $ship.defaultorder != $cfg.$origin"><return/></do_if>
+    <do_if value="$reason and $reason != 'ok' and $reason != 'ship_changed' and $reason != {61552,4300}">
+      <!-- This is the native per-ship Behaviour failure record, not just a global log interaction anchor. -->
+      <do_if value="$cfg.$origin.isrunning"><set_order_failed order="$cfg.$origin" text="{61552,4330}.[$ship.knownname,$ship.idcode,$cfg.$home.knownname,$reason]"/></do_if>
+      <do_if value="not $ship.pilot.$mwexFleetLastReason? or @$ship.pilot.$mwexFleetLastReason != $reason or player.age ge @$ship.pilot.$mwexFleetLastReasonAt+10min">
+        <debug_to_file directory="'MulesExtended'" name="'M4 Ship %s'.[$ship.idcode]" append="true" text="{61552,4330}.[$ship.knownname,$ship.idcode,$cfg.$home.knownname,$reason]"/>
+        <set_value name="$ship.pilot.$mwexFleetLastReason" exact="$reason"/>
+        <set_value name="$ship.pilot.$mwexFleetLastReasonAt" exact="player.age"/>
+      </do_if>
+    </do_if>
+    <do_else>
+      <do_if value="$cfg.$origin.isrunning"><clear_order_failure order="$cfg.$origin"/></do_if>
+      <remove_value name="$ship.pilot.$mwexFleetLastReason"/>
+      <remove_value name="$ship.pilot.$mwexFleetLastReasonAt"/>
+    </do_else>
+    <return/>
+  </actions></attention>
+</aiscript>

@@ -1,0 +1,8 @@
+* text=auto eol=lf
+*.xml text eol=lf
+*.md text eol=lf
+*.py text eol=lf
+*.ps1 text eol=lf
+*.cat -text
+*.dat -text
+*.zip -text

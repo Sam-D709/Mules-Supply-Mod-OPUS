@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<aiscript name="mule.fleet.net" version="1">
+  <params><param name="offer"/></params>
+  <attention min="unknown"><actions>
+    <!-- amount is native net. Only the part NOT visible in native reservations is held locally. -->
+    <set_value name="$net" exact="0"/>
+    <do_if value="@$offer.exists">
+      <set_value name="$net" exact="[$offer.amount,0].max"/>
+      <set_value name="$byShip" exact="table[]"/>
+      <do_for_each name="$hold" in="global.$mwexFleetPending.clone" reverse="true">
+        <do_if value="not @$hold.$order.exists or not @$hold.$ship.exists or not @$hold.$offer.exists">
+          <remove_from_list name="global.$mwexFleetPending" exact="$hold"/>
+          <continue/>
+        </do_if>
+        <!-- Once transfer begins, native accounting has unquestionably taken over. -->
+        <do_if value="@$hold.$order.trade.transferredamount gt 0">
+          <remove_from_list name="global.$mwexFleetPending" exact="$hold"/>
+          <continue/>
+        </do_if>
+        <do_if value="$hold.$offer == $offer">
+          <do_if value="not $byShip.{$hold.$ship}?">
+            <set_value name="$byShip.{$hold.$ship}" exact="table[$ship=$hold.$ship,$amount=0,$holds=[]]"/>
+          </do_if>
+          <set_value name="$byShip.{$hold.$ship}.$amount" operation="add" exact="$hold.$amount"/>
+          <append_to_list name="$byShip.{$hold.$ship}.$holds" exact="$hold"/>
+        </do_if>
+      </do_for_each>
+      <do_for_each valuename="$entry" in="$byShip">
+        <!-- Ship had no trade orders when dispatched, so these are its own newly submitted reservations. -->
+        <set_value name="$nativeOwn" exact="[$offer.offeramount.{$entry.$ship} - $offer.amount,0].max"/>
+        <set_value name="$missing" exact="[$entry.$amount - $nativeOwn,0].max"/>
+        <set_value name="$net" exact="[$net - $missing,0].max"/>
+        <debug_to_file directory="'MulesExtended'" name="'M4 Capacity Accounting'" append="true"
+          text="'NET t=%s offer=%s ship=%s amount=%s expected=%s nativeOwn=%s localMissing=%s net=%s'.[player.age,$offer,$entry.$ship.idcode,$offer.amount,$entry.$amount,$nativeOwn,$missing,$net]"/>
+        <do_if value="$missing == 0">
+          <remove_from_list name="global.$mwexFleetPending" list="$entry.$holds"/>
+        </do_if>
+      </do_for_each>
+    </do_if>
+    <return><retval name="net" value="$net"/></return>
+  </actions></attention>
+</aiscript>

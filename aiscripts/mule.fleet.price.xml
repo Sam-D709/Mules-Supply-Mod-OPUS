@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<aiscript name="mule.fleet.price" version="1">
+  <params><param name="offer"/><param name="ship"/><param name="cache" default="table[]"/></params>
+  <attention min="unknown"><actions>
+    <do_if value="not @$offer.exists"><return><retval name="price" value="0Cr"/><retval name="ok" value="false"/></return></do_if>
+    <do_if value="not $cache.{$ship.owner}?"><set_value name="$cache.{$ship.owner}" exact="table[]"/></do_if>
+    <do_if value="$cache.{$ship.owner}.{$offer}?">
+      <set_value name="$entry" exact="$cache.{$ship.owner}.{$offer}"/>
+      <do_if value="$entry.$raw == $offer.unitprice"><return><retval name="price" value="$entry.$price"/><retval name="ok" value="true"/></return></do_if>
+    </do_if>
+    <set_value name="$price" exact="$offer.unitprice"/>
+    <do_if value="not $offer.isbuyoffer and $offer.buyfree.{$ship}"><set_value name="$price" exact="0Cr"/></do_if>
+    <set_value name="$modified" exact="($ship.owner == faction.player) and ($offer.owner.owner != $ship.owner) and (player.hasdiscount.{$offer.owner} or player.hasdiscount.{$offer.owner.owner} or player.hascommission.{$offer.owner} or player.hascommission.{$offer.owner.owner})"/>
+    <do_if value="$modified">
+      <!-- Native filters apply the reserving ship's modifiers. No trial orders or economic writes. -->
+      <!-- Search integer hundredths of a credit to avoid floating boundary drift. -->
+      <set_value name="$low" exact="0"/><set_value name="$high" exact="(([$offer.unitprice,$offer.ware.maxprice].max+$offer.ware.pricerange+1Cr)/1Cr*100)i"/>
+      <do_all exact="33" counter="$probeIndex">
+        <set_value name="$probe" exact="if $probeIndex == 1 then $high else (($low+$high)/2)i"/>
+        <set_value name="$probePrice" exact="$probe*1Cr/100"/>
+        <do_if value="$offer.isbuyoffer">
+          <find_buy_offer buyer="$offer.owner" wares="$offer.ware" tradepartner="$ship" result="$priced" multiple="true" excludeempty="false"><price max="$probePrice" tradepartner="$ship"/></find_buy_offer>
+        </do_if>
+        <do_else>
+          <find_sell_offer seller="$offer.owner" wares="$offer.ware" tradepartner="$ship" result="$priced" multiple="true" excludeempty="false"><price max="$probePrice" tradepartner="$ship"/></find_sell_offer>
+        </do_else>
+        <do_if value="$priced.indexof.{$offer}"><set_value name="$high" exact="$probe"/></do_if>
+        <do_elseif value="$probeIndex == 1"><return><retval name="price" value="0Cr"/><retval name="ok" value="false"/></return></do_elseif>
+        <do_else><set_value name="$low" exact="$probe+1"/></do_else>
+        <do_if value="$low ge $high"><break/></do_if>
+      </do_all>
+      <do_if value="$low lt $high"><return><retval name="price" value="0Cr"/><retval name="ok" value="false"/></return></do_if>
+      <set_value name="$price" exact="$high*1Cr/100"/>
+    </do_if>
+    <set_value name="$cache.{$ship.owner}.{$offer}" exact="table[$raw=$offer.unitprice,$price=$price]"/>
+    <return><retval name="price" value="$price"/><retval name="ok" value="true"/></return>
+  </actions></attention>
+</aiscript>

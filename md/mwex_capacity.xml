@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mdscript name="MWEX_Capacity">
+  <cues>
+    <cue name="Loaded" instantiate="true">
+      <conditions><event_game_loaded/></conditions>
+      <actions>
+        <!-- Native queued orders remain. In-flight holds are reconciled; never discard them on load. -->
+        <remove_value name="global.$mwexFleetLock"/>
+        <do_if value="global.$mwexFleetHubs?">
+          <do_for_each valuename="$hub" in="global.$mwexFleetHubs">
+            <set_value name="$hub.$rosterDirty" exact="true"/>
+            <set_value name="$hub.$cacheDirty" exact="true"/>
+            <set_value name="$hub.$next" exact="player.age+2s"/>
+          </do_for_each>
+        </do_if>
+      </actions>
+    </cue>
+    <cue name="Discovered" instantiate="true">
+      <conditions><event_player_trade_discovered/></conditions>
+      <actions>
+        <!-- Incremental insert by ware/sector/supplier. No per-ship scan and no geographic reorder. -->
+        <set_value name="$offer" exact="event.param"/>
+        <do_if value="@$offer.exists and global.$mwexFleetHubs?">
+          <do_for_each valuename="$hub" in="global.$mwexFleetHubs">
+            <do_if value="not @$hub.$home.exists"><continue/></do_if>
+            <set_value name="$sector" exact="if $hub.$home.isclass.sector then $hub.$home else $hub.$home.sector"/>
+            <set_value name="$distance" exact="$sector.gatedistance.{$offer.owner.sector}"/>
+            <do_if value="$distance lt 0 or $distance gt (if $hub.$range? then $hub.$range else 0)"><continue/></do_if>
+            <do_if value="$offer.isbuyoffer">
+              <do_if value="not $hub.$needs.indexof.{$offer}"><append_to_list name="$hub.$needs" exact="$offer"/></do_if>
+              <do_if value="not $hub.$sources.{$offer.ware}?"><set_value name="$hub.$cacheDirty" exact="true"/></do_if>
+            </do_if>
+            <do_else>
+              <do_if value="not $hub.$sources.{$offer.ware}?"><set_value name="$hub.$sources.{$offer.ware}" exact="table[]"/></do_if>
+              <do_if value="not $hub.$sources.{$offer.ware}.{$offer.owner.sector}?"><set_value name="$hub.$sources.{$offer.ware}.{$offer.owner.sector}" exact="table[]"/></do_if>
+              <set_value name="$hub.$sources.{$offer.ware}.{$offer.owner.sector}.{$offer.owner}" exact="$offer"/>
+            </do_else>
+            <set_value name="$hub.$next" exact="[player.age+2s,$hub.$next].min"/>
+          </do_for_each>
+        </do_if>
+        <!-- Coalesced version is diagnostic; inserts above are immediately usable. -->
+        <do_if value="not global.$mwexFleetLastDiscovery? or player.age ge global.$mwexFleetLastDiscovery+5s">
+          <set_value name="global.$mwexFleetLastDiscovery" exact="player.age"/>
+        </do_if>
+      </actions>
+    </cue>
+    <cue name="WatchHub" instantiate="true">
+      <conditions><event_object_signalled object="player.entity" param="'mwex_capacity_watch'"/></conditions>
+      <actions><set_value name="$hub" exact="event.param2"/><set_value name="$home" exact="$hub.$home"/></actions>
+      <cues>
+        <cue name="RosterAdded" instantiate="true">
+          <conditions><event_object_subordinate_added object="$home"/></conditions>
+          <actions><set_value name="$hub.$rosterDirty" exact="true"/><set_value name="$hub.$next" exact="player.age+1s"/></actions>
+        </cue>
+        <cue name="RosterRemoved" instantiate="true">
+          <conditions><event_object_subordinate_removed object="$home"/></conditions>
+          <actions><set_value name="$hub.$rosterDirty" exact="true"/><set_value name="$hub.$next" exact="player.age+1s"/></actions>
+        </cue>
+        <cue name="Produced" instantiate="true">
+          <conditions><event_object_production_finished object="$home"/></conditions>
+          <actions><set_value name="$hub.$next" exact="[player.age+2s,$hub.$next].min"/></actions>
+        </cue>
+        <cue name="Traded" instantiate="true">
+          <conditions><event_trade_completed buyer="$home"/></conditions>
+          <actions><set_value name="$hub.$next" exact="[player.age+2s,$hub.$next].min"/></actions>
+        </cue>
+        <cue name="Cancelled" instantiate="true">
+          <conditions><event_trade_cancelled buyer="$home"/></conditions>
+          <actions><set_value name="$hub.$next" exact="[player.age+2s,$hub.$next].min"/></actions>
+        </cue>
+        <cue name="HomeDestroyed">
+          <conditions><event_object_destroyed object="$home"/></conditions>
+          <actions><remove_value name="global.$mwexFleetHubs.{$home}"/><cancel_cue cue="WatchHub"/></actions>
+        </cue>
+      </cues>
+    </cue>
+    <cue name="WatchShip" instantiate="true">
+      <conditions><event_object_signalled object="player.entity" param="'mwex_capacity_watch_ship'"/></conditions>
+      <actions>
+        <set_value name="$ship" exact="event.param2.$ship"/><set_value name="$hub" exact="event.param2.$hub"/>
+        <do_if value="@$ship.pilot.$mwexFleetWatchCue?"><cancel_cue cue="$ship.pilot.$mwexFleetWatchCue"/></do_if>
+        <set_value name="$ship.pilot.$mwexFleetWatchCue" exact="this"/>
+      </actions>
+      <cues>
+        <cue name="ShipDestroyed">
+          <conditions><event_object_destroyed object="$ship"/></conditions>
+          <actions><set_value name="$hub.$rosterDirty" exact="true"/><set_value name="$hub.$next" exact="player.age+1s"/><cancel_cue cue="WatchShip"/></actions>
+        </cue>
+        <cue name="OrderCancelled" instantiate="true">
+          <conditions><event_object_order_cancelled object="$ship" immediate="true"/></conditions>
+          <actions><set_value name="$hub.$next" exact="[player.age+2s,$hub.$next].min"/></actions>
+        </cue>
+      </cues>
+    </cue>
+    <cue name="Warning" instantiate="true">
+      <conditions><event_object_signalled object="player.entity" param="'mwex_capacity_warning'"/></conditions>
+      <actions>
+        <set_value name="$notice" exact="event.param2"/>
+        <set_value name="$text" exact="{61552,4201}.[$notice.$station.knownname,$notice.$ware.name,$notice.$range,$notice.$reason]"/>
+        <write_to_logbook category="alerts" object="$notice.$station" title="{61552,4200}" text="$text" interaction="showonmap"/>
+        <do_if value="not global.$mwexFleetLastPopup? or player.age ge global.$mwexFleetLastPopup+30s">
+          <show_notification text="$text" timeout="15s"/>
+          <set_value name="global.$mwexFleetLastPopup" exact="player.age"/>
+        </do_if>
+      </actions>
+    </cue>
+  </cues>
+</mdscript>

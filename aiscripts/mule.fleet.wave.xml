@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="utf-8"?>
+<aiscript name="mule.fleet.wave" version="5">
+  <params><param name="hub"/></params>
+  <patch sinceversion="5"><return/></patch>
+  <patch sinceversion="4"><return/></patch>
+  <attention min="unknown"><actions>
+    <set_value name="$successes" exact="0"/>
+    <set_value name="$hub.$prices" exact="table[]"/>
+    <set_value name="$hub.$failures" exact="table[]"/>
+    <set_value name="$negative" exact="table[]"/>
+    <set_value name="$failedCommit" exact="table[]"/>
+    <set_value name="$shipFailures" exact="table[]"/>
+    <set_value name="$visits" exact="0"/>
+    <do_if value="$hub.$cacheDirty or player.age ge $hub.$cacheUntil or $hub.$cacheEpoch != global.$mwexFleetEpoch">
+      <run_script name="'mule.fleet.discover'"><param name="hub" value="$hub"/></run_script>
+    </do_if>
+    <set_value name="$descending" exact="$hub.$descending"/>
+    <set_value name="$ascending" exact="$hub.$ascending"/>
+    <!-- Each phase visits ALL available members. Busy small models do not block the next larger one. -->
+    <do_all exact="2" counter="$phase">
+      <set_value name="$relaxed" exact="$phase == 2"/>
+      <set_value name="$groupOrder" exact="if $relaxed then $ascending else $descending"/>
+      <do_for_each name="$groupKey" in="$groupOrder">
+        <do_if value="not $hub.$groups.{$groupKey}?"><continue/></do_if>
+        <do_for_each name="$ship" in="$hub.$groups.{$groupKey}">
+          <set_value name="$visits" operation="add" exact="1"/>
+          <do_if value="$visits ge 16">
+            <set_value name="global.$mwexFleetLock.$time" exact="player.age"/><wait exact="1ms"/>
+            <set_value name="$visits" exact="0"/>
+          </do_if>
+          <do_if value="not $ship.isoperational or not $ship.pilot.exists or not $hub.$members.{$ship}?"><continue/></do_if>
+          <do_if value="$failedCommit.{$ship}?"><continue/></do_if>
+          <set_value name="$cfg" exact="$hub.$members.{$ship}"/>
+          <do_if value="$ship.orders.count or $ship == player.occupiedship or $ship.pilot.$mwexFleetCfg != $cfg"><continue/></do_if>
+          <do_if value="$cfg.$bound and $ship.commander != $cfg.$commander"><continue/></do_if>
+          <do_if value="$ship.defaultorder != $cfg.$origin"><continue/></do_if>
+          <do_if value="$ship.cargo.count">
+            <run_script name="'mule.fleet.recover'"><param name="cfg" value="$cfg"/></run_script>
+            <do_if value="$ship.cargo.count"><continue/></do_if>
+          </do_if>
+          <!-- Conservative equivalence: explicit personal blacklists prevent reuse across ships. -->
+          <set_value name="$personal" exact="$ship.hasblacklist.{blacklisttype.sectortravel}.{blacklistgroup.civilian} or $ship.hasblacklist.{blacklisttype.sectoractivity}.{blacklistgroup.civilian} or $ship.hasblacklist.{blacklisttype.objectactivity}.{blacklistgroup.civilian}"/>
+          <set_value name="$failureKey" exact="'$failure/%s/%s/%s/%s/%s/%s/%s'.[$groupKey,$cfg.$signature,$ship.money,$ship.commander,($ship.units.{unitcategory.transport}.count gt 0),if $personal then $ship else '-',$relaxed]"/>
+          <do_if value="$negative.{$failureKey}?">
+            <set_value name="$shipFailures.{$ship}" exact="$negative.{$failureKey}"/>
+            <debug_to_file directory="'MulesExtended'" name="'M4 Capacity Dispatch'" append="true" text="'MODEL_SKIP ship=%s key=%s reason=%s'.[$ship.idcode,$failureKey,$negative.{$failureKey}]"/>
+            <continue/>
+          </do_if>
+          <run_script name="'mule.fleet.plan'">
+            <param name="hub" value="$hub"/><param name="cfg" value="$cfg"/><param name="relaxed" value="$relaxed"/>
+            <save_retval name="plan" variable="$plan"/><save_retval name="failure" variable="$reason"/>
+          </run_script>
+          <do_if value="$plan.count">
+            <run_script name="'mule.fleet.commit'"><param name="cfg" value="$cfg"/><param name="plan" value="$plan"/><save_retval name="ok" variable="$ok"/><save_retval name="failure" variable="$commitReason"/></run_script>
+            <do_if value="$ok">
+              <set_value name="$successes" operation="add" exact="1"/>
+              <set_value name="$negative" exact="table[]"/>
+              <remove_value name="$shipFailures.{$ship}"/>
+              <run_script name="'mule.fleet.report'"><param name="cfg" value="$cfg"/></run_script>
+              <do_for_each name="$leg" in="$plan">
+                <remove_value name="$hub.$warnings.{$leg.$need}"/>
+                <remove_value name="$hub.$failures.{$leg.$need}"/>
+              </do_for_each>
+            </do_if>
+            <do_else><set_value name="$failedCommit.{$ship}" exact="true"/><set_value name="$shipFailures.{$ship}" exact="$commitReason"/></do_else>
+          </do_if>
+          <do_elseif value="$reason != 'ship_changed'"><set_value name="$negative.{$failureKey}" exact="$reason"/><set_value name="$shipFailures.{$ship}" exact="$reason"/></do_elseif>
+        </do_for_each>
+      </do_for_each>
+    </do_all>
+    <!-- Record final results only: normal-phase load rejections may succeed in the relaxed phase. -->
+    <set_value name="$hub.$allIdle" exact="true"/>
+    <do_for_each name="$ship" valuename="$cfg" in="$hub.$members">
+      <do_if value="not $ship.isoperational or not $ship.pilot.exists or $ship.defaultorder != $cfg.$origin or $ship.pilot.$mwexFleetCfg != $cfg or ($cfg.$bound and $ship.commander != $cfg.$commander)"><continue/></do_if>
+      <do_if value="$ship.orders.count or $ship == player.occupiedship"><set_value name="$hub.$allIdle" exact="false"/><continue/></do_if>
+      <do_if value="$shipFailures.{$ship}?"><run_script name="'mule.fleet.report'"><param name="cfg" value="$cfg"/><param name="reason" value="$shipFailures.{$ship}"/></run_script></do_if>
+    </do_for_each>
+    <!-- Search is exhausted, not just one page. Notifications do not claim a precise cause beyond the last actual rejection. -->
+    <do_for_each name="$need" valuename="$reason" in="$hub.$failures">
+      <run_script name="'mule.fleet.net'"><param name="offer" value="$need"/><save_retval name="net" variable="$net"/></run_script>
+      <do_if value="$net le 0"><remove_value name="$hub.$warnings.{$need}"/><continue/></do_if>
+      <do_if value="not $hub.$warnings.{$need}? or player.age ge $hub.$warnings.{$need}+10min">
+        <set_value name="$maxRange" exact="0"/>
+        <do_for_each valuename="$cfg" in="$hub.$members"><set_value name="$maxRange" exact="[$maxRange,$cfg.$maxDist].max"/></do_for_each>
+        <signal_objects object="player.entity" param="'mwex_capacity_warning'" param2="table[$station=$need.owner,$ware=$need.ware,$range=$maxRange,$reason=$reason]"/>
+        <set_value name="$hub.$warnings.{$need}" exact="player.age"/>
+      </do_if>
+    </do_for_each>
+    <do_if value="$successes">
+      <set_value name="$hub.$backoff" exact="2s"/>
+    </do_if>
+    <do_else><set_value name="$hub.$backoff" exact="[30s,$hub.$backoff*2].min"/></do_else>
+    <set_value name="$hub.$next" exact="player.age+$hub.$backoff"/>
+    <debug_to_file directory="'MulesExtended'" name="'M4 Capacity Dispatch'" append="true" text="'WAVE home=%s assigned=%s next=%s'.[$hub.$home,$successes,$hub.$next]"/>
+    <return/>
+  </actions></attention>
+</aiscript>

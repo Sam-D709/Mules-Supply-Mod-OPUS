@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<aiscript name="mule.fleet.offer" version="3">
+  <params>
+    <param name="offer"/><param name="ship"/><param name="home"/><param name="maxDist"/>
+  </params>
+  <attention min="unknown"><actions>
+    <set_value name="$valid" exact="null"/>
+    <set_value name="$reason" exact="{61552,4310}"/>
+    <set_value name="$distance" exact="-1"/>
+    <do_if value="not @$offer.exists or not @$offer.owner.exists or not $ship.isoperational">
+      <return><retval name="offer" value="$valid"/><retval name="reason" value="$reason"/><retval name="distance" value="$distance"/></return>
+    </do_if>
+    <set_value name="$homeSector" exact="if $home.isclass.sector then $home else $home.sector"/>
+    <set_value name="$distance" exact="$homeSector.gatedistance.{$offer.owner.sector}.{blacklistgroup.civilian}.{$ship}"/>
+    <set_value name="$reason" exact="{61552,4311}.[$offer.owner.knownname,$distance,$maxDist]"/>
+    <do_if value="$distance lt 0 or $distance gt $maxDist">
+      <return><retval name="offer" value="$valid"/><retval name="reason" value="$reason"/><retval name="distance" value="$distance"/></return>
+    </do_if>
+    <!-- Native queries apply ALL activity/travel filters to the actual vessel, even with a shared unfiltered index. -->
+    <do_if value="$offer.isbuyoffer">
+      <find_buy_offer buyer="$offer.owner" wares="$offer.ware" tradepartner="$ship" result="$matches" multiple="true">
+        <match_buyer>
+          <match_use_blacklist group="blacklistgroup.civilian" type="blacklisttype.objectactivity" object="$ship"/>
+          <match_parent><match_parent>
+            <match_use_blacklist group="blacklistgroup.civilian" type="blacklisttype.sectortravel" object="$ship"/>
+            <match_use_blacklist group="blacklistgroup.civilian" type="blacklisttype.sectoractivity" object="$ship"/>
+          </match_parent></match_parent>
+        </match_buyer>
+      </find_buy_offer>
+    </do_if>
+    <do_else>
+      <find_sell_offer seller="$offer.owner" wares="$offer.ware" tradepartner="$ship" result="$matches" multiple="true">
+        <match_seller>
+          <match tradesknownto="faction.player"/>
+          <match_use_blacklist group="blacklistgroup.civilian" type="blacklisttype.objectactivity" object="$ship"/>
+          <match_parent><match_parent>
+            <match_use_blacklist group="blacklistgroup.civilian" type="blacklisttype.sectortravel" object="$ship"/>
+            <match_use_blacklist group="blacklistgroup.civilian" type="blacklisttype.sectoractivity" object="$ship"/>
+          </match_parent></match_parent>
+        </match_seller>
+      </find_sell_offer>
+    </do_else>
+    <set_value name="$reason" exact="{61552,4312}.[$offer.owner.knownname,$offer.ware.name]"/>
+    <do_for_each name="$match" in="$matches">
+      <do_if value="$match.available and $match.cantradewith.{$ship}">
+        <set_value name="$valid" exact="$match"/>
+        <break/>
+      </do_if>
+    </do_for_each>
+    <do_if value="$valid">
+      <!-- free=false: occupied berths are a queue, not permanent incompatibility. -->
+      <find_closest_dockingbay name="$bay" object="$valid.owner" ship="$ship" free="false" requiretrading="true"/>
+      <do_if value="not $bay">
+        <set_value name="$valid" exact="null"/>
+        <set_value name="$reason" exact="{61552,4313}.[$offer.owner.knownname]"/>
+      </do_if>
+      <do_elseif value="$ship.iscapitalship and not $ship.units.{unitcategory.transport}.count and not $valid.owner.units.{unitcategory.transport}.count">
+        <set_value name="$valid" exact="null"/>
+        <set_value name="$reason" exact="{61552,4314}.[$offer.owner.knownname]"/>
+      </do_elseif>
+      <do_else><set_value name="$reason" exact="'ok'"/></do_else>
+    </do_if>
+    <do_if value="not $valid"><debug_to_file directory="'MulesExtended'" name="'M4 Capacity Candidates'" append="true" text="'REJECT ship=%s station=%s ware=%s reason=%s'.[$ship.idcode,$offer.owner.knownname,$offer.ware.name,$reason]"/></do_if>
+    <return><retval name="offer" value="$valid"/><retval name="reason" value="$reason"/><retval name="distance" value="$distance"/></return>
+  </actions></attention>
+</aiscript>

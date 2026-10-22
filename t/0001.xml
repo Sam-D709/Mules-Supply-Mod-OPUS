@@ -1,0 +1,150 @@
+<?xml version='1.0' encoding='utf-8'?>
+<language>
+  <page id="61552" voice="no">
+    <t id="1001">M1- Travel Mule</t>
+    <t id="1002">Source Station</t>
+    <t id="1003">Max Jumps</t>
+    <t id="1004">Profit Override</t>
+    <t id="1005">Lock Ware List</t>
+    <t id="1006">Wares (all by default)</t>
+    <t id="1007">Fill Cargo Hold %</t>
+    <t id="1008">Target NPC Shipyards</t>
+    <t id="1009">Target All NPC Stations</t>
+    <t id="1010">Custom Stop List (Replaces 'Target' Options)</t>
+    <t id="1101">Ferries supplies between stations</t>
+    <t id="1102">The source station</t>
+    <t id="1103">Max Gate Distance to sell.</t>
+    <t id="1104">Owned Station Buy price adjustment, 0=Sell all wares regardless of trade offer price. 100= Obey Station Manager's buy offer.</t>
+    <t id="1105">Locks the Users ware selection, otherwise we need to wipe it each time we call the script</t>
+    <t id="1106">Which Wares to consider in the trade.</t>
+    <t id="1107">The percentage of the ship's cargo hold that the trade will take up.</t>
+    <t id="1108">Assign to trade with all NPC shipyards, wharfs, and equip docks.</t>
+    <t id="1109">Assign to trade with all NPC stations.</t>
+    <t id="1110">Manually choose Points to visit.</t>
+    <t id="2001">M2- Station Mule</t>
+    <t id="2002">Source Station</t>
+    <t id="2003">Target Station</t>
+    <t id="2004">Assign Ship To Station</t>
+    <t id="2005">Include Energy Cells</t>
+    <t id="2006">Include Food and Meds</t>
+    <t id="2007">Seller Priority</t>
+    <t id="2008">Never Illegal</t>
+    <t id="2009">Illegal Only</t>
+    <t id="2010">Two-way Trade</t>
+    <t id="2011">Return Seller Priority</t>
+    <t id="2012">No In-System Trade</t>
+    <t id="2013">Allow Low Volumes</t>
+    <t id="2014">Make Target Warehouse</t>
+    <t id="2101">Ferries supplies between stations</t>
+    <t id="2102">The source station</t>
+    <t id="2103">The recipient station</t>
+    <t id="2104">Assign to the source station if it's the players.</t>
+    <t id="2105">Includes energy cells in the supply</t>
+    <t id="2106">Includes food and meds in the supply</t>
+    <t id="2107">Put the priority on emptying the seller's stocks</t>
+    <t id="2108">Never trades illegal wares</t>
+    <t id="2109">Trade only illegal wares</t>
+    <t id="2110">Trades back and forth between stations</t>
+    <t id="2111">Seller priority on return trade</t>
+    <t id="2112">Forbid trade between all player objects in system when idle</t>
+    <t id="2113">Allow loads below the usual 80% cargo threshold; existing construction and other exceptions still apply.</t>
+    <t id="2114">Add the source station's sale wares as target tradewares and allow the target to buy and sell them. Disabling this option does not remove wares already added.</t>
+    <t id="3001">M3- Distribute Mule</t>
+    <t id="3002">Source Warehouse</t>
+    <t id="3003">Min Storage</t>
+    <t id="3004">Static Storage</t>
+    <t id="3005">Max Storage</t>
+    <t id="3006">Wares (all by default)</t>
+    <t id="3007">Target Warehouses</t>
+    <t id="3101">Ferries supplies between warehouses</t>
+    <t id="3102">The source station</t>
+    <t id="3103">Trigger distribution when the receiving station is below this stock percentage, subject to the supplying station threshold and cargo requirements.</t>
+    <t id="3104">The supplying station must be above this stock percentage to start a transfer. This is not a guaranteed reserve after the transfer.</t>
+    <t id="3105">Allow distribution above the receiving station minimum when the supplying station exceeds this percentage and is more than 10 percentage points fuller than the receiver; other thresholds still apply.</t>
+    <t id="3106">Warebasket</t>
+    <t id="3107">Points to visit</t>
+    <t id="4001">M4- Supply Mule</t>
+    <t id="4002">Home Station/Sector</t>
+    <t id="4003">Assign Ship To Station</t>
+    <t id="4004">Max Jumps From Home</t>
+    <t id="4005">Serve Source Only</t>
+    <t id="4006">Enable purchases from player factories</t>
+    <t id="4007">Collect from AI Factions</t>
+    <t id="4008">Allow Build Storage</t>
+    <t id="4009">Allow Resources</t>
+    <t id="4010">Allow Intermediates</t>
+    <t id="4011">Allow Trade Wares</t>
+    <t id="4012">Lock Ware List</t>
+    <t id="4013">Wares (all by default)</t>
+    <t id="4014">Max Trades</t>
+    <t id="4015">Player Buy Mod</t>
+    <t id="4016">Collect from Player ONLY</t>
+    <t id="4017">Priortize Build Storage</t>
+    <t id="4018">Provide for Production Factories ONLY</t>
+    <t id="4019">Home Station/Sector</t>
+    <t id="4020">Assign Ship To Station</t>
+    <t id="4021">Max Trades</t>
+    <t id="4022">Fill Cargo Hold %</t>
+    <t id="4023">% of trades to eval</t>
+    <t id="4101">Supplies own Stations Needs</t>
+    <t id="4102">Home</t>
+    <t id="4103">Assign to the home station if it's the players.</t>
+    <t id="4104">Max gate distance to buy.</t>
+    <t id="4105">Will only serve the configured source station.</t>
+    <t id="4106">Use owned factories or warehouses only when this ware stock exceeds the configured percentage. Disabling excludes owned sources; NPC sources have a separate switch.</t>
+    <t id="4107">Allows buys from AI Faction Stations.</t>
+    <t id="4108">Allows buys for Station Build Storages.</t>
+    <t id="4109">Allows buys for Resources.</t>
+    <t id="4110">Allows buys for Intermediates.</t>
+    <t id="4111">Allows buys for Trade Wares.</t>
+    <t id="4112">Locks the ware selection, otherwise we need to wipe it each time we call the script.</t>
+    <t id="4113">Warebasket</t>
+    <t id="4114">Maximum procurement lots per trip (1–10). One supplier, one ware and one receiver count as one lot. Deliveries do not count again.</t>
+    <t id="4115">Owned Station Buy price adjustment, 0=ignore manager price 100= Obey Station Manager's buy offer.</t>
+    <t id="4116">Buys from player stations only</t>
+    <t id="4117">Will wait for build storage needs instead of finding something to do.</t>
+    <t id="4118">Will look to supply only factories with products.</t>
+    <t id="4119">The source station</t>
+    <t id="4120">Assign to the home station if it's the players.</t>
+    <t id="4121">Maximum procurement lots per trip. The capacity dispatcher supports multiple pickups followed by deliveries.</t>
+    <t id="4122">Minimum total planned load per trip. Normal allocation runs from largest cargo capacity to smallest; remaining demand then runs from smallest to largest without this minimum. Maximum lots and all trade rules still apply.</t>
+    <t id="4123">Work per candidate batch. Lower values yield more often; candidates are not randomly discarded.</t>
+    <t id="4024">Secondary corridor radius (jumps)</t>
+    <t id="4025">Price markup per off-route jump %</t>
+    <t id="4124">Maximum jumps from the fixed home-to-primary-supplier route for secondary pickups. All suppliers must also remain inside the original home range. Zero means route sectors only.</t>
+    <t id="4125">Comparison price = actual price × (1 + off-route jumps × percent / 100). Only ranks competing suppliers of the same ware. Zero disables markup, not the corridor radius.</t>
+    <t id="4200">M4 capacity procurement</t>
+    <t id="4201">%s: no executable procurement for %s within %s home jumps. Last rejection: %s.</t>
+    <t id="4205">%s: incomplete submission; queued orders are withdrawn where possible. Running orders remain. After all orders end, remaining cargo is liquidated at ware average price. See M4 Capacity Dispatch.</t>
+    <t id="4206">%s has remaining cargo that cannot currently be delivered to its planned receiver/home. Cargo is preserved. Check offers, funds and trade rules.</t>
+    <t id="4026">Allow player supply above stock %</t>
+    <t id="4126">Current ware stock divided by allocated ware storage; default 50%. Strictly above triggers eligibility, not a retained reserve: an accepted shipment may take all legally offered stock. Owned transfers ignore profit spread.</t>
+    <t id="4300">No unmet demand matches service scope, ware category and cargo compatibility.</t>
+    <t id="4301">No indexed supplier quote for this ware; waiting for quote updates.</t>
+    <t id="4302">Cannot resolve actual partner price: quote may have disappeared, become restricted or changed. Skip and retry.</t>
+    <t id="4303">Owned stock below trigger: %s ware=%s stock=%s allocated=%s threshold=%s%%. Skip this supplier.</t>
+    <t id="4304">Price spread rejected: ware=%s supplier=%s actual buy=%s Cr receiver=%s actual bid=%s Cr. External procurement requires bid above ask. Supplier raw quote=%s Cr.</t>
+    <t id="4305">Outside corridor: supplier=%s deviation=%s jumps allowed=%s.</t>
+    <t id="4306">Insufficient quantity/minimum lot: supplier=%s ware=%s net demand=%s net supply=%s free volume=%s after native storage/funds clamp=%s supplier minimum=%s receiver minimum=%s remaining budget=%s Cr actual buy=%s Cr.</t>
+    <t id="4307">No reachable transport route under this ship travel blacklist.</t>
+    <t id="4308">Trip load below threshold: volume=%s capacity=%s required=%s%% lots=%s maximum=%s. Normal pass defers to ascending relaxed allocation.</t>
+    <t id="4310">Offer/station invalid or ship not operational.</t>
+    <t id="4311">Range/unreachable: station=%s legal jumps=%s maximum=%s; negative means no legal path.</t>
+    <t id="4312">Native quote unavailable to this ship: station=%s ware=%s. Trade rules, activity blacklists, withdrawn quotes or reservations may apply; native query gives no finer reason.</t>
+    <t id="4313">No compatible trade dock at %s for this ship; temporarily occupied berths do not count as incompatible.</t>
+    <t id="4314">Cargo drones missing: neither this ship nor trading station %s has cargo drones for freight transfer.</t>
+    <t id="4315">Source ownership switch excludes supplier %s.</t>
+    <t id="4316">Supplier quote is invalid or has no remaining quantity, possibly reserved by other transports.</t>
+    <t id="4320">%s: liquidated %s, %s units at average %s Cr/unit; credited player %s Cr. No station delivery occurred.</t>
+    <t id="4321">%s: commit revalidation failed; no orders created. See adjacent COMMIT_CHECK records.</t>
+    <t id="4322">Revalidation failed: %s; ship=%s supplier=%s ware=%s planned=%s.</t>
+    <t id="4323">Actual price changed or modifier expired</t>
+    <t id="4324">Owned source no longer exceeds stock trigger</t>
+    <t id="4325">Net demand/supply no longer covers reserved plan</t>
+    <t id="4326">Cumulative procurement/receiver funds insufficient</t>
+    <t id="4327">Insufficient shared cargo space</t>
+    <t id="4328">Ship orders, assignment or settings changed</t>
+    <t id="4330">M4: %s (%s), home %s. Procurement not executed: %s</t>
+    <t id="4331">Cannot return to home %s: no route from the current sector complies with this ship's travel blacklist. Trade searches will continue and return will be retried.</t>
+  </page>
+</language>

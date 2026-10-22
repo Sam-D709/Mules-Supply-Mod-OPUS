@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<aiscript name="mule.fleet.home" version="1">
+  <params><param name="cfg"/><param name="hub"/></params>
+  <interrupts>
+    <handler>
+      <conditions>
+        <event_object_signalled object="$cfg.$ship" param="'mwex_capacity_return_refresh'"/>
+        <check_value value="event.param2 == $returnToken"/>
+      </conditions>
+      <actions><abort_called_scripts resume="finish"/></actions>
+    </handler>
+  </interrupts>
+  <init><set_value name="$returnToken" exact="table[$cfg=$cfg]"/></init>
+  <attention min="unknown"><actions>
+    <set_value name="$ship" exact="$cfg.$ship"/>
+    <set_value name="$home" exact="$cfg.$home"/>
+    <do_if value="not @$hub.$allIdle or not $home.exists or not $ship.isoperational or $ship == player.occupiedship or $ship.orders.count or $ship.defaultorder != $cfg.$origin or $ship.pilot.$mwexFleetCfg != $cfg or ($cfg.$bound and $ship.commander != $cfg.$commander)"><return/></do_if>
+    <set_value name="$sector" exact="if $home.isclass.sector then $home else $home.sector"/>
+    <!-- Return to the station's zone, without occupying trade berths; sector homes stop on sector entry. -->
+    <do_if value="($home.isclass.sector and $ship.sector == $sector) or (not $home.isclass.sector and $ship.zone == $home.zone)"><return/></do_if>
+    <set_value name="$distance" exact="$ship.sector.gatedistance.{$sector}.{blacklistgroup.civilian}.{$ship}"/>
+    <do_if value="$distance lt 0">
+      <run_script name="'mule.fleet.report'"><param name="cfg" value="$cfg"/><param name="reason" value="{61552,4331}.[$home.knownname]"/></run_script>
+      <return/>
+    </do_if>
+    <debug_to_file directory="'MulesExtended'" name="'M4 Capacity Dispatch'" append="true" text="'RETURN_HOME ship=%s home=%s'.[$ship.idcode,$home]"/>
+    <signal_objects object="$ship" param="'mwex_capacity_return_refresh'" param2="$returnToken" delay="30s"/>
+    <!-- Only called after the dispatch lock is released. No queued Wait/Dock order can block future procurement. -->
+    <run_script name="'move.generic'">
+      <param name="destination" value="$home"/>
+      <param name="endintargetzone" value="not $home.isclass.sector"/>
+      <param name="endintargetsector" value="$home.isclass.sector"/>
+      <param name="strictblacklist" value="true"/>
+    </run_script>
+    <label name="finish"/>
+    <return/>
+  </actions></attention>
+</aiscript>

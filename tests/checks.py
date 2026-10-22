@@ -1,0 +1,1219 @@
+"""Execute the NEW shipping XML against an explicit, synthetic engine adapter.
+
+This checks the actual control flow and expressions, not a second dispatcher.
+The adapter deliberately cannot validate native X4 scheduling, reservation
+visibility timing, path weights, docking internals or save serialization.
+"""
+from collections import deque
+from pathlib import Path
+import hashlib
+import json
+import re
+import runpy
+import sys
+import unittest
+import xml.etree.ElementTree as ET
+
+HERE = Path(__file__).resolve().parent
+SRC = HERE.parent
+BINDING_FIELDS = ('mwexFleetBoundOrigin','mwexFleetBoundHome','mwexFleetAssignmentWarning')
+
+
+class UndefinedBinding(Exception):pass
+
+
+class Obj(dict):
+    __hash__ = object.__hash__
+    __eq__ = object.__eq__
+    def __str__(self): return str(dict.get(self, 'idcode', dict.get(self, 'name', id(self))))
+    def __repr__(self): return f'<Obj {str(self)}>'
+
+
+class Keys(list):
+    def __init__(self, table): super().__init__(table); self.table = table
+
+
+class Proxy:
+    def __init__(self, callback, value=0): self.callback, self.value = callback, value
+
+
+def raw(value): return value.value if isinstance(value, Proxy) else value
+
+
+def member(value, key):
+    key = raw(key)
+    if isinstance(value, Proxy): return value.callback(key)
+    if isinstance(value, dict):
+        if value.get('class') in ('ship','station','sector') and str(key).startswith('mwex'):
+            raise AssertionError('Native component has no entity blackboard: '+str(key))
+        if key == 'clone': return value.copy()
+        if key == 'keys': return Keys(value)
+        if key == 'exists': return value.get(key, True)
+        if key == 'isoperational': return value.get(key, value.get('exists', True))
+        if key == 'isclass': return Proxy(lambda cls: value.get('class') in cls if isinstance(cls,list) else cls == value.get('class'))
+        if key == 'isplayerowned': return value.get('owner') == 'player'
+        if key == 'knownname': return value.get('name','')
+        if key == 'hasblacklist': return Proxy(lambda typ: Proxy(lambda group: False))
+        if key == 'canhavecommander':return Proxy(lambda commander:not value.get('reject_assignment',False))
+        if key == 'canuseassignment':return Proxy(lambda assignment:Proxy(lambda commander:not value.get('reject_assignment',False)))
+        if isinstance(value, Offer): return value.field(key)
+        return value.get(key, 0)
+    if isinstance(value, (list, tuple)):
+        if key == 'list': return list(value)
+        if key == 'count': return len(value)
+        if key == 'clone': return list(value)
+        if key == 'sorted' and isinstance(value, Keys): return sorted(value, key=lambda x: value.table[x])
+        if key == 'min': return min(map(raw, value))
+        if key == 'max': return max(map(raw, value))
+        if key == 'indexof': return Proxy(lambda item: value.index(item)+1 if item in value else 0)
+        if isinstance(key, (int,float)) and int(key)==key:
+            return value[int(key)-1] if 0 < key <= len(value) else 0
+    if isinstance(value, str) and key == 'id': return value
+    if key == 'exists': return False
+    return 0
+
+
+TOKEN = re.compile(r"\s*(?:('(?:[^']|'')*')|(\d+(?:\.\d+)?(?:min|ms|Cr|s)?)(?![\w])|([$A-Za-z_][\w$]*)|(==|!=|[.{}\[\](),?@+*/=<>-]))")
+
+
+class Parser:
+    def __init__(self, text):
+        self.tokens=[]; pos=0
+        while pos < len(text):
+            if not text[pos:].strip(): break
+            match=TOKEN.match(text,pos)
+            if not match: raise SyntaxError(f'{text!r} near {text[pos:]}')
+            self.tokens.append(next(x for x in match.groups() if x is not None));pos=match.end()
+        self.tokens.append('<end>');self.i=0
+    def peek(self): return self.tokens[self.i]
+    def pop(self): value=self.peek();self.i+=1;return value
+    def want(self, token):
+        value=self.pop()
+        if value!=token: raise SyntaxError(f'expected {token}, got {value}; {self.tokens}')
+    def parse(self):
+        result=self.expr()
+        if self.peek()!='<end>':raise SyntaxError(f'Unconsumed: {self.tokens[self.i:]}')
+        return result
+    def expr(self, minimum=0):
+        token=self.pop()
+        if token=='if':
+            cond=self.expr();self.want('then');yes=self.expr();self.want('else');no=self.expr()
+            left=('if',cond,yes,no)
+        elif token in ('not','-','@'):left=('unary',token,self.expr(7))
+        elif token=='(':
+            left=self.expr();self.want(')')
+        elif token=='[':
+            args=[]
+            while self.peek()!=']':
+                args.append(self.expr())
+                if self.peek()!=',':break
+                self.pop()
+            self.want(']');left=('list',args)
+        elif token=='table':
+            self.want('[');pairs=[]
+            while self.peek()!=']':
+                key=self.pop().lstrip('$');self.want('=');pairs.append((key,self.expr()))
+                if self.peek()!=',':break
+                self.pop()
+            self.want(']');left=('table',pairs)
+        elif token=='{':
+            page=self.pop();self.want(',');entry=self.pop();self.want('}')
+            left=('text',page,entry)
+        elif token.startswith("'"):left=('literal',token[1:-1].replace("''", "'"))
+        elif token[0].isdigit():
+            match=re.fullmatch(r'(\d+(?:\.\d+)?)(min|ms|Cr|s)?',token)
+            left=('literal',float(match[1])*{'min':60,'ms':.001,'Cr':1,'s':1,None:1}[match[2]])
+        elif token in ('true','false','null'):left=('literal',{'true':True,'false':False,'null':None}[token])
+        else:left=('var',token)
+        while True:
+            token=self.peek()
+            if token=='.':
+                self.pop()
+                if self.peek()=='{':
+                    self.pop();key=self.expr();self.want('}');left=('member',left,key)
+                elif self.peek()=='[':
+                    self.pop();args=[]
+                    while self.peek()!=']':
+                        args.append(self.expr())
+                        if self.peek()!=',':break
+                        self.pop()
+                    self.want(']');left=('format',left,args)
+                else:left=('member',left,('literal',self.pop().lstrip('$')))
+                continue
+            if token=='?':self.pop();left=('present',left);continue
+            if token in ('i','f'):
+                self.pop();left=('cast',token,left);continue
+            precedence={'or':1,'and':2,'==':3,'!=':3,'gt':3,'lt':3,'ge':3,'le':3,'+':4,'-':4,'*':5,'/':5}.get(token,0)
+            if not precedence or precedence<minimum:break
+            self.pop();right=self.expr(precedence+1);left=('binary',token,left,right)
+        return left
+
+
+class Done(Exception):
+    def __init__(self, values):self.values=values
+class Continue(Exception):pass
+class Break(Exception):pass
+class Resume(Exception):
+    def __init__(self,label):self.label=label
+
+
+class Runner:
+    def __init__(self, engine):self.engine=engine;self.parsed={};self.steps=0
+    def ast(self,text):
+        if text not in self.parsed:self.parsed[text]=Parser(text).parse()
+        return self.parsed[text]
+    def ev(self,node,local):
+        tag=node[0]
+        if tag=='literal':return node[1]
+        if tag=='text':return self.engine.texts.get((node[1],node[2]),f'text:{node[1]}:{node[2]}')
+        if tag=='var':
+            name=node[1]
+            if name.startswith('$'):return local.get(name[1:],0)
+            return self.engine.roots.get(name,0)
+        if tag=='member':
+            target,key=self.ev(node[1],local),self.ev(node[2],local)
+            if self.engine.strict_binding_reads and key in BINDING_FIELDS and key not in target:
+                raise UndefinedBinding(key)
+            return member(target,key)
+        if tag=='present':
+            child=node[1]
+            if child[0]=='member':
+                target,key=self.ev(child[1],local),raw(self.ev(child[2],local))
+                if isinstance(target,dict):return key in target
+            if child[0]=='var' and child[1].startswith('$'):return child[1][1:] in local
+            return self.ev(child,local) is not None and self.ev(child,local)!=0
+        if tag=='list':return [self.ev(x,local) for x in node[1]]
+        if tag=='table':return Obj({key:self.ev(value,local) for key,value in node[1]})
+        if tag=='if':return self.ev(node[2] if raw(self.ev(node[1],local)) else node[3],local)
+        if tag=='cast':return (int if node[1]=='i' else float)(raw(self.ev(node[2],local)))
+        if tag=='unary':
+            try:value=raw(self.ev(node[2],local))
+            except UndefinedBinding:
+                if node[1]=='@':return None
+                raise
+            return not value if node[1]=='not' else -value if node[1]=='-' else value
+        if tag=='format':
+            text=self.ev(node[1],local);args=tuple(str(raw(self.ev(x,local))) for x in node[2])
+            return text % args[:text.count('%s')] if '%s' in text else text+' '+str(args)
+        if tag=='binary':
+            op=node[1];a=raw(self.ev(node[2],local))
+            # Conservative binding checks must also work if BOTH boolean operands
+            # are evaluated. This is a stress mode, not a full native evaluator.
+            if self.engine.strict_binding_reads and op in ('and','or') and any(k in repr(node) for k in BINDING_FIELDS):
+                b=raw(self.ev(node[3],local));return (a and b) if op=='and' else (a or b)
+            if op=='and':return a and raw(self.ev(node[3],local))
+            if op=='or':return a or raw(self.ev(node[3],local))
+            b=raw(self.ev(node[3],local))
+            if op=='+':return a+b
+            if op=='-':return a-b
+            if op=='*':return a*b
+            if op=='/':return a/b
+            if op=='==':return a==b
+            if op=='!=':return a!=b
+            if op=='gt':return a>b
+            if op=='lt':return a<b
+            if op=='ge':return a>=b
+            if op=='le':return a<=b
+        raise ValueError(node)
+    def value(self,text,local):return self.ev(self.ast(text),local)
+    def set(self,path,value,local,remove=False,operation=None):
+        node=self.ast(path)
+        if node[0]=='var':target,key=local,node[1][1:]
+        else:
+            assert node[0]=='member',node
+            target=self.ev(node[1],local);key=raw(self.ev(node[2],local))
+            if node[2] in (('var','$group'),('var','$groupKey'),('var','$failureKey')) and isinstance(key,str) and not key.startswith('$'):
+                raise AssertionError('Native table string keys must start with $: '+key)
+        if isinstance(target,dict) and target.get('class') in ('ship','station','sector') and str(key).startswith('mwex'):
+            raise AssertionError('Native component cannot store entity blackboard: '+str(key))
+        if remove:target.pop(key,None);return
+        if operation=='add':value=target.get(key,0)+value
+        if operation=='subtract':value=target.get(key,0)-value
+        target[key]=value
+    def script(self,name,params):
+        root=ET.parse(SRC/'aiscripts'/('supply_mule.xml' if name=='supplymule' else f'{name}.xml')).getroot();local=dict(params)
+        for p in root.findall('./params/param'):
+            if p.get('name') not in local:local[p.get('name')]=self.value(p.get('default','null'),local)
+        actions=root.find('./attention/actions')
+        children=list(actions);labels={c.get('name'):i for i,c in enumerate(children) if c.tag=='label'}
+        start=0
+        try:
+            if root.find('init') is not None:self.children(list(root.find('init')),local)
+            while True:
+                try:self.children(children[start:],local);break
+                except Resume as resumed:start=labels[resumed.label]+1
+        except Done as done:return done.values
+        return {}
+    def children(self,children,local):
+        i=0
+        while i<len(children):
+            node=children[i]
+            if node.tag=='do_if':
+                group=[node];i+=1
+                while i<len(children) and children[i].tag in ('do_elseif','do_else'):
+                    group.append(children[i]);i+=1
+                for branch in group:
+                    if branch.tag=='do_else' or self.value(branch.get('value'),local):
+                        self.children(list(branch),local);break
+                continue
+            self.action(node,local);i+=1
+    def action(self,node,local):
+        self.steps+=1
+        if self.steps>2000000:raise RuntimeError('Synthetic adapter step limit')
+        tag=node.tag
+        v=lambda key,default='null':self.value(node.get(key,default),local)
+        if tag=='set_value':self.set(node.get('name'),v('exact'),local,operation=node.get('operation'));return
+        if tag=='remove_value':self.set(node.get('name'),None,local,remove=True);return
+        if tag=='append_to_list':
+            target=v('name');target.extend(v('list')) if node.get('list') else target.append(v('exact'));return
+        if tag=='remove_from_list':
+            target=v('name');remove=v('list') if node.get('list') else [v('exact')]
+            for item in list(remove):
+                if item in target:target.remove(item)
+            return
+        if tag in ('do_for_each','do_all'):
+            if tag=='do_all':items=[(i,i) for i in range(1,int(v('exact'))+1)]
+            else:
+                source=v('in');items=list(source.items()) if isinstance(source,dict) else [(x,x) for x in list(source)]
+            if node.get('reverse')=='true':items.reverse()
+            for index,(key,value) in enumerate(items,1):
+                if node.get('name'):self.set(node.get('name'),key,local)
+                if node.get('valuename'):self.set(node.get('valuename'),value,local)
+                if node.get('counter'):self.set(node.get('counter'),key if tag=='do_all' else index,local)
+                try:self.children(list(node),local)
+                except Continue:continue
+                except Break:break
+            return
+        if tag=='continue':raise Continue()
+        if tag=='break':raise Break()
+        if tag=='return':raise Done({c.get('name'):self.value(c.get('value'),local) for c in node})
+        if tag=='resume':raise Resume(node.get('label'))
+        if tag=='run_script':
+            if v('name')=='move.generic':
+                params={c.get('name'):self.value(c.get('value'),local) for c in node if c.tag=='param'}
+                # Model completion/interruption only; native flying and path following require in-game testing.
+                self.engine.moves.append(params)
+                if 'mwexFleetLock' in self.engine.global_:raise AssertionError('Movement holds the dispatch lock')
+                if self.engine.on_move:self.engine.on_move(self.engine,params)
+                else:
+                    ship=self.engine.roots['this']['ship'];destination=params['destination']
+                    ship['sector']=destination['sector'];ship['zone']=destination.get('zone',destination)
+                return
+            result=self.script(v('name'),{c.get('name'):self.value(c.get('value'),local) for c in node if c.tag=='param'})
+            for c in node:
+                if c.tag=='save_retval':self.set(c.get('variable'),result.get(c.get('name'),0),local)
+            return
+        if tag=='wait':
+            self.engine.player['age']+=v('exact',node.get('min','0'));self.engine.waits+=1
+            if self.engine.on_wait:self.engine.on_wait(self.engine)
+            return
+        if tag in ('debug_to_file','debug_text'):
+            self.engine.logs.append(v('text'));return
+        if tag=='write_to_logbook':self.engine.notices.append(v('text'));return
+        if tag=='set_order_failed':
+            order=v('order');order['failure']=v('text');self.engine.ship_failures.append((order,v('text')));return
+        if tag=='clear_order_failure':v('order').pop('failure',None);return
+        if tag=='reward_player':self.engine.player['money']+=v('money');return
+        if tag=='remove_cargo':
+            ship,ware=v('object'),v('ware');amount=min(int(v('exact')),ship['cargo'][ware]['count'])
+            ship['cargo'][ware]['count']-=amount
+            ship['cargo']['free']['all']+=amount*ware['volume'];ship['cargo'][ware]['free']+=amount
+            ship['cargo']['list']=[w for w in ship['cargo']['list'] if ship['cargo'][w]['count']>0]
+            ship['cargo']['count']=sum(ship['cargo'][w]['count'] for w in self.engine.wares)
+            return
+        if tag in ('set_order_syncpoint_reached','set_command_action'):return
+        if tag=='get_factions_by_relation':self.set(node.get('result'),['player','ai'],local);return
+        if tag=='set_object_commander':
+            ship=v('object')
+            self.engine.assignments.append((ship,v('commander')))
+            if not ship.get('reject_assignment',False):ship['commander']=v('commander');ship['toplevelcommander']=v('commander')
+            return
+        if tag=='signal_objects':
+            self.engine.signals.append(Obj(object=v('object'),param=v('param'),param2=v('param2'),delay=v('delay','0s')));return
+        if tag=='label':return
+        if tag=='get_ware_definition':self.set(node.get('result'),self.engine.wares,local);return
+        if tag in ('find_buy_offer','find_sell_offer'):
+            self.engine.queries[tag]=self.engine.queries.get(tag,0)+1
+            pool=self.engine.needs if tag=='find_buy_offer' else self.engine.sources
+            owner=v('buyer' if tag=='find_buy_offer' else 'seller');wares=v('wares');ship=v('tradepartner')
+            matches=[]
+            for offer in pool:
+                if owner and offer['owner'] is not owner:continue
+                if wares and offer['ware'] not in (wares if isinstance(wares,list) else [wares]):continue
+                if not offer.get('exists',True):continue
+                if node.get('excludeempty')!='false' and offer.field('amount')<=0:continue
+                if ship and not offer.allowed(ship):continue
+                price_filter=node.find('price')
+                if price_filter is not None and offer.actual_price(ship)>self.value(price_filter.get('max'),local)+1e-8:continue
+                matches.append(offer)
+            self.set(node.get('result'),matches,local);return
+        if tag=='find_closest_dockingbay':
+            owner,ship=v('object'),v('ship')
+            self.set(node.get('name'),Obj(name='dock') if ship['size'] in owner['docks'] else None,local);return
+        if tag=='get_global_path':
+            start=self.value(node.find('start').get('object'),local);end=self.value(node.find('end').get('object'),local)
+            ship=v('refobject');path=self.engine.path(start.get('sector',start),end['sector'],ship)
+            self.set(node.get('component'),path or [],local)
+            if node.get('resultdistance'):self.set(node.get('resultdistance'),len(path)-1 if path else -1,local)
+            return
+        if tag=='clamp_trade_amount':
+            offer,amount,buyer,seller=v('trade'),int(v('amount')),v('buyer'),v('seller')
+            if buyer:
+                if buyer['class']=='ship':amount=min(amount,member(member(buyer['cargo'],offer['ware']),'free'))
+                price=offer.actual_price(buyer)
+                if not offer.field('buyfree').callback(buyer) and price>0:amount=min(amount,int(buyer['money']//price))
+            self.set(node.get('result'),max(0,amount),local);return
+        if tag=='create_trade_order':
+            order=self.engine.order(v('object'),v('tradeoffer'),int(v('amount')))
+            if node.get('name'):self.set(node.get('name'),order,local)
+            return
+        if tag=='cancel_order':self.engine.cancel(v('order'));return
+        raise NotImplementedError(tag)
+
+
+class Offer(Obj):
+    def __init__(self,owner,ware,amount,price,buy):
+        super().__init__(owner=owner,ware=ware,total=amount,unitprice=price,isbuyoffer=buy,
+                         minamount=1,exists=True);self.reserved={}
+    def allowed(self,ship):return (self['owner']['sector'] not in ship['blocked'] and
+                                  self['owner'] not in ship['forbidden'] and
+                                  self['ware'] in ship['cargo'])
+    def actual_price(self,ship):return self.get('actualprice',self['unitprice'])
+    def field(self,key):
+        if key=='amount':return max(0,self['total']-sum(self.reserved.values()))
+        if key=='desiredamount':return self['total']
+        if key=='offeramount':return Proxy(lambda ship:self.field('amount')+self.reserved.get(ship,0),self['total'])
+        if key=='available':return self.get('exists',True) and self.field('amount')>0
+        if key=='cantradewith':return Proxy(self.allowed)
+        if key in ('buyer','seller'):return self['owner'] if (key=='buyer')==self['isbuyoffer'] else None
+        if key=='buyfree':return Proxy(lambda buyer: (self['owner']['owner']==buyer.get('owner')
+                                                    if not self['isbuyoffer'] else False),False)
+        return dict.get(self,key,0)
+
+
+class Engine:
+    def __init__(self,delayed=False):
+        self.player=Obj(age=0,money=10**12,occupiedship=None,entity=Obj(name='player'),galaxy=Obj(name='galaxy'))
+        self.modifier_targets=set()
+        self.player['hasdiscount']=Proxy(lambda target:target in self.modifier_targets)
+        self.player['hascommission']=Proxy(lambda target:target in self.modifier_targets)
+        self.texts={('61552',n.get('id')):n.text for n in ET.parse(SRC/'t/0001-l086.xml').getroot().iter('t')}
+        self.global_=Obj(mwexFleetPending=[],mwexFleetEpoch=0,mwexFleetLock=Obj(time=0,actor=Obj(name='actor')))
+        self.roots={'global':self.global_,'player':self.player,
+                    'faction':Obj(player='player'),'class':Obj(ship='ship',station='station',sector='sector'),
+                    'assignment':Obj(trade='trade'),'unitcategory':Obj(transport='transport'),'blacklistgroup':Obj(civilian='civilian'),
+                    'blacklisttype':Obj(sectortravel='travel',sectoractivity='activity',objectactivity='object')}
+        self.wares=[];self.needs=[];self.sources=[];self.logs=[];self.notices=[];self.waits=0
+        self.delayed=delayed;self.created=0;self.fail_at=None;self.graph={};self.runner=Runner(self)
+        self.on_wait=None;self.queries={};self.partial_at=None;self.running_partial=False
+        self.strict_binding_reads=True
+        self.assignments=[]
+        self.moves=[];self.on_move=None;self.ship_failures=[];self.signals=[]
+    def sector(self,name):
+        s=Obj(name=name,**{'class':'sector'});s['sector']=s
+        def distance(other):
+            def with_ship(ship):
+                path=self.path(s,other,ship);return len(path)-1 if path else -1
+            return Proxy(lambda group:Proxy(with_ship),len(self.path(s,other,None) or [])-1)
+        s['gatedistance']=Proxy(distance);self.graph[s]=[];return s
+    def connect(self,a,b):self.graph[a].append(b);self.graph[b].append(a)
+    def path(self,a,b,ship):
+        blocked=ship.get('blocked',set()) if ship else set()
+        if a in blocked or b in blocked:return None
+        todo=deque([(a,[a])]);seen={a}
+        while todo:
+            sector,path=todo.popleft()
+            if sector is b:return path
+            for neighbor in self.graph[sector]:
+                if neighbor not in seen and neighbor not in blocked:
+                    seen.add(neighbor);todo.append((neighbor,path+[neighbor]))
+        return None
+    def ware(self,name,volume=1,tag='container'):
+        w=Obj(id=name,name=name,volume=volume,transporttag=tag,averageprice=100,minprice=50,maxprice=200,pricerange=150);self.wares.append(w);return w
+    def station(self,name,sector,owner='player',docks=('S','M','L','XL')):
+        obj=Obj(name=name,idcode=name,sector=sector,zone=Obj(name=name+' zone'),owner=owner,money=10**12,
+                units={'transport':{'count':1}},resources=Obj(),supplyresources=Obj(),
+                products=Obj(),tradewares=Obj(),cargo=Obj(free=Obj(all=10**12,container=10**12)),docks=docks,allsubordinates=[],**{'class':'station'})
+        return obj
+    def offer(self,owner,ware,amount,price,buy):
+        offer=Offer(owner,ware,amount,price,buy)
+        (self.needs if buy else self.sources).append(offer)
+        owner['resources'][ware]=Obj(exists=buy);owner['products'][ware]=Obj(exists=not buy)
+        owner['tradewares'][ware]=Obj(exists=True);owner['cargo'][ware]=Obj(count=0 if buy else amount,target=max(1,amount))
+        return offer
+    def ship(self,name,capacity,home,macro=None,size='M',**settings):
+        cargo=Obj(count=0,list=[],capacity=Obj(all=capacity,container=capacity),free=Obj(all=capacity,container=capacity))
+        for w in self.wares:cargo[w]=Obj(max=int(capacity//w['volume']),free=int(capacity//w['volume']),count=0)
+        ship=Obj(name=name,idcode=name,cargo=cargo,money=10**12,macro=macro or name,sector=home['sector'],zone=home['zone'],
+                 owner='player',orders=[],subordinates=[],isoperational=True,iscapitalship=size in ('L','XL'),size=size,
+                 waretransport=['container'],units={'transport':{'count':1}},blocked=set(),forbidden=set(),
+                 pilot=Obj(exists=True),commander=home,toplevelcommander=home,**{'class':'ship'})
+        cfg=Obj(ship=ship,home=home,maxDist=10,dedicatedServe=True,allowPlayerSuppliers=True,allowAiSuppliers=True,
+                allowBuildstorage=True,allowResources=True,allowIntermediates=True,allowTradewares=True,
+                lockWares=False,wares=[],maxTrades=3,minCargoUsed=70,playerBuyMod=100,searchDepth=100,playerStockThreshold=50,
+                corridorDepth=2,corridorMarkup=5,commander=home,bound=True,signature='same')
+        cfg.update(settings);origin=Obj(id='SupplyMule',isrunning=True);origin.update(cfg);origin['specialWareBasket']=cfg['wares'];cfg['origin']=origin
+        ship['defaultorder']=origin;ship['pilot']['mwexFleetCfg']=cfg;home['allsubordinates'].append(ship)
+        return ship,cfg
+    def hub(self,home,ships):
+        hub=Obj(home=home,members=Obj(),groups=Obj(),capacities=Obj(),warnings=Obj(),failures=Obj(),
+                needs=list(self.needs),sources=Obj(),cacheDirty=False,cacheUntil=10**9,cacheEpoch=0,
+                backoff=2,next=0,rosterDirty=False)
+        for ship,cfg in ships:
+            key='$model/'+str(ship['macro'])+'/'+str(ship['cargo']['capacity']['all'])
+            hub['members'][ship]=cfg;hub['groups'].setdefault(key,[]).append(ship)
+            hub['capacities'][key]=ship['cargo']['capacity']['all']
+        hub['ascending']=sorted(hub['groups'],key=lambda x:hub['capacities'][x]);hub['descending']=list(reversed(hub['ascending']))
+        for offer in self.sources:hub['sources'].setdefault(offer['ware'],Obj()).setdefault(offer['owner']['sector'],Obj())[offer['owner']]=offer
+        return hub
+    def order(self,ship,offer,amount):
+        self.created+=1
+        if self.fail_at==self.created:return None
+        if self.partial_at==self.created:amount=max(1,amount//2)
+        order=Obj(id='Trade',state='queued',isrunning=False,trade=Obj(amount=amount,transferredamount=0),
+                  ship=ship,offer=offer,amount=amount)
+        if self.partial_at==self.created and self.running_partial:order['isrunning']=True
+        ship['orders'].append(order)
+        if not self.delayed:offer.reserved[ship]=offer.reserved.get(ship,0)+amount
+        return order
+    def cancel(self,order):
+        if not order or not order.get('exists',True):return
+        ship,offer,amount=order['ship'],order['offer'],order['amount']
+        if order in ship['orders']:ship['orders'].remove(order)
+        order['exists']=False
+        if ship in offer.reserved:offer.reserved[ship]=max(0,offer.reserved[ship]-amount)
+
+
+class XMLDispatchChecks(unittest.TestCase):
+    def entry(self,e,ship,cfg,home):
+        local=dict(cfg,home=home,assignHome=True,specialWareBasket=[],restartScript=0)
+        ship['defaultorder']['home']=home;ship['defaultorder']['assignHome']=True
+        e.roots['this']=Obj(ship=ship,name='pilot',assignedcontrolled=ship)
+        e.global_.pop('mwexFleetLock',None)
+        e.runner.script('supplymule',local)
+
+    def test_original_m4_entry_assigns_station_and_creates_trade_orders(self):
+        e,home,fleet,hub=self.setup_market([80],[100]);ship,cfg=fleet[0]
+        ship['commander']=None;ship['pilot'].pop('mwexFleetCfg')
+        self.entry(e,ship,cfg,home)
+        self.assertIs(ship['commander'],home)
+        self.assertEqual(len(ship['orders']),2)
+        self.assertIs(e.global_['mwexFleetHubs'][home]['members'][ship],ship['pilot']['mwexFleetCfg'])
+
+    def test_original_m4_sector_home_warns_but_still_dispatches(self):
+        e,home,fleet,hub=self.setup_market([80],[100]);ship,cfg=fleet[0]
+        ship['commander']=None;ship['pilot'].pop('mwexFleetCfg')
+        self.entry(e,ship,cfg,home['sector'])
+        self.assertIsNone(ship['commander'])
+        self.assertEqual(len(ship['orders']),2)
+        self.assertEqual(len(e.notices),1)
+
+    def test_native_blackboard_registration_keeps_fresh_member_and_dispatches(self):
+        e,home,fleet,hub=self.setup_market([80],[100]);ship,cfg=fleet[0]
+        ship['pilot'].pop('mwexFleetCfg');hub['members'].clear()
+        hub['groups'].clear();hub['capacities'].clear();hub['ascending']=[];hub['descending']=[]
+        self.run_roster(e,home,fleet,hub)
+        self.assertIs(ship['pilot']['mwexFleetCfg'],hub['members'][ship])
+        self.assertEqual(len(ship['orders']),2)
+
+    def test_rejected_assignment_records_native_conditions_and_does_not_block_trade(self):
+        e,home,fleet,hub=self.setup_market([80],[100]);ship,cfg=fleet[0]
+        ship.update(commander=None,reject_assignment=True)
+        ship['pilot'].pop('mwexFleetCfg')
+        self.entry(e,ship,cfg,home)
+        diag=ship['pilot']['mwexFleetAssignmentCheck']
+        self.assertFalse(diag['canHave']);self.assertFalse(diag['canTrade'])
+        self.assertIsNone(diag['after']);self.assertNotIn('mwexFleetBoundOrigin',ship['pilot'])
+        self.assertEqual(len(e.notices),1);self.assertEqual(len(ship['orders']),2)
+
+    def test_idle_registration_returns_to_refresh_within_eight_seconds(self):
+        e,home,fleet,hub=self.setup_market([0],[100]);ship,cfg=fleet[0]
+        e.roots['this']=Obj(ship=ship,name='pilot')
+        e.global_.pop('mwexFleetLock',None)
+        e.runner.script('mule.fleet.run',{'cfg':cfg})
+        self.assertGreater(e.player['age'],5);self.assertLessEqual(e.player['age'],8)
+
+    def test_legacy_binding_guard_reads_missing_state_under_eager_validation(self):
+        e,home,fleet,hub=self.setup_market([0],[100]);ship,cfg=fleet[0]
+        ship['commander']=None
+        with self.assertRaises(UndefinedBinding):
+            e.runner.value('not @$ship.pilot.$mwexFleetBoundOrigin? or $ship.pilot.$mwexFleetBoundOrigin != $ship.defaultorder',{'ship':ship})
+
+    def test_direct_registration_binds_fresh_ship_and_preserves_trade_queue(self):
+        e,home,fleet,hub=self.setup_market([80],[100]);ship,cfg=fleet[0]
+        ship['commander']=None;ship['defaultorder']['assignHome']=True
+        order=e.order(ship,e.sources[0],1)
+        self.run_roster(e,home,fleet,hub)
+        self.assertIs(ship['commander'],home);self.assertEqual(ship['orders'],[order])
+        self.assertEqual(len(e.assignments),1)
+        diag=ship['pilot']['mwexFleetAssignmentCheck']
+        self.assertTrue(diag['attempted']);self.assertEqual(diag['reason'],'first-binding')
+        self.assertIs(ship['pilot']['mwexFleetCfg']['commander'],home)
+
+    def test_reload_already_assigned_does_not_repeat_assignment(self):
+        e,home,fleet,hub=self.setup_market([0],[100]);ship,cfg=fleet[0]
+        ship['defaultorder']['assignHome']=True
+        self.run_roster(e,home,fleet,hub)
+        self.assertEqual(e.assignments,[])
+        self.assertIs(ship['pilot']['mwexFleetBoundOrigin'],ship['defaultorder'])
+        self.assertEqual(ship['pilot']['mwexFleetAssignmentCheck']['reason'],'already-assigned')
+
+    def test_manually_detached_same_binding_is_not_forced_back(self):
+        e,home,fleet,hub=self.setup_market([0],[100]);ship,cfg=fleet[0]
+        ship['defaultorder']['assignHome']=True
+        self.run_roster(e,home,fleet,hub)
+        ship['commander']=None
+        self.run_roster(e,home,fleet,hub)
+        self.assertIsNone(ship['commander']);self.assertEqual(e.assignments,[])
+        self.assertEqual(ship['pilot']['mwexFleetAssignmentCheck']['reason'],'same-binding-detached')
+
+    def test_changed_binding_and_incomplete_binding_can_assign(self):
+        for case in ('order','home','missing-home'):
+            with self.subTest(case=case):
+                e,home,fleet,hub=self.setup_market([0],[100]);ship,cfg=fleet[0]
+                ship['commander']=None;ship['defaultorder']['assignHome']=True
+                pilot=ship['pilot'];pilot['mwexFleetBoundOrigin']=ship['defaultorder']
+                if case=='order':pilot['mwexFleetBoundOrigin']=Obj(id='previous-order')
+                if case!='missing-home':pilot['mwexFleetBoundHome']=Obj(name='old-home')
+                self.run_roster(e,home,fleet,hub)
+                self.assertIs(ship['commander'],home);self.assertEqual(len(e.assignments),1)
+
+    def setup_market(self,amounts,capacities,delayed=False):
+        e=Engine(delayed);h=e.sector('H');home=e.station('Home',h)
+        for i,amount in enumerate(amounts):
+            w=e.ware('w'+str(i));supplier=e.station('Source'+str(i),h,'ai')
+            e.offer(home,w,amount,110,True);e.offer(supplier,w,amount,100,False)
+        fleet=[e.ship('ship'+str(i),cap,home,macro='model'+str(cap)) for i,cap in enumerate(capacities)]
+        return e,home,fleet,e.hub(home,fleet)
+    def dispatch(self,e,hub):e.runner.script('mule.fleet.wave',{'hub':hub})
+    def test_manual_trade_stock_ignores_retired_flag_but_requires_buy_demand(self):
+        for amount in (0,80):
+            with self.subTest(amount=amount):
+                e,home,fleet,hub=self.setup_market([amount],[100]);ware=e.wares[0]
+                home['resources'][ware]['exists']=False
+                ship,cfg=fleet[0]
+                cfg.update(allowResources=False,allowIntermediates=False,allowBuildstorage=False,allowTradewares=False)
+                ship['defaultorder'].update(cfg)
+                self.dispatch(e,hub)
+                self.assertEqual(len(ship['orders']),2 if amount else 0)
+                if amount:self.assertEqual(ship['orders'][0]['amount'],amount)
+
+    def test_remaining_ware_switches_still_filter_receiver_uses(self):
+        for category,flag in (('resource','allowResources'),('intermediate','allowIntermediates'),('build','allowBuildstorage')):
+            with self.subTest(category=category):
+                e,home,fleet,hub=self.setup_market([80],[100]);ware=e.wares[0];ship,cfg=fleet[0]
+                if category=='intermediate':home['products'][ware]['exists']=True
+                if category=='build':
+                    store=e.station('Build',home['sector']);store.update({'class':'buildstorage','base':home})
+                    e.needs[0]['owner']=store
+                cfg[flag]=False;ship['defaultorder'][flag]=False
+                self.dispatch(e,hub)
+                self.assertEqual(ship['orders'],[])
+
+    def test_buildstorage_only_keeps_player_price_exception_without_retired_flag(self):
+        for old_flag in (False,True):
+            with self.subTest(old_flag=old_flag):
+                e,home,fleet,hub=self.setup_market([80],[100]);ship,cfg=fleet[0]
+                store=e.station('Build',home['sector']);store.update({'class':'buildstorage','base':home})
+                e.needs[0].update(owner=store,unitprice=90)
+                cfg.update(allowResources=False,allowIntermediates=False,allowTradewares=old_flag)
+                ship['defaultorder'].update(cfg)
+                self.dispatch(e,hub)
+                self.assertEqual(len(ship['orders']),2)
+                self.assertIs(ship['orders'][1]['offer']['owner'],store)
+
+    def test_retired_price_modifier_no_longer_blocks_owned_transfers(self):
+        for owner in ('player','ai'):
+            for modifier,accepted in ((100,False),(85,True),(0,True)):
+                with self.subTest(owner=owner,modifier=modifier):
+                    e,home,fleet,hub=self.setup_market([80],[100]);ship,cfg=fleet[0]
+                    e.needs[0]['unitprice']=90;e.sources[0]['owner']['owner']=owner;cfg['playerBuyMod']=modifier
+                    plan=e.runner.script('mule.fleet.plan',{'hub':hub,'cfg':cfg,'relaxed':True})['plan']
+                    self.assertEqual(bool(plan),owner=='player')
+                    if plan:self.assertEqual(plan[0]['buyprice'],0)
+
+    def test_free_owned_transfer_competes_at_zero_cost_at_equal_distance(self):
+        e,home,fleet,hub=self.setup_market([80],[100]);ship,cfg=fleet[0]
+        e.needs[0]['unitprice']=150;cfg['playerBuyMod']=0
+        own=e.offer(e.station('Own',home['sector']),e.wares[0],80,110,False)
+        hub=e.hub(home,fleet)
+        plan=e.runner.script('mule.fleet.plan',{'hub':hub,'cfg':cfg,'relaxed':True})['plan']
+        self.assertIs(plan[0]['source'],own);self.assertEqual(plan[0]['buyprice'],0)
+
+    def test_main_source_prefers_fewer_jumps_then_lower_price(self):
+        for same_sector in (False,True):
+            with self.subTest(same_sector=same_sector):
+                e,home,fleet,hub=self.setup_market([80],[100]);ship,cfg=fleet[0]
+                e.needs[0]['unitprice']=150
+                remote=e.sector('Remote');e.connect(home['sector'],remote)
+                cheaper=e.offer(e.station('Cheap',home['sector'] if same_sector else remote,'ai'),e.wares[0],80,90,False)
+                plan=e.runner.script('mule.fleet.plan',{'hub':e.hub(home,fleet),'cfg':cfg,'relaxed':True})['plan']
+                self.assertIs(plan[0]['source'],cheaper if same_sector else e.sources[0])
+
+    def test_stock_trigger_allows_whole_shipment_without_retained_reserve(self):
+        for stock,accepted in ((59,False),(60,False),(80,True)):
+            with self.subTest(stock=stock):
+                e,home,fleet,hub=self.setup_market([100],[100]);source=e.sources[0];ware=e.wares[0];ship,cfg=fleet[0]
+                source['owner']['owner']='player';source['owner']['cargo'][ware].update(count=stock,target=100)
+                cfg['playerStockThreshold']=60;ship['defaultorder']['playerStockThreshold']=60
+                source['total']=stock;e.needs[0]['unitprice']=1
+                self.dispatch(e,hub)
+                self.assertEqual(bool(ship['orders']),accepted)
+                if accepted:self.assertEqual(ship['orders'][0]['amount'],80)
+
+    def test_low_owned_stock_falls_back_to_npc_and_switch_disables_owned_sources(self):
+        for enabled,stock in ((True,10),(False,100)):
+            with self.subTest(enabled=enabled):
+                e,home,fleet,hub=self.setup_market([80],[100]);ware=e.wares[0];ship,cfg=fleet[0]
+                own=e.offer(e.station('Own',home['sector']),ware,100,200,False)
+                own['owner']['cargo'][ware]['count']=stock
+                cfg['allowPlayerSuppliers']=enabled;ship['defaultorder']['allowPlayerSuppliers']=enabled
+                self.dispatch(e,e.hub(home,fleet))
+                self.assertIs(ship['orders'][0]['offer'],e.sources[0])
+
+    def test_stock_trigger_is_per_ware_and_zero_target_does_not_divide(self):
+        e,home,fleet,hub=self.setup_market([80,80],[200]);ship,cfg=fleet[0]
+        for source in e.sources:source['owner']['owner']='player'
+        e.sources[0]['owner']['cargo'][e.wares[0]]['target']=0
+        self.dispatch(e,hub)
+        self.assertEqual([o['offer']['ware'] for o in ship['orders'] if not o['offer']['isbuyoffer']],[e.wares[1]])
+
+    def test_live_stock_drop_rejects_unsubmitted_plan(self):
+        e,home,fleet,hub=self.setup_market([80],[100]);ship,cfg=fleet[0];source=e.sources[0]
+        source['owner']['owner']='player'
+        plan=e.runner.script('mule.fleet.plan',{'hub':hub,'cfg':cfg,'relaxed':True})['plan']
+        source['owner']['cargo'][e.wares[0]]['count']=10
+        self.assertFalse(e.runner.script('mule.fleet.commit',{'cfg':cfg,'plan':plan})['ok']);self.assertEqual(e.created,0)
+
+    def test_zero_stock_trigger_survives_config_refresh_and_live_change_rejects(self):
+        e,home,fleet,hub=self.setup_market([80],[100]);ship,cfg=fleet[0];source=e.sources[0]
+        source['owner']['owner']='player';source['owner']['cargo'][e.wares[0]].update(count=1,target=100)
+        source['total']=1;cfg['playerStockThreshold']=0;ship['defaultorder']['playerStockThreshold']=0
+        refreshed=e.runner.script('mule.fleet.config',{'cfg':cfg})['cfg']
+        self.assertEqual(refreshed['playerStockThreshold'],0)
+        plan=e.runner.script('mule.fleet.plan',{'hub':hub,'cfg':cfg,'relaxed':True})['plan']
+        self.assertTrue(plan);ship['defaultorder']['playerStockThreshold']=75
+        self.assertFalse(e.runner.script('mule.fleet.commit',{'cfg':cfg,'plan':plan})['ok']);self.assertEqual(e.created,0)
+
+    def test_native_discount_unlocks_previously_equal_raw_quotes_and_actual_budget(self):
+        e,home,fleet,hub=self.setup_market([80],[100]);ship,cfg=fleet[0];source=e.sources[0];ware=e.wares[0]
+        source.update(unitprice=710,actualprice=558);e.needs[0]['unitprice']=710
+        ware.update(minprice=710,maxprice=1318,pricerange=608)
+        e.modifier_targets.add(source['owner']['owner']);ship['money']=558*80
+        self.dispatch(e,hub)
+        self.assertEqual(len(ship['orders']),2);self.assertEqual(ship['orders'][0]['amount'],80)
+        self.assertAlmostEqual(ship['pilot']['mwexFleetVoyage'][0]['buyprice'],558,places=2)
+
+    def test_main_same_distance_ranks_discounted_actual_price(self):
+        e,home,fleet,hub=self.setup_market([80],[100]);ship,cfg=fleet[0];source=e.sources[0]
+        source.update(unitprice=140,actualprice=90);e.needs[0]['unitprice']=150
+        e.modifier_targets.add(source['owner'])
+        e.offer(e.station('Competitor',home['sector'],'ai'),e.wares[0],80,100,False)
+        self.dispatch(e,e.hub(home,fleet));self.assertIs(ship['orders'][0]['offer'],source)
+
+    def test_secondary_competition_uses_discount_before_corridor_markup(self):
+        e,home,fleet,off,far,p=self.corridor_market();fleet[0][1]['corridorMarkup']=5
+        off.update(unitprice=120,actualprice=90);e.modifier_targets.add(off['owner'])
+        e.offer(e.station('OnPath',p,'ai'),off['ware'],200,100,False)
+        self.dispatch(e,e.hub(home,fleet))
+        self.assertIn(off,[o['offer'] for o in fleet[0][0]['orders']])
+
+    def test_price_cache_is_shared_by_same_faction_and_scoped_to_supplied_cache(self):
+        e,home,fleet,hub=self.setup_market([80],[100,100]);source=e.sources[0]
+        source['actualprice']=90;e.modifier_targets.add(source['owner']);cache=Obj()
+        first=e.runner.script('mule.fleet.price',{'offer':source,'ship':fleet[0][0],'cache':cache})
+        queries=sum(e.queries.values())
+        second=e.runner.script('mule.fleet.price',{'offer':source,'ship':fleet[1][0],'cache':cache})
+        self.assertEqual(first,second);self.assertEqual(sum(e.queries.values()),queries)
+        self.assertLessEqual(queries,33);self.assertEqual(e.created,0)
+
+    def test_discount_expiry_rejects_plan_without_creating_trial_orders(self):
+        e,home,fleet,hub=self.setup_market([80],[100]);ship,cfg=fleet[0];source=e.sources[0]
+        source['actualprice']=90;e.modifier_targets.add(source['owner'])
+        plan=e.runner.script('mule.fleet.plan',{'hub':hub,'cfg':cfg,'relaxed':True})['plan']
+        self.assertTrue(plan);source['actualprice']=100;e.modifier_targets.clear()
+        self.assertFalse(e.runner.script('mule.fleet.commit',{'cfg':cfg,'plan':plan})['ok']);self.assertEqual(e.created,0)
+
+    def test_receiver_commission_is_used_in_price_spread(self):
+        e,home,fleet,hub=self.setup_market([80],[100]);ship,cfg=fleet[0]
+        home['owner']='ai';e.needs[0].update(unitprice=90,actualprice=110);e.modifier_targets.add(home)
+        self.dispatch(e,hub);self.assertEqual(len(ship['orders']),2)
+        self.assertAlmostEqual(ship['pilot']['mwexFleetVoyage'][0]['sellprice'],110,places=2)
+
+    def test_busy_trade_cargo_is_not_liquidated(self):
+        e,home,fleet,hub=self.setup_market([80],[100]);ship,cfg=fleet[0];ware=e.wares[0]
+        ship['cargo'].update(count=15,list=[ware]);ship['cargo'][ware]['count']=15
+        order=e.order(ship,e.needs[0],15);balance=e.player['money'];self.dispatch(e,hub)
+        self.assertEqual(ship['cargo'][ware]['count'],15);self.assertEqual(e.player['money'],balance)
+        self.assertEqual(ship['orders'],[order])
+
+    def test_price_rejection_explains_prices_in_chinese(self):
+        e,home,fleet,hub=self.setup_market([80],[100]);e.needs[0]['unitprice']=90
+        self.dispatch(e,hub)
+        message=hub['failures'][e.needs[0]]
+        self.assertIn('实际采购单价100',message);self.assertIn('实际买报价90',message)
+        self.assertNotIn('raw_price',message)
+
+    def test_hidden_tuning_parameters_and_new_stock_slider(self):
+        root=ET.parse(SRC/'aiscripts/supply_mule.xml').getroot();params={p.get('name'):p for p in root.findall('./order/params/param')}
+        self.assertEqual(params['searchDepth'].get('type'),'internal');self.assertEqual(params['playerBuyMod'].get('type'),'internal')
+        self.assertEqual(params['playerStockThreshold'].get('type'),'number')
+        for old in (5,40,100):
+            e,home,fleet,hub=self.setup_market([100],[100]);fleet[0][1]['searchDepth']=old
+            ware=e.wares[0];e.sources.clear()
+            for i in range(40):e.offer(e.station('S'+str(i),home['sector'],'ai'),ware,100,100,False)
+            self.dispatch(e,e.hub(home,fleet));self.assertEqual(e.waits,2)
+
+    def test_old_signature_cannot_reuse_config_without_new_stock_threshold(self):
+        e,home,fleet,hub=self.setup_market([80],[100]);ship,cfg=fleet[0]
+        fresh=e.runner.script('mule.fleet.config',{'cfg':Obj(cfg)})['cfg']
+        old=Obj(fresh);old.pop('playerStockThreshold');old['signature']=old['signature'].removesuffix('/v15')
+        ship['pilot']['mwexFleetCfg']=old
+        incoming=Obj(cfg);incoming.pop('playerStockThreshold')
+        resolved=e.runner.script('mule.fleet.config',{'cfg':incoming})['cfg']
+        self.assertIsNot(resolved,old);self.assertEqual(resolved['playerStockThreshold'],50)
+
+    def test_sector_service_dispatches_to_six_player_factories_and_excludes_npc(self):
+        e,home,fleet,hub=self.setup_market([10],[100]);ware=e.wares[0];e.sources[0]['total']=1000
+        receivers=[home]
+        for i in range(5):
+            station=e.station('Player'+str(i),home['sector']);receivers.append(station)
+            e.offer(station,ware,10,110,True)
+        npc=e.station('NPC',home['sector'],'ai');e.offer(npc,ware,1000,110,True)
+        fleet.extend(e.ship('extra'+str(i),100,home) for i in range(5))
+        for ship,cfg in fleet:
+            cfg.update(home=home['sector'],bound=False);ship['defaultorder']['home']=home['sector']
+        self.dispatch(e,e.hub(home['sector'],fleet))
+        delivered=[o['offer']['owner'] for ship,cfg in fleet for o in ship['orders'] if o['offer']['isbuyoffer']]
+        self.assertCountEqual(delivered,receivers);self.assertNotIn(npc,delivered)
+
+    def test_capacity_inversion_uses_large_L_before_small_XL(self):
+        e,home,fleet,hub=self.setup_market([150000],[90000,120000,5000])
+        fleet[0][0]['size']='XL';fleet[1][0]['size']='L'
+        self.dispatch(e,hub)
+        self.assertEqual(fleet[1][0]['orders'][0]['amount'],120000)
+        self.assertEqual(fleet[2][0]['orders'][0]['amount'],5000)
+        self.assertEqual(fleet[0][0]['orders'][0]['amount'],25000)
+    def test_three_lots_collect_before_delivery(self):
+        e,home,fleet,hub=self.setup_market([350,250,150],[1000,100])
+        self.dispatch(e,hub);orders=fleet[0][0]['orders']
+        self.assertEqual([o['offer']['isbuyoffer'] for o in orders],[False]*3+[True]*3)
+        self.assertEqual([o['amount'] for o in orders[:3]],[350,250,150])
+    def test_exact_70_percent_is_normal(self):
+        e,_,fleet,hub=self.setup_market([350,250,100],[1000,100])
+        self.dispatch(e,hub)
+        self.assertTrue(any('volume=700.0' in x and 'relaxed=False' in x and 'accepted=True' in x for x in e.logs))
+    def test_below_threshold_reaches_small_ship_first(self):
+        e,_,fleet,hub=self.setup_market([699],[1000,100])
+        self.dispatch(e,hub)
+        self.assertEqual(fleet[1][0]['orders'][0]['amount'],100)
+        self.assertEqual(fleet[0][0]['orders'][0]['amount'],599)
+    def test_tail_escalates_without_waiting_for_small_delivery(self):
+        e,_,fleet,hub=self.setup_market([1]*10,[5000,90000,120000])
+        self.dispatch(e,hub)
+        self.assertEqual([len(s['orders']) for s,c in fleet],[6,6,6])
+        self.assertEqual(sum(n.field('amount') for n in e.needs),1)
+    def test_ten_tail_lots_use_four_of_ten_ships(self):
+        e,_,fleet,hub=self.setup_market([1]*10,[5000]*10)
+        self.dispatch(e,hub)
+        self.assertEqual(sorted(len(s['orders'])//2 for s,c in fleet if s['orders']),[1,3,3,3])
+    def test_busy_small_ship_does_not_block_medium(self):
+        e,_,fleet,hub=self.setup_market([1]*4,[5000,90000])
+        fleet[0][0]['orders'].append(Obj(id='Wait'))
+        self.dispatch(e,hub)
+        self.assertEqual(len(fleet[1][0]['orders']),6)
+    def test_N_is_never_relaxed(self):
+        e,_,fleet,hub=self.setup_market([300,200,150,100],[1000])
+        self.dispatch(e,hub)
+        self.assertEqual(len(fleet[0][0]['orders']),6)
+        self.assertEqual(sum(o['amount'] for o in fleet[0][0]['orders'][:3]),650)
+    def test_cumulative_budget(self):
+        e,_,fleet,hub=self.setup_market([6,6,6],[1000])
+        ship,cfg=fleet[0];ship['money']=1000
+        self.dispatch(e,hub)
+        self.assertEqual(sum(o['amount']*100 for o in ship['orders'] if not o['offer']['isbuyoffer']),1000)
+    def test_delayed_native_visibility_does_not_duplicate_last_unit(self):
+        e,_,fleet,hub=self.setup_market([1],[100]*12,delayed=True)
+        self.dispatch(e,hub)
+        self.assertEqual(sum(bool(s['orders']) for s,c in fleet),1)
+    def test_native_handoff_avoids_double_subtraction(self):
+        e,_,fleet,hub=self.setup_market([1000],[100],delayed=True)
+        self.dispatch(e,hub);need=e.needs[0];ship=fleet[0][0]
+        self.assertEqual(e.runner.script('mule.fleet.net',{'offer':need})['net'],900)
+        need.reserved[ship]=100
+        self.assertEqual(e.runner.script('mule.fleet.net',{'offer':need})['net'],900)
+    def test_cancel_releases_hold_once(self):
+        e,_,fleet,hub=self.setup_market([1000],[100],delayed=True)
+        self.dispatch(e,hub)
+        for order in list(fleet[0][0]['orders']):e.cancel(order)
+        self.assertEqual(e.runner.script('mule.fleet.net',{'offer':e.needs[0]})['net'],1000)
+    def test_submission_failure_cancels_only_created_orders(self):
+        e,_,fleet,hub=self.setup_market([350,250,150],[1000])
+        e.fail_at=4;self.dispatch(e,hub)
+        self.assertEqual(fleet[0][0]['orders'],[])
+        self.assertTrue(e.notices)
+    def test_blacklisted_supplier_is_not_used(self):
+        e,_,fleet,hub=self.setup_market([100],[100])
+        fleet[0][0]['forbidden'].add(e.sources[0]['owner'])
+        self.dispatch(e,hub)
+        self.assertEqual(fleet[0][0]['orders'],[])
+    def test_incompatible_dock_is_not_used(self):
+        e,_,fleet,hub=self.setup_market([100],[100])
+        e.sources[0]['owner']['docks']=('S',)
+        self.dispatch(e,hub)
+        self.assertEqual(fleet[0][0]['orders'],[])
+    def test_idle_cargo_liquidates_once_at_average_price(self):
+        e,_,fleet,hub=self.setup_market([0],[100]);ship=fleet[0][0];w=e.wares[0]
+        ship['cargo']['count']=1;ship['cargo']['list']=[w];ship['cargo'][w]['count']=15
+        balance=e.player['money'];self.dispatch(e,hub)
+        self.assertEqual(ship['cargo'][w]['count'],0)
+        self.assertEqual(e.player['money']-balance,15*w['averageprice'])
+        self.assertEqual(ship['orders'],[])
+        self.dispatch(e,hub);self.assertEqual(e.player['money']-balance,15*w['averageprice'])
+    def test_no_demand_creates_no_orders(self):
+        e,_,fleet,hub=self.setup_market([0],[100]*200)
+        self.dispatch(e,hub)
+        self.assertEqual(e.created,0)
+    def test_200_s_share_one_tail_unit(self):
+        e,_,fleet,hub=self.setup_market([1],[100]*200)
+        self.dispatch(e,hub)
+        self.assertEqual(e.created,2)
+    def test_35_mixed_all_used_for_adequate_supply(self):
+        e,_,fleet,hub=self.setup_market([10**7],[100000]*5+[20000]*10+[4000]*20)
+        self.dispatch(e,hub)
+        self.assertEqual(sum(bool(s['orders']) for s,c in fleet),35)
+    def test_supplier_checks_page_without_discarding_late_source(self):
+        e,home,fleet,hub=self.setup_market([100],[100]);w=e.wares[0]
+        e.sources.clear()
+        for i in range(40):
+            s=e.station('s'+str(i),home['sector'],'ai');offer=e.offer(s,w,100,120 if i<39 else 100,False)
+        hub=e.hub(home,fleet);self.dispatch(e,hub)
+        self.assertEqual(fleet[0][0]['orders'][0]['offer']['owner']['name'],'s39')
+        self.assertGreaterEqual(e.waits,2)
+    def corridor_market(self):
+        e=Engine();h=e.sector('H');p=e.sector('P');a=e.sector('A');b=e.sector('B');c=e.sector('C')
+        e.connect(h,p);e.connect(p,a);e.connect(p,b);e.connect(b,c)
+        home=e.station('Home',h);wa=e.ware('A');wb=e.ware('B');wc=e.ware('C')
+        e.offer(home,wa,600,200,True);e.offer(home,wb,200,103,True);e.offer(home,wc,100,200,True)
+        e.offer(e.station('main',a,'ai'),wa,600,100,False)
+        off=e.offer(e.station('off',b,'ai'),wb,200,100,False)
+        far=e.offer(e.station('third',c,'ai'),wc,100,100,False)
+        fleet=[e.ship('ship',1000,home,corridorDepth=1)]
+        return e,home,fleet,off,far,p
+    def test_single_secondary_survives_weighted_price_above_receiver_price(self):
+        e,home,fleet,off,far,p=self.corridor_market();hub=e.hub(home,fleet)
+        self.dispatch(e,hub)
+        buys=[o['offer'] for o in fleet[0][0]['orders'] if not o['offer']['isbuyoffer']]
+        self.assertIn(off,buys);self.assertNotIn(far,buys)
+    def test_secondary_price_competition_prefers_103_on_path_to_100_off(self):
+        e,home,fleet,off,far,p=self.corridor_market()
+        # Raise receiver quote to retain the existing strict RAW positive-profit rule.
+        e.needs[1]['unitprice']=110
+        on=e.offer(e.station('on',p,'ai'),off['ware'],200,103,False)
+        self.dispatch(e,e.hub(home,fleet))
+        buys=[o['offer'] for o in fleet[0][0]['orders'] if not o['offer']['isbuyoffer']]
+        self.assertIn(on,buys);self.assertNotIn(off,buys)
+    def test_zero_markup_keeps_depth_restriction(self):
+        e,home,fleet,off,far,p=self.corridor_market();fleet[0][1]['corridorMarkup']=0
+        self.dispatch(e,e.hub(home,fleet))
+        self.assertNotIn(far,[o['offer'] for o in fleet[0][0]['orders']])
+    def test_home_range_remains_hard_limit(self):
+        e,home,fleet,off,far,p=self.corridor_market()
+        # Main fits; third is only two jumps from corridor but three from home.
+        fleet[0][1]['maxDist']=2;fleet[0][0]['defaultorder']['maxDist']=2;fleet[0][1]['corridorDepth']=2
+        self.dispatch(e,e.hub(home,fleet))
+        self.assertNotIn(far,[o['offer'] for o in fleet[0][0]['orders']])
+
+    def run_roster(self,e,home,fleet,hub):
+        e.global_['mwexFleetHubs']=Obj({home:hub});e.global_.pop('mwexFleetLock',None)
+        hub['rosterDirty']=True;hub['next']=e.player['age'];hub['rosterUntil']=0
+        e.roots['this']=Obj(ship=fleet[0][0],name='pilot')
+        e.runner.script('mule.fleet.run',{'cfg':fleet[0][1]})
+    def test_roster_same_model_count_change_does_not_sort_again(self):
+        e,home,fleet,hub=self.setup_market([0],[100,200])
+        self.run_roster(e,home,fleet,hub);sorts=sum(x.startswith('SORT') for x in e.logs)
+        new=e.ship('new',100,home,macro='model100');fleet.append(new)
+        self.run_roster(e,home,fleet,hub)
+        self.assertEqual(len(hub['members']),3)
+        self.assertEqual(sum(x.startswith('SORT') for x in e.logs),sorts)
+        self.assertEqual(sorted(map(len,hub['groups'].values())),[1,2])
+    def test_roster_new_model_sorts_and_destroyed_model_removed(self):
+        e,home,fleet,hub=self.setup_market([0],[100,200]);self.run_roster(e,home,fleet,hub)
+        new=e.ship('new',150,home,macro='newmodel');fleet.append(new)
+        self.run_roster(e,home,fleet,hub)
+        self.assertEqual([hub['capacities'][x] for x in hub['ascending']],[100,150,200])
+        new[0]['isoperational']=False;self.run_roster(e,home,fleet,hub)
+        self.assertNotIn(new[0],hub['members'])
+        self.assertEqual([hub['capacities'][x] for x in hub['ascending']],[100,200])
+    def test_roster_detached_ship_not_readded(self):
+        e,home,fleet,hub=self.setup_market([0],[100,200]);self.run_roster(e,home,fleet,hub)
+        fleet[1][0]['commander']=Obj(name='other');self.run_roster(e,home,fleet,hub)
+        self.assertNotIn(fleet[1][0],hub['members'])
+    def test_discovery_indexes_sources_by_ware_sector_owner(self):
+        e,home,fleet,hub=self.setup_market([100,0],[100])
+        e.runner.script('mule.fleet.discover',{'hub':hub})
+        self.assertEqual(hub['sources'][e.wares[0]][home['sector']][e.sources[0]['owner']],e.sources[0])
+        self.assertNotIn(e.wares[1],hub['sources'])
+        self.assertEqual(e.queries['find_sell_offer'],1)
+    def test_no_demand_discovery_skips_supplier_query(self):
+        e,home,fleet,hub=self.setup_market([0],[100]*200)
+        e.runner.script('mule.fleet.discover',{'hub':hub})
+        self.assertNotIn('find_sell_offer',e.queries)
+    def test_two_hubs_share_delayed_supplier_holds(self):
+        e,home,fleet,hub=self.setup_market([80],[100],delayed=True)
+        e.sources[0]['total']=100
+        home2=e.station('Home2',home['sector']);e.offer(home2,e.wares[0],80,110,True)
+        fleet2=[e.ship('second',100,home2)];hub2=e.hub(home2,fleet2)
+        self.dispatch(e,hub);self.dispatch(e,hub2)
+        self.assertEqual(fleet[0][0]['orders'][0]['amount'],80)
+        self.assertEqual(fleet2[0][0]['orders'][0]['amount'],20)
+    def test_partial_running_order_keeps_hold_for_actual_amount(self):
+        e,home,fleet,hub=self.setup_market([100],[100],delayed=True)
+        e.partial_at=1;e.running_partial=True;self.dispatch(e,hub)
+        self.assertEqual(len(fleet[0][0]['orders']),1)
+        self.assertEqual(e.runner.script('mule.fleet.net',{'offer':e.sources[0]})['net'],50)
+        self.assertIn('mwexFleetVoyage',fleet[0][0]['pilot'])
+    def test_liquidation_allows_new_procurement_in_same_wave(self):
+        e,home,fleet,hub=self.setup_market([100],[100]);ship,cfg=fleet[0];ware=e.wares[0]
+        ship['cargo'].update(count=1,list=[ware]);ship['cargo'][ware]['count']=15
+        balance=e.player['money'];self.dispatch(e,hub)
+        self.assertEqual(len(ship['orders']),2);self.assertFalse(ship['orders'][0]['offer']['isbuyoffer'])
+        self.assertEqual(ship['cargo'][ware]['count'],0)
+        self.assertEqual(e.player['money']-balance,15*ware['averageprice'])
+    def test_d0_requires_route_sector(self):
+        e,home,fleet,off,far,p=self.corridor_market()
+        fleet[0][1]['corridorDepth']=0;fleet[0][0]['defaultorder']['corridorDepth']=0
+        self.dispatch(e,e.hub(home,fleet))
+        self.assertNotIn(off,[o['offer'] for o in fleet[0][0]['orders']])
+    def test_live_parameter_change_rejects_plan_without_orders(self):
+        e,home,fleet,hub=self.setup_market([100],[100]);ship,cfg=fleet[0]
+        plan=e.runner.script('mule.fleet.plan',{'hub':hub,'cfg':cfg,'relaxed':False})['plan']
+        ship['defaultorder']['allowAiSuppliers']=False
+        self.assertFalse(e.runner.script('mule.fleet.commit',{'cfg':cfg,'plan':plan})['ok'])
+        self.assertEqual(e.created,0)
+    def test_late_blacklist_change_rejects_draft_before_commit(self):
+        e,home,fleet,hub=self.setup_market([100],[100]);ship,cfg=fleet[0]
+        plan=e.runner.script('mule.fleet.plan',{'hub':hub,'cfg':cfg,'relaxed':False})['plan']
+        ship['forbidden'].add(e.sources[0]['owner'])
+        self.assertFalse(e.runner.script('mule.fleet.commit',{'cfg':cfg,'plan':plan})['ok'])
+        self.assertEqual(e.created,0)
+    def test_detached_after_draft_rejects_before_commit(self):
+        e,home,fleet,hub=self.setup_market([100],[100]);ship,cfg=fleet[0]
+        plan=e.runner.script('mule.fleet.plan',{'hub':hub,'cfg':cfg,'relaxed':False})['plan']
+        ship['commander']=Obj(name='other')
+        self.assertFalse(e.runner.script('mule.fleet.commit',{'cfg':cfg,'plan':plan})['ok'])
+        self.assertEqual(e.created,0)
+    def test_discovery_event_inserts_source_without_rebuilding_index(self):
+        e,home,fleet,hub=self.setup_market([100],[100]);hub['range']=10
+        e.global_['mwexFleetHubs']=Obj({home:hub})
+        new=e.offer(e.station('new',home['sector'],'ai'),e.wares[0],100,99,False)
+        e.roots['event']=Obj(param=new)
+        md=ET.parse(SRC/'md/mwex_capacity.xml').getroot()
+        actions=md.find('./cues/cue[@name="Discovered"]/actions')
+        e.runner.children(list(actions),{})
+        self.assertIs(hub['sources'][e.wares[0]][home['sector']][new['owner']],new)
+        self.assertEqual(e.queries,{})
+    def test_active_entry_precedes_legacy_virtual_cargo_action(self):
+        root=ET.parse(SRC/'aiscripts/supply_mule.xml').getroot()
+        actions=list(root.find('./attention/actions'))
+        dispatch=next(i for i,n in enumerate(actions) if n.tag=='run_script' and n.get('name')=="'mule.fleet.run'")
+        self.assertEqual(actions[dispatch+1].tag,'return')
+        self.assertTrue(any(n.tag=='set_value' and n.get('exact')=='this.ship.cargo.list' for n in actions[dispatch+2:]))
+    def test_receiver_storage_is_shared_across_draft_lots(self):
+        e,home,fleet,hub=self.setup_market([80,80],[1000]);home['cargo']['free']['container']=100
+        self.dispatch(e,hub)
+        self.assertEqual(sum(o['amount'] for o in fleet[0][0]['orders'] if o['offer']['isbuyoffer']),100)
+    def test_foreign_receiver_budget_is_shared_across_lots(self):
+        e,home,fleet,hub=self.setup_market([6,6,6],[1000]);home['owner']='ai';home['money']=1100
+        self.dispatch(e,hub)
+        self.assertEqual(sum(o['amount'] for o in fleet[0][0]['orders'] if o['offer']['isbuyoffer']),10)
+    def test_mimic_registered_config_uses_capacity_dispatch(self):
+        e,home,fleet,hub=self.setup_market([80],[100]);ship,cfg=fleet[0]
+        ship['defaultorder']=Obj(id='Assist');cfg['origin']=ship['defaultorder']
+        self.dispatch(e,hub)
+        self.assertEqual(len(ship['orders']),2)
+    def test_sector_home_uses_sector_scope_and_native_limits(self):
+        e,home,fleet,hub=self.setup_market([80],[100]);ship,cfg=fleet[0]
+        sector=home['sector'];cfg.update(home=sector,bound=False);ship['defaultorder']['home']=sector
+        hub['home']=sector;self.dispatch(e,hub)
+        self.assertEqual(len(ship['orders']),2)
+    def test_load_preserves_pending_holds_and_invalidates_only_caches(self):
+        e,home,fleet,hub=self.setup_market([100],[100],delayed=True);self.dispatch(e,hub)
+        e.global_['mwexFleetHubs']=Obj({home:hub});pending=e.global_['mwexFleetPending'][:]
+        md=ET.parse(SRC/'md/mwex_capacity.xml').getroot()
+        e.runner.children(list(md.find('./cues/cue[@name="Loaded"]/actions')), {})
+        self.assertNotIn('mwexFleetLock',e.global_)
+        self.assertEqual(e.global_['mwexFleetPending'],pending)
+        self.assertTrue(hub['rosterDirty']);self.assertTrue(hub['cacheDirty'])
+        self.assertEqual(len(fleet[0][0]['orders']),2)
+    def test_receiver_shared_storage_change_rejects_before_commit(self):
+        e,home,fleet,hub=self.setup_market([80,80],[200]);ship,cfg=fleet[0]
+        plan=e.runner.script('mule.fleet.plan',{'hub':hub,'cfg':cfg,'relaxed':False})['plan']
+        home['cargo']['free']['container']=100
+        self.assertFalse(e.runner.script('mule.fleet.commit',{'cfg':cfg,'plan':plan})['ok'])
+        self.assertEqual(e.created,0)
+
+    def return_home(self,e,hub,ship,cfg):
+        e.global_.pop('mwexFleetLock',None)
+        e.roots['this']=Obj(ship=ship,assignedcontrolled=ship)
+        e.runner.script('mule.fleet.home',{'cfg':cfg,'hub':hub})
+
+    def test_whole_fleet_idle_signal_requires_no_active_trade_or_manual_order(self):
+        e,home,fleet,hub=self.setup_market([0],[100,200])
+        self.dispatch(e,hub);self.assertTrue(hub['allIdle'])
+        fleet[1][0]['orders'].append(Obj(id='MoveWait'))
+        self.dispatch(e,hub);self.assertFalse(hub['allIdle'])
+        fleet[1][0]['orders'].clear();e.needs[0]['total']=80;e.sources[0]['total']=80
+        self.dispatch(e,hub);self.assertFalse(hub['allIdle'])
+        self.assertTrue(any(s['orders'] for s,c in fleet))
+
+    def test_station_home_returns_to_station_zone_without_occupying_a_berth(self):
+        e,home,fleet,hub=self.setup_market([0],[100]);ship,cfg=fleet[0]
+        far=e.sector('far');e.connect(home['sector'],far)
+        ship.update(sector=far,zone=Obj(name='far zone'));self.dispatch(e,hub)
+        self.return_home(e,hub,ship,cfg)
+        self.assertIs(ship['zone'],home['zone']);self.assertEqual(ship['orders'],[])
+        self.assertIs(e.moves[0]['destination'],home)
+        self.assertTrue(e.moves[0]['endintargetzone']);self.assertTrue(e.moves[0]['strictblacklist'])
+        self.return_home(e,hub,ship,cfg);self.assertEqual(len(e.moves),1)
+
+    def test_sector_home_stops_inside_sector_and_does_not_force_station_visit(self):
+        e,home,fleet,hub=self.setup_market([0],[100]);ship,cfg=fleet[0]
+        cfg['home']=home['sector'];cfg['origin']['home']=home['sector'];hub['home']=home['sector'];hub['allIdle']=True
+        ship['zone']=Obj(name='other zone in home sector')
+        self.return_home(e,hub,ship,cfg);self.assertEqual(e.moves,[])
+        far=e.sector('far');e.connect(home['sector'],far);ship['sector']=far
+        self.return_home(e,hub,ship,cfg)
+        self.assertIs(e.moves[0]['destination'],home['sector'])
+        self.assertTrue(e.moves[0]['endintargetsector']);self.assertFalse(e.moves[0]['endintargetzone'])
+
+    def test_idle_return_never_takes_player_busy_detached_or_reconfigured_ship(self):
+        for case in ('fleet-busy','manual','occupied','detached','default','cfg','dead','home-gone'):
+            with self.subTest(case=case):
+                e,home,fleet,hub=self.setup_market([0],[100]);ship,cfg=fleet[0]
+                ship['zone']=Obj(name='remote zone');hub['allIdle']=True
+                if case=='fleet-busy':hub['allIdle']=False
+                if case=='manual':ship['orders'].append(Obj(id='Wait'))
+                if case=='occupied':e.player['occupiedship']=ship
+                if case=='detached':ship['commander']=None
+                if case=='default':ship['defaultorder']=Obj(id='Wait')
+                if case=='cfg':ship['pilot']['mwexFleetCfg']=Obj()
+                if case=='dead':ship['isoperational']=False
+                if case=='home-gone':home['exists']=False
+                self.return_home(e,hub,ship,cfg);self.assertEqual(e.moves,[])
+
+    def test_blacklist_prevents_return_and_reason_is_attached_to_this_ship(self):
+        e,home,fleet,hub=self.setup_market([0],[100]);ship,cfg=fleet[0]
+        far=e.sector('far');e.connect(home['sector'],far)
+        ship.update(sector=far,zone=Obj(name='far zone'));ship['blocked'].add(home['sector']);hub['allIdle']=True
+        self.return_home(e,hub,ship,cfg)
+        self.assertEqual(e.moves,[]);self.assertIn('旅行黑名单',cfg['origin']['failure'])
+        self.assertIn(ship['idcode'],cfg['origin']['failure'])
+
+    def test_return_is_outside_lock_and_new_demand_can_dispatch_before_arrival(self):
+        e,home,fleet,hub=self.setup_market([0],[100]);ship,cfg=fleet[0]
+        # The adapter distinguishes Python 50 from 50.0 in string formatting; X4 numeric values do not.
+        cfg['playerStockThreshold']=cfg['origin']['playerStockThreshold']=50.0
+        far=e.sector('far');e.connect(home['sector'],far);ship.update(sector=far,zone=Obj(name='far zone'))
+        def unfinished_move(engine,params):
+            self.assertNotIn('mwexFleetLock',engine.global_)
+            engine.player['age']+=30
+            engine.needs[0]['total']=80
+            engine.sources[0]['total']=80
+        e.on_move=unfinished_move
+        e.roots['this']=Obj(ship=ship,assignedcontrolled=ship)
+        e.global_.pop('mwexFleetLock',None)
+        e.runner.script('mule.fleet.run',{'cfg':cfg})
+        self.assertEqual(len(e.moves),1);self.assertIs(ship['sector'],far)
+        e.runner.script('mule.fleet.run',{'cfg':cfg})
+        self.assertEqual(len(ship['orders']),2);self.assertNotIn('failure',cfg['origin'])
+        self.assertEqual(len(e.moves),1)
+
+    def test_return_timer_is_bounded_and_stale_timers_cannot_interrupt_new_leg(self):
+        root=ET.parse(SRC/'aiscripts/mule.fleet.home.xml').getroot()
+        timer=root.find('./attention/actions/signal_objects');self.assertEqual(timer.get('delay'),'30s')
+        conditions=root.find('./interrupts/handler/conditions')
+        self.assertEqual(conditions.find('event_object_signalled').get('param'),timer.get('param'))
+        self.assertEqual(root.find('./interrupts/handler/actions/abort_called_scripts').get('resume'),'finish')
+        e,home,fleet,hub=self.setup_market([0],[100]);ship,cfg=fleet[0]
+        hub['allIdle']=True;ship['zone']=Obj(name='remote zone')
+        self.return_home(e,hub,ship,cfg)
+        old=e.signals[-1]['param2'];ship['zone']=Obj(name='remote zone again')
+        self.return_home(e,hub,ship,cfg);new=e.signals[-1]['param2']
+        self.assertIsNot(old,new);self.assertEqual(e.signals[-1]['delay'],30)
+        expr=conditions.find('check_value').get('value')
+        e.roots['event']=Obj(param2=old)
+        self.assertFalse(e.runner.value(expr,{'returnToken':new}))
+        e.roots['event']=Obj(param2=new)
+        self.assertTrue(e.runner.value(expr,{'returnToken':new}))
+
+    def test_identical_drone_less_ships_each_get_their_own_failure_record(self):
+        e,home,fleet,hub=self.setup_market([80],[100,100]);a,ac=fleet[0];b,bc=fleet[1]
+        for ship,cfg in fleet:
+            ship['iscapitalship']=True;ship['size']='L';ship['units']['transport']['count']=0
+        e.sources[0]['owner']['units']['transport']['count']=0
+        self.dispatch(e,hub)
+        for ship,cfg in fleet:
+            text=cfg['origin']['failure']
+            self.assertIn('货运无人机',text);self.assertIn(ship['idcode'],text)
+            other=b if ship is a else a;self.assertNotIn(other['idcode'],text)
+        self.assertTrue(any('MODEL_SKIP' in log for log in e.logs))
+
+    def test_failure_dedup_recovery_and_no_demand_clear_per_ship(self):
+        e,home,fleet,hub=self.setup_market([80],[100]);ship,cfg=fleet[0]
+        e.sources[0]['unitprice']=300
+        self.dispatch(e,hub);self.assertIn('实际采购单价',cfg['origin']['failure'])
+        logs=len([x for x in e.logs if x.startswith('M4：')])
+        self.dispatch(e,hub)
+        self.assertEqual(len([x for x in e.logs if x.startswith('M4：')]),logs)
+        e.needs[0]['total']=0;self.dispatch(e,hub)
+        self.assertNotIn('failure',cfg['origin'])
+        e.needs[0]['total']=80;e.sources[0]['unitprice']=50;self.dispatch(e,hub)
+        self.assertEqual(len(ship['orders']),2);self.assertNotIn('failure',cfg['origin'])
+
+    def test_commit_failure_returns_concrete_reason_for_ship_diagnostics(self):
+        e,home,fleet,hub=self.setup_market([80],[100]);ship,cfg=fleet[0]
+        plan=e.runner.script('mule.fleet.plan',{'hub':hub,'cfg':cfg,'relaxed':False})['plan']
+        home['cargo']['free']['container']=1
+        result=e.runner.script('mule.fleet.commit',{'cfg':cfg,'plan':plan})
+        self.assertFalse(result['ok']);self.assertIn('共享货仓',result['failure'])
+        e.runner.script('mule.fleet.report',{'cfg':cfg,'reason':result['failure']})
+        self.assertIn('共享货仓',cfg['origin']['failure']);self.assertEqual(ship['orders'],[])
+
+
+def syntax_check():
+    attributes={'exact','value','in','name','amount','object','offer','tradeoffer','buyer','seller',
+                'wares','resultdistance','refobject','useknownpath','uselocalhighways','param2','param3',
+                'tradepartner','trade','order','text','title','default','directory','result','variable'}
+    count=0
+    for p in (SRC/'aiscripts').glob('mule.fleet.*.xml'):
+        root=ET.parse(p).getroot()
+        for node in root.iter():
+            for key,value in node.attrib.items():
+                if key not in attributes:continue
+                if key=='name' and node.tag in ('aiscript','param','label','retval','save_retval'):continue
+                if key=='result' and not value.startswith('$'):continue
+                try:Parser(value).parse()
+                except Exception as error:raise AssertionError(f'{p.name} {node.tag} {key}={value}: {error}') from error
+                count+=1
+    return count
+
+
+if __name__=='__main__':
+    count=syntax_check()
+    suite=unittest.defaultTestLoader.loadTestsFromTestCase(XMLDispatchChecks)
+    # Run the earlier ten regression cases without rewriting their historical reports.
+    old_script=HERE/'test_legacy.py'
+    saved_argv=sys.argv[:]
+    try:
+        sys.argv=[str(old_script),str(SRC)]
+        previous=runpy.run_path(str(old_script))
+    finally:sys.argv=saved_argv
+    suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(previous['MuleFixes']))
+    result=unittest.TextTestRunner(verbosity=2).run(suite)
+    report={'tests':result.testsRun,'failures':len(result.failures),'errors':len(result.errors),
+            'new_ai_expressions_parsed':count,
+            'source_sha256':{str(p.relative_to(SRC)):hashlib.sha256(p.read_bytes()).hexdigest() for p in SRC.rglob('*.xml')},
+            'limits':'Actual XML on synthetic adapter; no native engine scheduling, paths, reservation timing, save or FPS verification.'}
+    (HERE/'checks.json').write_text(json.dumps(report,indent=2),encoding='utf-8')
+    raise SystemExit(not result.wasSuccessful())

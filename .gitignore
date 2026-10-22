@@ -1,0 +1,9 @@
+__pycache__/
+*.py[cod]
+dist/
+tests/checks.json
+tests/mules_regression_*.json
+tools/schema_checks.json
+*.log
+.DS_Store
+Thumbs.db
