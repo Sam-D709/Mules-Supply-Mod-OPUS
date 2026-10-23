@@ -252,7 +252,7 @@ SWI只是当前测试环境；ship_sorter、TacticalResponsePolice 和 Options H
 
 ## 提交bug
 
-确保安装SirNukes Mod Support APIs，在模组管理菜单打开Mules-Supply-Mod-OPUS/debug开关，随后复现问题，复现后去往文档Documents\Egosoft\X4\1112832858\logs\MulesExtended以压缩包形式发给我日志记录，存档位于C:\Users\SCP343\Documents\Egosoft\X4\1112832858\save，最好提供问题存档，包含复现问题前正常存档-复现问题后异常存档，如果存档过大建议开新档复现。
+确保安装SirNukes Mod Support APIs，在模组管理菜单打开Mules-Supply-Mod-OPUS/debug开关，随后复现问题，复现后去往文档Documents\Egosoft\X4\1112832858\logs\MulesExtended以压缩包形式发给我日志记录，存档位于文档Documents\Egosoft\X4\1112832858\save，最好提供问题存档，包含复现问题前正常存档-复现问题后异常存档，如果存档过大建议开新档复现。
 
 ## 已知限制与下一阶段
 
