@@ -4,7 +4,7 @@
 
 ## 两套编号分别维护
 
-| 位置 | 本次值 | 用途 |
+| 位置 | 首次公开发布值 | 用途 |
 |---|---|---|
 | 根目录 `VERSION` | `0.1.0-beta.1` | 公开版本的唯一来源，不加前缀v；打包工具据此命名 |
 | Git标签、Release标题 | `v0.1.0-beta.1` | 定位对应源码提交 |
@@ -35,11 +35,11 @@ AI脚本的 `<aiscript version="…">` 又是独立的存档迁移版本：只�
 
 ## 下一次发布怎么做
 
-下面以 **`v0.1.0-beta.2` / 内部664** 为例。如果664已经发布过，应继续用更大的内部版本。只在模组源码仓库执行这些操作，不要对整个X4游戏目录提交。
+下面以 **`v0.1.0-beta.4` / 内部666** 为例。如果666已经发布过，应继续用更大的内部版本。只在模组源码仓库执行这些操作，不要对整个X4游戏目录提交。
 
 1. 同步远端并确认分支，保留他人README等修改；先完成代码和游戏验证。
-2. 将VERSION改为`0.1.0-beta.2`，将content.xml内部版本改为`664`、日期改为当天日期。同步中英文README的下载链接及包名。
-3. 新建`docs/releases/v0.1.0-beta.2.md`，写清触发问题、修复后的行为、验证结果、已知限制与安装方法；更新变更记录。
+2. 将VERSION改为`0.1.0-beta.4`，将content.xml内部版本改为`666`、日期改为当天日期。同步中英文README的下载链接及包名。
+3. 新建`docs/releases/v0.1.0-beta.4.md`，写清触发问题、修复后的行为、验证结果、已知限制与安装方法；更新变更记录。
 4. 在仓库根目录验证并打包：
 
    ```powershell
@@ -56,9 +56,9 @@ AI脚本的 `<aiscript version="…">` 又是独立的存档迁移版本：只�
 7. 给该提交打不可变标签，推送标签后创建Release。下面命令中的`提交SHA`须替换为真实值，发布说明文件也必须已经存在：
 
    ```powershell
-   git tag -a v0.1.0-beta.2 提交SHA -m "Mules-Supply-Mod-OPUS v0.1.0-beta.2"
-   git push origin v0.1.0-beta.2
-   gh release create v0.1.0-beta.2 dist/Mules-Supply-Mod-OPUS-v0.1.0-beta.2.zip dist/SHA256SUMS.txt --verify-tag --prerelease --title "v0.1.0-beta.2" --notes-file docs/releases/v0.1.0-beta.2.md
+   git tag -a v0.1.0-beta.4 提交SHA -m "Mules-Supply-Mod-OPUS v0.1.0-beta.4"
+   git push origin v0.1.0-beta.4
+   gh release create v0.1.0-beta.4 dist/Mules-Supply-Mod-OPUS-v0.1.0-beta.4.zip dist/SHA256SUMS.txt --verify-tag --prerelease --title "v0.1.0-beta.4" --notes-file docs/releases/v0.1.0-beta.4.md
    ```
 
    在网页发布也可以：选择对应标签，上传两个附件并勾选**Set as a pre-release**。正式版移除测试后缀并取消预发布勾选；不能仅取消勾选却继续使用beta标签。

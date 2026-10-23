@@ -45,6 +45,13 @@ class ReleasePackageChecks(unittest.TestCase):
             self.assertEqual(runtime,expected)
             self.assertEqual(runtime['t/0001-l044.xml'],runtime['t/0001.xml'])
             self.assertIn('t/0001-l086.xml',runtime)
+            self.assertIn('md/mwex_options.xml',runtime)
+            self.assertIn('aiscripts/mule.fleet.summary.xml',runtime)
+            for name in ('t/0001-l044.xml','t/0001-l086.xml'):
+                texts={t.get('id'):t.text for t in ET.fromstring(runtime[name]).iter('t')}
+                self.assertIn('4401',texts);self.assertIn('-scriptlogfiles',texts['4402'])
+            dependency=ET.parse(installed/'content.xml').getroot().find('dependency[@id="ws_2042901274"]')
+            self.assertIsNotNone(dependency);self.assertEqual(dependency.get('optional'),'true')
             checksum=(build.OUT/'SHA256SUMS.txt').read_text(encoding='utf-8').split()
             self.assertEqual(checksum,[hashlib.sha256(package.read_bytes()).hexdigest(),package.name])
 

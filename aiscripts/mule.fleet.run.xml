@@ -87,7 +87,7 @@
         <set_value name="$previousHub.$rosterDirty" exact="true"/>
         <set_value name="$previousHub.$cacheDirty" exact="true"/>
       </do_if>
-      <debug_to_file directory="'MulesExtended'" name="'M4 Capacity Dispatch'" append="true" text="'HOME_CHANGED ship=%s old=%s new=%s'.[$ship.idcode,$previousCfg.$home,$home]"/>
+      <do_if value="@global.$mwexDebug"><debug_to_file directory="'MulesExtended'" name="'debug.txt'" append="true" text="'HOME_CHANGED ship=%s old=%s new=%s'.[$ship.idcode,$previousCfg.$home,$home]"/></do_if>
     </do_if>
     <do_if value="$cfg.$bound and $ship.commander != $cfg.$commander">
       <remove_value name="$hub.$members.{$ship}"/>
@@ -160,12 +160,12 @@
           <set_value name="$hub.$ascending" exact="$newCapacities.keys.sorted"/>
           <set_value name="$hub.$descending" exact="[]"/>
           <do_for_each name="$key" in="$hub.$ascending" reverse="true"><append_to_list name="$hub.$descending" exact="$key"/></do_for_each>
-          <debug_to_file directory="'MulesExtended'" name="'M4 Capacity Dispatch'" append="true" text="'SORT home=%s ascending=%s'.[$home,$hub.$ascending]"/>
+          <do_if value="@global.$mwexDebug"><debug_to_file directory="'MulesExtended'" name="'debug.txt'" append="true" text="'SORT home=%s ascending=%s'.[$home,$hub.$ascending]"/></do_if>
         </do_if>
         <set_value name="$hub.$rosterDirty" exact="false"/>
         <set_value name="$hub.$rosterUntil" exact="player.age+30s"/>
         <set_value name="$hub.$cacheDirty" exact="true"/>
-        <debug_to_file directory="'MulesExtended'" name="'M4 Capacity Dispatch'" append="true" text="'ROSTER home=%s ships=%s models=%s reordered=%s'.[$home,$hub.$members.keys.count,$newGroups.keys.count,$sortChanged]"/>
+        <do_if value="@global.$mwexDebug"><debug_to_file directory="'MulesExtended'" name="'debug.txt'" append="true" text="'ROSTER home=%s ships=%s models=%s reordered=%s'.[$home,$hub.$members.keys.count,$newGroups.keys.count,$sortChanged]"/></do_if>
       </do_if>
       <run_script name="'mule.fleet.wave'"><param name="hub" value="$hub"/></run_script>
       <remove_value name="global.$mwexFleetLock"/>

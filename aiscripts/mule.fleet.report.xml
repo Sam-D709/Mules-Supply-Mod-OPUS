@@ -8,7 +8,7 @@
       <!-- This is the native per-ship Behaviour failure record, not just a global log interaction anchor. -->
       <do_if value="$cfg.$origin.isrunning"><set_order_failed order="$cfg.$origin" text="{61552,4330}.[$ship.knownname,$ship.idcode,$cfg.$home.knownname,$reason]"/></do_if>
       <do_if value="not $ship.pilot.$mwexFleetLastReason? or @$ship.pilot.$mwexFleetLastReason != $reason or player.age ge @$ship.pilot.$mwexFleetLastReasonAt+10min">
-        <debug_to_file directory="'MulesExtended'" name="'M4 Ship %s'.[$ship.idcode]" append="true" text="{61552,4330}.[$ship.knownname,$ship.idcode,$cfg.$home.knownname,$reason]"/>
+        <do_if value="@global.$mwexDebug"><debug_to_file directory="'MulesExtended'" name="'debug.txt'" append="true" text="{61552,4330}.[$ship.knownname,$ship.idcode,$cfg.$home.knownname,$reason]"/></do_if>
         <set_value name="$ship.pilot.$mwexFleetLastReason" exact="$reason"/>
         <set_value name="$ship.pilot.$mwexFleetLastReasonAt" exact="player.age"/>
       </do_if>

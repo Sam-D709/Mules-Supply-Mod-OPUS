@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<aiscript name="mule.fleet.journal" version="2">
+  <params>
+    <param name="cfg"/><param name="diagnostic"/><param name="phase"/>
+    <param name="outcome"/><param name="force" default="false"/>
+    <param name="normal" default="null"/><param name="plan" default="[]"/>
+  </params>
+  <patch sinceversion="2"><return/></patch>
+  <attention min="unknown"><actions>
+    <set_value name="$ship" exact="$cfg.$ship"/>
+    <do_if value="not $ship.isoperational or not $ship.pilot.exists or not $diagnostic"><return/></do_if>
+    <!-- Drop beta.2 full-body caches; check cooldown BEFORE building any text. -->
+    <remove_value name="$ship.pilot.$mwexFleetJournalLast"/>
+    <remove_value name="$ship.pilot.$mwexFleetJournalSerial"/>
+    <do_if value="not $force and $ship.pilot.$mwexFleetBrief?">
+      <set_value name="$last" exact="$ship.pilot.$mwexFleetBrief"/>
+      <do_if value="$last.$signature == $cfg.$signature and $last.$home == $cfg.$home and $last.$phase == $phase and player.age lt $last.$time+10min"><return/></do_if>
+    </do_if>
+    <do_if value="$force"><remove_value name="$ship.pilot.$mwexFleetBrief"/></do_if>
+    <do_else><set_value name="$ship.pilot.$mwexFleetBrief" exact="table[$signature=$cfg.$signature,$home=$cfg.$home,$phase=$phase,$time=player.age]"/></do_else>
+    <set_value name="$header" exact="{61552,4354}.[$ship.knownname,$ship.idcode,$cfg.$home.knownname,$cfg.$minCargoUsed,$cfg.$maxTrades,$cfg.$maxDist,$cfg.$corridorDepth,$cfg.$corridorMarkup,$cfg.$playerStockThreshold]"/>
+    <set_value name="$body" exact="$header+'\n'+{61552,4358}.[$cfg.$allowPlayerSuppliers,$cfg.$allowAiSuppliers,$cfg.$dedicatedServe,$cfg.$allowBuildstorage,$cfg.$allowResources,$cfg.$allowIntermediates,$cfg.$lockWares]+'\n'+$outcome"/>
+    <do_if value="$diagnostic.$ship != $ship"><set_value name="$body" exact="$body+'\n'+{61552,4412}"/></do_if>
+    <do_if value="$diagnostic.$relaxed"><set_value name="$body" exact="$body+'\n'+{61552,4406}"/></do_if>
+    <do_if value="$normal and $normal != $diagnostic">
+      <run_script name="'mule.fleet.summary'"><param name="diagnostic" value="$normal"/><save_retval name="text" variable="$summary"/></run_script>
+      <set_value name="$body" exact="$body+'\n'+$summary"/>
+    </do_if>
+    <run_script name="'mule.fleet.summary'"><param name="diagnostic" value="$diagnostic"/><save_retval name="text" variable="$summary"/></run_script>
+    <set_value name="$body" exact="$body+'\n'+$summary"/>
+    <!-- Only successfully committed trips list purchase legs. -->
+    <do_if value="$force">
+      <do_for_each name="$leg" in="$plan" counter="$legIndex">
+        <set_value name="$body" exact="$body+'\n'+{61552,4365}.[$legIndex,$leg.$ware.name,$leg.$amount,$leg.$source.owner.knownname,$leg.$source.owner.idcode,$leg.$need.owner.knownname,$leg.$need.owner.idcode,$leg.$buyprice/1Cr,$leg.$sellprice/1Cr]"/>
+      </do_for_each>
+    </do_if>
+    <write_to_logbook category="general" object="$ship" entity="$ship.pilot" interaction="showonmap" title="{61552,4404}.[$ship.idcode,if $phase == '$commit' then {61552,4353} else {61552,4405}]" text="$body"/>
+    <do_if value="@global.$mwexDebug"><debug_to_file directory="'MulesExtended'" name="'debug.txt'" append="true" text="'[time=%s ship=%s RESULT] %s'.[player.age,$ship.idcode,$body]"/></do_if>
+    <return/>
+  </actions></attention>
+</aiscript>

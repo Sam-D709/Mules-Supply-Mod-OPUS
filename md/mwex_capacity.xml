@@ -8,6 +8,13 @@
         <remove_value name="global.$mwexFleetLock"/>
         <do_if value="global.$mwexFleetHubs?">
           <do_for_each valuename="$hub" in="global.$mwexFleetHubs">
+            <!-- Only obsolete mod-owned caches are removed, never historical player log entries. -->
+            <do_for_each name="$ship" in="$hub.$members">
+              <do_if value="$ship.exists and $ship.pilot.exists">
+                <remove_value name="$ship.pilot.$mwexFleetJournalLast"/>
+                <remove_value name="$ship.pilot.$mwexFleetJournalSerial"/>
+              </do_if>
+            </do_for_each>
             <set_value name="$hub.$rosterDirty" exact="true"/>
             <set_value name="$hub.$cacheDirty" exact="true"/>
             <set_value name="$hub.$next" exact="player.age+2s"/>

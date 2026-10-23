@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<aiscript name="mule.fleet.trace" version="2">
+  <params><param name="diagnostic"/><param name="text"/></params>
+  <patch sinceversion="2"><return/></patch>
+  <attention min="unknown"><actions>
+    <!-- Callers also guard formatting. Never retain a list of candidate strings. -->
+    <do_if value="@global.$mwexDebug">
+      <debug_to_file directory="'MulesExtended'" name="'debug.txt'" append="true"
+        text="'[time=%s ship=%s relaxed=%s] %s'.[player.age,$diagnostic.$ship.idcode,$diagnostic.$relaxed,$text]"/>
+    </do_if>
+    <return/>
+  </actions></attention>
+</aiscript>

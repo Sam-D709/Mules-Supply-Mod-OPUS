@@ -14,7 +14,7 @@
         <set_value name="$refund" exact="$removed*$ware.averageprice"/>
         <reward_player money="$refund"/>
         <write_to_logbook category="upkeep" object="$ship" title="{61552,4200}" interaction="showonmap" money="$refund" text="{61552,4320}.[$ship.knownname,$ware.name,$removed,$ware.averageprice/1Cr,$refund/1Cr]"/>
-        <debug_to_file directory="'MulesExtended'" name="'M4 Capacity Dispatch'" append="true" text="{61552,4320}.[$ship.idcode,$ware.name,$removed,$ware.averageprice/1Cr,$refund/1Cr]"/>
+        <do_if value="@global.$mwexDebug"><debug_to_file directory="'MulesExtended'" name="'debug.txt'" append="true" text="{61552,4320}.[$ship.idcode,$ware.name,$removed,$ware.averageprice/1Cr,$refund/1Cr]"/></do_if>
       </do_if>
     </do_for_each>
     <remove_value name="$ship.pilot.$mwexFleetVoyage"/>

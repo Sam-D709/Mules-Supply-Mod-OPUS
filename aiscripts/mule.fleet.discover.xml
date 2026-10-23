@@ -47,8 +47,8 @@
     </do_for_each>
     <set_value name="$hub.$cacheUntil" exact="player.age+30s"/>
     <set_value name="$hub.$cacheEpoch" exact="$buildEpoch"/>
-    <debug_to_file directory="'MulesExtended'" name="'M4 Capacity Dispatch'" append="true"
-      text="'DISCOVER home=%s needs=%s sources=%s range=%s epoch=%s'.[$home,$hub.$needs.count,$offers.count,$range,$hub.$cacheEpoch]"/>
+    <do_if value="@global.$mwexDebug"><debug_to_file directory="'MulesExtended'" name="'debug.txt'" append="true"
+      text="'DISCOVER home=%s needs=%s sources=%s range=%s epoch=%s'.[$home,$hub.$needs.count,$offers.count,$range,$hub.$cacheEpoch]"/></do_if>
     <return/>
   </actions></attention>
 </aiscript>
