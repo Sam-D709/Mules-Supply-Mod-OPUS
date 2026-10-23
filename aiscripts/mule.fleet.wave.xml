@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<aiscript name="mule.fleet.wave" version="6">
+<aiscript name="mule.fleet.wave" version="9">
   <params><param name="hub"/></params>
+  <patch sinceversion="9"><return/></patch>
+  <patch sinceversion="8"><return/></patch>
+  <patch sinceversion="7"><return/></patch>
   <patch sinceversion="6"><return/></patch>
   <patch sinceversion="5"><return/></patch>
   <patch sinceversion="4"><return/></patch>
@@ -32,7 +35,8 @@
           <do_if value="not $ship.isoperational or not $ship.pilot.exists or not $hub.$members.{$ship}?"><continue/></do_if>
           <do_if value="$failedCommit.{$ship}?"><continue/></do_if>
           <set_value name="$cfg" exact="$hub.$members.{$ship}"/>
-          <do_if value="$ship.orders.count or $ship == player.occupiedship or $ship.pilot.$mwexFleetCfg != $cfg"><continue/></do_if>
+          <do_if value="$cfg.$home != $hub.$home or ($ship.defaultorder.id == 'SupplyMule' and $ship.defaultorder.$home != $cfg.$home)"><continue/></do_if>
+          <do_if value="$ship.orders.count or $ship == player.occupiedship or ($ship.pilot.$mwexFleetCfg.$origin != $cfg.$origin or $ship.pilot.$mwexFleetCfg.$signature != $cfg.$signature or $ship.pilot.$mwexFleetCfg.$commander != $cfg.$commander or $ship.pilot.$mwexFleetCfg.$bound != $cfg.$bound)"><continue/></do_if>
           <do_if value="$cfg.$bound and $ship.commander != $cfg.$commander"><continue/></do_if>
           <do_if value="$ship.defaultorder != $cfg.$origin"><continue/></do_if>
           <do_if value="$ship.cargo.count">
@@ -70,10 +74,10 @@
       </do_for_each>
     </do_all>
     <!-- Record final results only: normal-phase load rejections may succeed in the relaxed phase. -->
-    <set_value name="$hub.$allIdle" exact="true"/>
     <do_for_each name="$ship" valuename="$cfg" in="$hub.$members">
-      <do_if value="not $ship.isoperational or not $ship.pilot.exists or $ship.defaultorder != $cfg.$origin or $ship.pilot.$mwexFleetCfg != $cfg or ($cfg.$bound and $ship.commander != $cfg.$commander)"><continue/></do_if>
-      <do_if value="$ship.orders.count or $ship == player.occupiedship"><set_value name="$hub.$allIdle" exact="false"/><continue/></do_if>
+      <do_if value="$cfg.$home != $hub.$home or ($ship.defaultorder.id == 'SupplyMule' and $ship.defaultorder.$home != $cfg.$home)"><continue/></do_if>
+      <do_if value="not $ship.isoperational or not $ship.pilot.exists or $ship.defaultorder != $cfg.$origin or ($ship.pilot.$mwexFleetCfg.$origin != $cfg.$origin or $ship.pilot.$mwexFleetCfg.$signature != $cfg.$signature or $ship.pilot.$mwexFleetCfg.$commander != $cfg.$commander or $ship.pilot.$mwexFleetCfg.$bound != $cfg.$bound) or ($cfg.$bound and $ship.commander != $cfg.$commander)"><continue/></do_if>
+      <do_if value="$ship.orders.count or $ship == player.occupiedship"><continue/></do_if>
       <do_if value="$shipFailures.{$ship}?"><run_script name="'mule.fleet.report'"><param name="cfg" value="$cfg"/><param name="reason" value="$shipFailures.{$ship}"/></run_script></do_if>
     </do_for_each>
     <!-- Search is exhausted, not just one page. Notifications do not claim a precise cause beyond the last actual rejection. -->

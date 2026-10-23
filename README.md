@@ -1,5 +1,7 @@
 # Mules-Supply-Mod-OPUS
 
+**简体中文** | [English](README.en.md)
+
 面向 **X4: Foundations** 的供应优化模组，基于 **Mules, Supply and Warehouses Extended 6.60**，主要重写 **M4 采购骡子**：按真实货仓容量分配任务，多笔采购合并运输，小额缺货也能补齐。M1、M2、M3 保留。
 目前仅在X4 Version 8.00 Hotfix 4 (legacy) + SWI星球大战模组中进行测试，至于原版 8.0 与 9.0 并未做测试，如果有任何适配性问题欢迎提出Issue
 
@@ -205,20 +207,39 @@ M4 以同一基点的船队为单位，按照**实际货仓容量从大到小**�
 |---|---|
 | 玩家取消贸易订单 | 释放相应需求占额，允许其他空闲船重新接单 |
 | 船只无法执行采购 | 在对应船的行为失败提示中显示原因 |
-| 同一基点的 M4 全部空闲 | 返回基点站附近或基点星区 |
+| 单艘 M4 空闲且没有活动或排队命令、未由玩家驾驶 | 独立返回基点站附近或基点星区，其他 M4 忙碌不影响返航 |
+| 修改基点星区 | 切换到新基点的需求与货源搜索；无合适贸易时返回新基点，不沿用船所在星区或旧基点。已排队贸易仍完成 |
 | 船上有余货，且已无活动或排队订单 | 采用虚拟清仓：删除余货，按商品均价补偿玩家；不视为实际交付 |
 
 ## 安装与兼容
 
+从 [Releases 的 v0.1.0-beta.1 页面](https://github.com/Sam-D709/Mules-Supply-Mod-OPUS/releases/tag/v0.1.0-beta.1)下载 **`Mules-Supply-Mod-OPUS-v0.1.0-beta.1.zip`** 安装附件。当前为公开测试版，X4内部版本663。不要误选自动生成的 **Source code** 源码包；本模组不使用 GitHub Packages。后续维护见[版本命名与发布指南](docs/VERSIONING.zh-CN.md)。
+
 1. 退出游戏，备份存档及原模组目录。
-2. 将包含 `content.xml` 的模组目录安装为 `extensions/mules_and_warehouses_extended/`，替换原骡子模组。使用散装源码安装时，移走旧 `ext_01.cat` / `ext_01.dat`。
+2. 解压安装 ZIP，得到 **`mules_and_warehouses_extended`** 文件夹，将整个文件夹拖入 X4 的 **`extensions`** 目录。升级时先把旧模组文件夹移到 `extensions` 以外，再放入新文件夹，避免旧散装文件覆盖新归档。
 3. 启动后确认扩展名为 **Mules-Supply-Mod-OPUS**，给船设置 M4 基点和参数。旧船的最大交易次数若仍为 1，需手动调整；旧玩家购买模式不会转换为库存门槛，新门槛默认 50%。
+
+安装后的路径应为：
+
+```text
+E:\SteamLibrary\steamapps\common\X4 Foundations\extensions\
+└── mules_and_warehouses_extended\
+    ├── content.xml
+    ├── ext_01.cat
+    ├── ext_01.dat
+    ├── README.md
+    └── README.en.md
+```
+
+包内包含中英文说明和界面资源，由游戏语言自动选择；不需要编译或另装语言文件。`SHA256SUMS.txt` 附件可用于核对下载完整性。
 
 本项目保留原扩展 ID 以兼容已有订单，**不能与原骡子模组并行安装**。Steam 创意工坊更新可能覆盖原目录。M4 依据空间站买报价补货，不修改游戏的自动仓储、自动定价或研究需求判定。
 
 ## 验证与文档
 
-105 项本地检查、XML 结构和补丁选择器检查通过。多单、容量调度、小额尾单及取消后重派已有游戏测试反馈；本次玩家货源优先级、实际优惠价格、空闲返航和本船失败提示仍待进一步游戏验证，尚无大规模船队 FPS 基准。
+116 项脚本检查、2 项安装包检查、24 项 XML 结构和 3 处补丁选择器检查通过。安装包经过实际解压、目录层级与CAT/DAT内容核对，并验证了英文提示与中英文本参数的一致性。返航每30秒检查新任务，无新任务时保持飞行，不反复重建路径或打断巡航充能。多单、容量调度、小额尾单、取消后重派及最新返航修复已有游戏反馈；玩家货源优先级、英文游戏显示、实际优惠价格和本船失败提示的完整组合仍待进一步游戏验证，尚无大规模船队 FPS 基准。
+
+已移除 M4 中不可执行的旧采购循环及两个无调用的辅助脚本；完整清理范围与保留原因见[代码清理说明](docs/CLEANUP.zh-CN.md)。关闭“仅服务基点”仍允许服务当前基点范围内其他玩家收货站，不表示强制只服务新基点。
 
 - [本次变更记录](docs/CHANGELOG.zh-CN.md)
 - [详细设计与实现限制](docs/DESIGN.zh-CN.md)
@@ -226,6 +247,6 @@ M4 以同一基点的船队为单位，按照**实际货仓容量从大到小**�
 - [源码变动清单](docs/BASELINE_SOURCE_MAP.md)
 - [GitHub 发布指引](docs/GITHUB_PUBLISH.zh-CN.md)
 
-本地检查：`python tests/checks.py`；生成安装包：`python tools/build.py`。
+本地检查：`python tests/checks.py`；安装包检查：`python tests/test_package.py`；生成安装包：`python tools/build.py`，输出 `dist/Mules-Supply-Mod-OPUS-v0.1.0-beta.1.zip`。
 
 衍生自 [Mules and Warehouses Extended](https://github.com/Misunderstood-Wookiee/Mules-and-Warehouses-Extended)，保留上游 **CC BY 4.0** 许可及作者署名。详见 [许可](LICENCE.md) 与 [来源及署名](ATTRIBUTION.md)。

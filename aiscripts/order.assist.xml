@@ -14,14 +14,11 @@
             <param name="allowBuildstorage" value="$order.$allowBuildstorage"/>
             <param name="allowResources" value="$order.$allowResources"/>
             <param name="allowIntermediates" value="$order.$allowIntermediates"/>
-            <param name="allowTradewares" value="$order.$allowTradewares"/>
             <param name="lockWares" value="$order.$lockWares"/>
             <param name="specialWareBasket" value="$order.$specialWareBasket"/>
             <param name="maxTrades" value="$order.$maxTrades"/>
             <param name="minCargoUsed" value="$order.$minCargoUsed"/>
-            <param name="playerBuyMod" value="$order.$playerBuyMod"/>
             <param name="playerStockThreshold" value="if $order.$playerStockThreshold? then $order.$playerStockThreshold else 50"/>
-            <param name="searchDepth" value="$order.$searchDepth"/>
             <param name="corridorDepth" value="if $order.$corridorDepth? then $order.$corridorDepth else 2"/>
             <param name="corridorMarkup" value="if $order.$corridorMarkup? then $order.$corridorMarkup else 5"/>
             <param name="restartScript" value="$order.$restartScript"/>

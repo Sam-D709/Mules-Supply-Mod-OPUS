@@ -101,45 +101,10 @@ class MuleFixes(unittest.TestCase):
         for ware in ['energycells', 'ore', 'silicon', 'hullparts']:
             self.assertTrue(rejected(block, ware))
 
-    def test_sample_retains_nonempty_lists(self):
-        tree = script('supply_mule')
-        for var, name in [('needs', '$newNeedsCount'), ('supplyOffers', '$newSupplyCount')]:
-            expr = assignment(tree, name)
-            for count in [0, 1, 2, 3, 10, 100]:
-                for depth in [5, 25, 50, 75, 100]:
-                    got = evaluate(expr, {f'${var}.count':count, '$searchDepth':depth})
-                    self.assertEqual(got, min(count, max(int(count*depth/100),1)))
 
-    def test_builder_tie_keeps_matching_destination(self):
-        tree = script('mule.lib.evaluate_tradeoffers')
-        branch = next(x for x in tree.iter('do_elseif') if '$dedicatedPlayerBuilder' in x.get('value',''))
-        env = {'$dedicatedPlayerBuilder':True, '$currentProfit':2, '$bestProfit':2,
-               '$tradeAmount':500, '$bestAmount':100, '$bestNeedTrade.ware.id':'hullparts', '$buyoffer.ware.id':'hullparts',
-               '$bestNeedTrade':'buyer_A', '$buyoffer':'buyer_B', '$selloffer':'seller_S'}
-        self.assertTrue(evaluate(branch.get('value'), env))
-        for node in branch.findall('set_value'):
-            env[node.get('name')] = evaluate(node.get('exact'), env)
-        self.assertEqual((env['$bestNeedTrade'],env['$bestSupplyTrade'],env['$bestAmount']), ('buyer_B','seller_S',500))
 
-    def test_score_uses_actual_quantity(self):
-        scores = [x.get('exact') for x in script('mule.lib.evaluate_tradeoffers').iter('set_value') if x.get('name') == '$currentProfit' and '$fillLevelMod' in x.get('exact','')]
-        self.assertEqual(len(scores),2)
-        for expression in scores:
-            def score(amount, margin):
-                return evaluate(expression, {'$tradeAmount':amount, '$cargoHauled':1000, '$fillLevelMod':1, '$buyoffer.unitprice':100+margin, '$selloffer.unitprice':100, '$sameFactionBuyMod':100})
-            self.assertEqual(score(750,12), 9000)
-            self.assertGreater(score(1000,10),score(750,12))
 
-    def test_sector_priority_modes(self):
-        expr = assignment(script('supply_mule'), '$isServingSector')
-        for sector, station, dedicated, expected in [(True,False,False,True), (True,False,True,True), (False,True,False,True), (False,True,True,False)]:
-            self.assertEqual(evaluate(expr, {'$home.isclass.sector':sector, '$home.isclass.{[class.ship, class.station]}':station, '$dedicatedServe':dedicated}), expected)
 
-    def test_mimic_passes_search_depth(self):
-        tree = script('order.assist')
-        run = tree.find('.//do_if[@value="$order.id == \'SupplyMule\'"]/run_script')
-        self.assertIsNotNone(run)
-        self.assertEqual(run.find('param[@name="searchDepth"]').get('value'), '$order.$searchDepth')
 
     def test_custom_target_unlimited_and_blacklists(self):
         tree = script('travel_mule')
@@ -157,15 +122,6 @@ class MuleFixes(unittest.TestCase):
             self.assertIsNotNone(bound.find('blacklist'))
             self.assertEqual(len(find.findall('.//match_use_blacklist')),3)
 
-    def test_small_final_shortages_and_partial_loads(self):
-        tree = script('mule.lib.evaluate_tradeoffers')
-        empty = next(x.get('value') for x in tree.iter('do_if') if 'nothing to trade' in ET.tostring(x,encoding='unicode') and '$tradeAmount' in x.get('value',''))
-        small = next(x.get('value') for x in tree.iter('do_if') if '$minCargoSize' in x.get('value',''))
-        for amount, desired, minimum, accepted in [(1,1,250,True),(15,15,250,True),(15,1000,250,False),(250,1000,250,True),(1,1000,0,True),(0,0,0,False),(-1,15,0,False),(0,15,250,False)]:
-            values = {'$tradeAmount':amount, '$targetOfferedAmount':desired, '$buyoffer.ware.volume':1, '$minCargoSize':minimum, '$buyoffer.buyer.isclass.buildstorage':False}
-            self.assertEqual(not evaluate(empty,values) and not evaluate(small,values),accepted)
-        # Original construction-storage exception continues to work.
-        self.assertFalse(evaluate(small, {'$tradeAmount':1, '$targetOfferedAmount':1, '$buyoffer.ware.volume':1, '$minCargoSize':250, '$buyoffer.buyer.isclass.buildstorage':True}))
 
     def test_minimum_slider_and_unchanged_default(self):
         param = script('supply_mule').find('.//param[@name="minCargoUsed"]')

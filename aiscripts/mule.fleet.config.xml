@@ -1,15 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
-<aiscript name="mule.fleet.config" version="4">
+<aiscript name="mule.fleet.config" version="6">
   <params><param name="cfg"/></params>
   <attention min="unknown"><actions>
     <set_value name="$ship" exact="$cfg.$ship"/>
+    <!-- Never edit a snapshot still shared by another hub or a running trade plan. -->
+    <set_value name="$cfg" exact="$cfg.clone"/>
+    <do_if value="$ship.defaultorder == $cfg.$origin and $cfg.$origin.id == 'SupplyMule'"><set_value name="$cfg.$home" exact="$cfg.$origin.$home"/></do_if>
     <set_value name="$cfg.$playerStockThreshold" exact="[0,[if $cfg.$playerStockThreshold? then $cfg.$playerStockThreshold else 50,100].min].max"/>
     <set_value name="$cfg.$maxTrades" exact="[1,[$cfg.$maxTrades,10].min].max"/>
     <set_value name="$cfg.$corridorDepth" exact="[0,[$cfg.$corridorDepth,10].min].max"/>
     <set_value name="$cfg.$corridorMarkup" exact="[0,[$cfg.$corridorMarkup,50].min].max"/>
     <set_value name="$cfg.$signature" exact="'%s/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s/v16'.[$cfg.$home,$cfg.$maxDist,$cfg.$dedicatedServe,$cfg.$allowPlayerSuppliers,$cfg.$allowAiSuppliers,$cfg.$allowBuildstorage,$cfg.$allowResources,$cfg.$allowIntermediates,$cfg.$allowTradewares,$cfg.$lockWares,$cfg.$maxTrades,$cfg.$minCargoUsed,$cfg.$playerStockThreshold,100,$cfg.$corridorDepth,$cfg.$corridorMarkup,$cfg.$wares]"/>
-    <do_if value="@$ship.pilot.$mwexFleetCfg? and $ship.pilot.$mwexFleetCfg.$origin == $cfg.$origin and $ship.pilot.$mwexFleetCfg.$signature == $cfg.$signature">
-      <return><retval name="cfg" value="$ship.pilot.$mwexFleetCfg"/></return>
+    <set_value name="$cached" exact="@$ship.pilot.$mwexFleetCfg"/>
+    <do_if value="$cached">
+      <do_if value="$cached.$origin == $cfg.$origin and $cached.$signature == $cfg.$signature">
+        <return><retval name="cfg" value="$cached"/></return>
+      </do_if>
     </do_if>
     <set_value name="$cfg.$commander" exact="$ship.commander"/>
     <set_value name="$cfg.$bound" exact="$ship.commander.exists and not $cfg.$home.isclass.sector and ($ship.commander == $cfg.$home or $ship.toplevelcommander == $cfg.$home)"/>

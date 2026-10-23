@@ -288,7 +288,7 @@ class Runner:
         if tag=='break':raise Break()
         if tag=='return':raise Done({c.get('name'):self.value(c.get('value'),local) for c in node})
         if tag=='resume':raise Resume(node.get('label'))
-        if tag=='run_script':
+        if tag in ('run_script','run_interrupt_script'):
             if v('name')=='move.generic':
                 params={c.get('name'):self.value(c.get('value'),local) for c in node if c.tag=='param'}
                 # Model completion/interruption only; native flying and path following require in-game testing.
@@ -303,6 +303,8 @@ class Runner:
             for c in node:
                 if c.tag=='save_retval':self.set(c.get('variable'),result.get(c.get('name'),0),local)
             return
+        if tag=='find_zone':
+            self.set(node.get('name'),v('space').get('returnzone'),local);return
         if tag=='wait':
             self.engine.player['age']+=v('exact',node.get('min','0'));self.engine.waits+=1
             if self.engine.on_wait:self.engine.on_wait(self.engine)
@@ -392,12 +394,13 @@ class Offer(Obj):
 
 
 class Engine:
-    def __init__(self,delayed=False):
+    def __init__(self,delayed=False,language='zh'):
         self.player=Obj(age=0,money=10**12,occupiedship=None,entity=Obj(name='player'),galaxy=Obj(name='galaxy'))
         self.modifier_targets=set()
         self.player['hasdiscount']=Proxy(lambda target:target in self.modifier_targets)
         self.player['hascommission']=Proxy(lambda target:target in self.modifier_targets)
-        self.texts={('61552',n.get('id')):n.text for n in ET.parse(SRC/'t/0001-l086.xml').getroot().iter('t')}
+        text_file=SRC/'t'/('0001.xml' if language=='en' else '0001-l086.xml')
+        self.texts={('61552',n.get('id')):n.text for n in ET.parse(text_file).getroot().iter('t')}
         self.global_=Obj(mwexFleetPending=[],mwexFleetEpoch=0,mwexFleetLock=Obj(time=0,actor=Obj(name='actor')))
         self.roots={'global':self.global_,'player':self.player,
                     'faction':Obj(player='player'),'class':Obj(ship='ship',station='station',sector='sector'),
@@ -411,6 +414,7 @@ class Engine:
         self.moves=[];self.on_move=None;self.ship_failures=[];self.signals=[]
     def sector(self,name):
         s=Obj(name=name,**{'class':'sector'});s['sector']=s
+        s['returnzone']=Obj(name=name+' navigation zone',sector=s,**{'class':'zone'})
         def distance(other):
             def with_ship(ship):
                 path=self.path(s,other,ship);return len(path)-1 if path else -1
@@ -533,6 +537,96 @@ class XMLDispatchChecks(unittest.TestCase):
         e.runner.script('mule.fleet.run',{'cfg':cfg})
         self.assertGreater(e.player['age'],5);self.assertLessEqual(e.player['age'],8)
 
+    def test_live_sector_home_edit_migrates_hub_and_searches_new_sector(self):
+        for demand in (0,80):
+            with self.subTest(new_demand=demand):
+                e,home,fleet,_=self.setup_market([80],[100]);ship,cfg=fleet[0]
+                old=home['sector'];new=e.sector('New home');e.connect(old,new)
+                cfg.update(home=old,bound=False,maxDist=0,playerStockThreshold=50.0)
+                cfg['origin'].update(home=old,maxDist=0,playerStockThreshold=50.0)
+                hub=e.hub(old,fleet);e.global_['mwexFleetHubs']=Obj({old:hub})
+                e.global_.pop('mwexFleetLock',None)
+                receiver=e.station('New receiver',new);source=e.station('New source',new,'ai')
+                need=e.offer(receiver,e.wares[0],demand,110,True)
+                e.offer(source,e.wares[0],demand,100,False)
+                # The UI edits the existing order; the running script still holds its old snapshot.
+                cfg['origin']['home']=new
+                e.roots['this']=Obj(ship=ship,name='pilot')
+                e.runner.script('mule.fleet.run',{'cfg':cfg})
+                self.assertNotIn(ship,hub['members'])
+                self.assertIs(cfg['home'],old,'Do not mutate the old shared configuration')
+                fresh=ship['pilot']['mwexFleetCfg']
+                self.assertIs(fresh['home'],new)
+                self.assertIs(e.global_['mwexFleetHubs'][new]['members'][ship],fresh)
+                self.assertIs(ship['sector'],old if demand else new)
+                if demand:
+                    self.assertEqual(len(ship['orders']),2)
+                    self.assertIs(ship['orders'][1]['offer'],need)
+                else:
+                    self.assertIs(e.moves[0]['destination'],new['returnzone'])
+
+    def test_old_home_wave_does_not_plan_for_ship_with_edited_home(self):
+        e,home,fleet,hub=self.setup_market([80],[100]);ship,cfg=fleet[0]
+        new=e.sector('New home');e.connect(home['sector'],new)
+        cfg['origin']['home']=new
+        self.dispatch(e,hub)
+        self.assertEqual(ship['orders'],[])
+        self.assertFalse(any(line.startswith('CANDIDATE') for line in e.logs))
+
+    def test_old_home_return_stops_after_live_home_edit(self):
+        e,home,fleet,hub=self.setup_market([0],[100]);ship,cfg=fleet[0]
+        new=e.sector('New home');e.connect(home['sector'],new)
+        ship['zone']=Obj(name='away from station')
+        cfg['origin']['home']=new
+        self.return_home(e,hub,ship,cfg)
+        self.assertEqual(e.moves,[])
+
+    def test_mimic_home_is_not_replaced_by_leader_order_home(self):
+        e,home,fleet,_=self.setup_market([0],[100]);ship,cfg=fleet[0]
+        cfg['origin']['id']='Assist';cfg['origin']['home']=e.sector('Other')
+        fresh=e.runner.script('mule.fleet.config',{'cfg':cfg})['cfg']
+        self.assertIs(fresh['home'],home)
+
+    def test_home_edit_during_idle_is_seen_before_another_old_home_search(self):
+        e,home,fleet,_=self.setup_market([0],[100]);ship,cfg=fleet[0]
+        old=home['sector'];new=e.sector('New home');e.connect(old,new)
+        cfg.update(home=old,bound=False);cfg['origin']['home']=old
+        hub=e.hub(old,fleet);e.global_['mwexFleetHubs']=Obj({old:hub})
+        e.global_.pop('mwexFleetLock',None)
+        e.roots['this']=Obj(ship=ship,name='pilot')
+        def edit_home(engine):
+            cfg['origin']['home']=new;engine.on_wait=None
+        e.on_wait=edit_home
+        e.runner.script('mule.fleet.run',{'cfg':cfg})
+        self.assertEqual(e.moves,[])
+        e.runner.script('mule.fleet.run',{'cfg':cfg})
+        self.assertIs(e.moves[0]['destination'],new['returnzone'])
+        self.assertNotIn(ship,hub['members'])
+
+    def test_home_migration_keeps_already_queued_trade_and_reservations(self):
+        e,home,fleet,_=self.setup_market([80],[100]);ship,cfg=fleet[0]
+        old=home['sector'];new=e.sector('New home');e.connect(old,new)
+        cfg.update(home=old,bound=False);cfg['origin']['home']=new
+        hub=e.hub(old,fleet);e.global_['mwexFleetHubs']=Obj({old:hub})
+        e.global_.pop('mwexFleetLock',None)
+        order=e.order(ship,e.sources[0],40);pending=Obj(ship=ship,offer=e.sources[0],order=order,amount=40)
+        e.global_['mwexFleetPending'].append(pending)
+        e.roots['this']=Obj(ship=ship,name='pilot')
+        e.runner.script('mule.fleet.run',{'cfg':cfg})
+        self.assertEqual(ship['orders'],[order]);self.assertIn(pending,e.global_['mwexFleetPending'])
+        self.assertNotIn(ship,hub['members']);self.assertEqual(e.moves,[])
+
+    def test_direct_entry_reads_edited_home_even_with_stale_script_parameter(self):
+        e,home,fleet,_=self.setup_market([0],[100]);ship,cfg=fleet[0]
+        new=e.sector('New home');e.connect(home['sector'],new)
+        ship['defaultorder']['home']=new
+        local=dict(cfg,assignHome=False,specialWareBasket=[],restartScript=0)
+        e.roots['this']=Obj(ship=ship,name='pilot',assignedcontrolled=ship)
+        e.global_.pop('mwexFleetLock',None)
+        e.runner.script('supplymule',local)
+        self.assertIs(ship['pilot']['mwexFleetCfg']['home'],new)
+        self.assertIs(e.moves[0]['destination'],new['returnzone'])
+
     def test_legacy_binding_guard_reads_missing_state_under_eager_validation(self):
         e,home,fleet,hub=self.setup_market([0],[100]);ship,cfg=fleet[0]
         ship['commander']=None
@@ -578,8 +672,8 @@ class XMLDispatchChecks(unittest.TestCase):
                 self.run_roster(e,home,fleet,hub)
                 self.assertIs(ship['commander'],home);self.assertEqual(len(e.assignments),1)
 
-    def setup_market(self,amounts,capacities,delayed=False):
-        e=Engine(delayed);h=e.sector('H');home=e.station('Home',h)
+    def setup_market(self,amounts,capacities,delayed=False,language='zh'):
+        e=Engine(delayed,language);h=e.sector('H');home=e.station('Home',h)
         for i,amount in enumerate(amounts):
             w=e.ware('w'+str(i));supplier=e.station('Source'+str(i),h,'ai')
             e.offer(home,w,amount,110,True);e.offer(supplier,w,amount,100,False)
@@ -849,6 +943,40 @@ class XMLDispatchChecks(unittest.TestCase):
         self.assertIn('实际采购单价100',message);self.assertIn('实际买报价90',message)
         self.assertNotIn('raw_price',message)
 
+    def test_english_resources_cover_script_references_and_match_format_arguments(self):
+        en={n.get('id'):n.text or '' for n in ET.parse(SRC/'t/0001.xml').getroot().iter('t')}
+        zh={n.get('id'):n.text or '' for n in ET.parse(SRC/'t/0001-l086.xml').getroot().iter('t')}
+        references=set()
+        for folder in ('aiscripts','md'):
+            for path in (SRC/folder).glob('*.xml'):
+                references.update(re.findall(r'\{61552,(\d+)\}',path.read_text(encoding='utf-8')))
+        for reference in references:
+            with self.subTest(reference=reference):
+                self.assertIn(reference,en);self.assertIn(reference,zh)
+                self.assertNotRegex(en[reference],r'[\u4e00-\u9fff]')
+                self.assertEqual(en[reference].count('%s'),zh[reference].count('%s'))
+
+    def test_english_price_failure_is_attached_to_ship_in_english(self):
+        e,home,fleet,hub=self.setup_market([80],[100],language='en');ship,cfg=fleet[0]
+        e.needs[0]['unitprice']=90;self.dispatch(e,hub)
+        message=cfg['origin']['failure']
+        self.assertIn('Price spread rejected',message);self.assertIn('actual buy=100',message)
+        self.assertNotRegex(message,r'[\u4e00-\u9fff]')
+
+    def test_english_assignment_warning_is_localized_and_trade_continues(self):
+        e,home,fleet,hub=self.setup_market([80],[100],language='en');ship,cfg=fleet[0]
+        ship.update(commander=None,reject_assignment=True);ship['pilot'].pop('mwexFleetCfg')
+        self.entry(e,ship,cfg,home)
+        self.assertEqual(len(e.notices),1);self.assertIn('could not be assigned',e.notices[0])
+        self.assertNotRegex(e.notices[0],r'[\u4e00-\u9fff]');self.assertEqual(len(ship['orders']),2)
+
+    def test_english_sector_home_warning_is_localized_and_trade_continues(self):
+        e,home,fleet,hub=self.setup_market([80],[100],language='en');ship,cfg=fleet[0]
+        ship['commander']=None;ship['pilot'].pop('mwexFleetCfg')
+        self.entry(e,ship,cfg,home['sector'])
+        self.assertEqual(len(e.notices),1);self.assertIn('has a sector as home',e.notices[0])
+        self.assertNotRegex(e.notices[0],r'[\u4e00-\u9fff]');self.assertEqual(len(ship['orders']),2)
+
     def test_hidden_tuning_parameters_and_new_stock_slider(self):
         root=ET.parse(SRC/'aiscripts/supply_mule.xml').getroot();params={p.get('name'):p for p in root.findall('./order/params/param')}
         self.assertEqual(params['searchDepth'].get('type'),'internal');self.assertEqual(params['playerBuyMod'].get('type'),'internal')
@@ -1044,6 +1172,15 @@ class XMLDispatchChecks(unittest.TestCase):
         e,home,fleet,hub=self.setup_market([0],[100,200]);self.run_roster(e,home,fleet,hub)
         fleet[1][0]['commander']=Obj(name='other');self.run_roster(e,home,fleet,hub)
         self.assertNotIn(fleet[1][0],hub['members'])
+    def test_roster_refresh_preserves_each_ships_stock_threshold_including_zero(self):
+        for threshold in (0,60,100):
+            with self.subTest(threshold=threshold):
+                e,home,fleet,hub=self.setup_market([0],[100,200])
+                candidate,old_cfg=fleet[1]
+                candidate['defaultorder']['playerStockThreshold']=threshold
+                self.run_roster(e,home,fleet,hub)
+                self.assertEqual(hub['members'][candidate]['playerStockThreshold'],threshold)
+                self.assertEqual(candidate['pilot']['mwexFleetCfg']['playerStockThreshold'],threshold)
     def test_discovery_indexes_sources_by_ware_sector_owner(self):
         e,home,fleet,hub=self.setup_market([100,0],[100])
         e.runner.script('mule.fleet.discover',{'hub':hub})
@@ -1108,12 +1245,12 @@ class XMLDispatchChecks(unittest.TestCase):
         e.runner.children(list(actions),{})
         self.assertIs(hub['sources'][e.wares[0]][home['sector']][new['owner']],new)
         self.assertEqual(e.queries,{})
-    def test_active_entry_precedes_legacy_virtual_cargo_action(self):
+    def test_active_entry_has_no_unreachable_legacy_trade_loop(self):
         root=ET.parse(SRC/'aiscripts/supply_mule.xml').getroot()
         actions=list(root.find('./attention/actions'))
         dispatch=next(i for i,n in enumerate(actions) if n.tag=='run_script' and n.get('name')=="'mule.fleet.run'")
         self.assertEqual(actions[dispatch+1].tag,'return')
-        self.assertTrue(any(n.tag=='set_value' and n.get('exact')=='this.ship.cargo.list' for n in actions[dispatch+2:]))
+        self.assertEqual(actions[dispatch+2:],[])
     def test_receiver_storage_is_shared_across_draft_lots(self):
         e,home,fleet,hub=self.setup_market([80,80],[1000]);home['cargo']['free']['container']=100
         self.dispatch(e,hub)
@@ -1153,14 +1290,32 @@ class XMLDispatchChecks(unittest.TestCase):
         e.roots['this']=Obj(ship=ship,assignedcontrolled=ship)
         e.runner.script('mule.fleet.home',{'cfg':cfg,'hub':hub})
 
-    def test_whole_fleet_idle_signal_requires_no_active_trade_or_manual_order(self):
-        e,home,fleet,hub=self.setup_market([0],[100,200])
-        self.dispatch(e,hub);self.assertTrue(hub['allIdle'])
-        fleet[1][0]['orders'].append(Obj(id='MoveWait'))
-        self.dispatch(e,hub);self.assertFalse(hub['allIdle'])
-        fleet[1][0]['orders'].clear();e.needs[0]['total']=80;e.sources[0]['total']=80
-        self.dispatch(e,hub);self.assertFalse(hub['allIdle'])
-        self.assertTrue(any(s['orders'] for s,c in fleet))
+    def test_idle_ship_returns_while_other_member_trades_has_manual_orders_or_is_player_flown(self):
+        for home_kind in ('station','sector'):
+            for busy_kind in ('trade','manual','player'):
+                with self.subTest(home=home_kind,other_member=busy_kind):
+                    e,home,fleet,hub=self.setup_market([80 if busy_kind=='trade' else 0],[100,200])
+                    ship,cfg=fleet[0];other,other_cfg=fleet[1]
+                    if busy_kind=='trade':
+                        e.order(other,e.sources[0],80);e.order(other,e.needs[0],80)
+                    if busy_kind=='manual':other['orders'].append(Obj(id='MoveWait'))
+                    if busy_kind=='player':e.player['occupiedship']=other
+                    other_orders=list(other['orders'])
+                    target=home if home_kind=='station' else home['sector']
+                    if home_kind=='sector':
+                        hub['home']=target
+                        for member,member_cfg in fleet:
+                            member_cfg['home']=target;member_cfg['origin']['home']=target
+                    far=e.sector('far');e.connect(home['sector'],far)
+                    ship.update(sector=far,zone=Obj(name='far zone'))
+                    cfg['playerStockThreshold']=cfg['origin']['playerStockThreshold']=50.0
+                    e.global_['mwexFleetHubs']=Obj({target:hub});e.global_.pop('mwexFleetLock',None)
+                    e.roots['this']=Obj(ship=ship,assignedcontrolled=ship)
+                    e.runner.script('mule.fleet.run',{'cfg':cfg})
+                    self.assertEqual(len(e.moves),1)
+                    self.assertIs(e.moves[0]['destination'],target if home_kind=='station' else target['returnzone'])
+                    self.assertEqual(ship['orders'],[]);self.assertEqual(other['orders'],other_orders)
+                    self.assertIs(ship['sector'],home['sector'])
 
     def test_station_home_returns_to_station_zone_without_occupying_a_berth(self):
         e,home,fleet,hub=self.setup_market([0],[100]);ship,cfg=fleet[0]
@@ -1174,20 +1329,20 @@ class XMLDispatchChecks(unittest.TestCase):
 
     def test_sector_home_stops_inside_sector_and_does_not_force_station_visit(self):
         e,home,fleet,hub=self.setup_market([0],[100]);ship,cfg=fleet[0]
-        cfg['home']=home['sector'];cfg['origin']['home']=home['sector'];hub['home']=home['sector'];hub['allIdle']=True
+        cfg['home']=home['sector'];cfg['origin']['home']=home['sector'];hub['home']=home['sector']
         ship['zone']=Obj(name='other zone in home sector')
         self.return_home(e,hub,ship,cfg);self.assertEqual(e.moves,[])
         far=e.sector('far');e.connect(home['sector'],far);ship['sector']=far
         self.return_home(e,hub,ship,cfg)
-        self.assertIs(e.moves[0]['destination'],home['sector'])
-        self.assertTrue(e.moves[0]['endintargetsector']);self.assertFalse(e.moves[0]['endintargetzone'])
+        self.assertIs(e.moves[0]['destination'],home['sector']['returnzone'])
+        self.assertTrue(e.moves[0]['endintargetsector']);self.assertTrue(e.moves[0]['endintargetzone'])
 
     def test_idle_return_never_takes_player_busy_detached_or_reconfigured_ship(self):
-        for case in ('fleet-busy','manual','occupied','detached','default','cfg','dead','home-gone'):
+        for case in ('trade','manual','occupied','detached','default','cfg','dead','home-gone'):
             with self.subTest(case=case):
                 e,home,fleet,hub=self.setup_market([0],[100]);ship,cfg=fleet[0]
-                ship['zone']=Obj(name='remote zone');hub['allIdle']=True
-                if case=='fleet-busy':hub['allIdle']=False
+                ship['zone']=Obj(name='remote zone')
+                if case=='trade':ship['orders'].append(Obj(id='Trade'))
                 if case=='manual':ship['orders'].append(Obj(id='Wait'))
                 if case=='occupied':e.player['occupiedship']=ship
                 if case=='detached':ship['commander']=None
@@ -1200,7 +1355,7 @@ class XMLDispatchChecks(unittest.TestCase):
     def test_blacklist_prevents_return_and_reason_is_attached_to_this_ship(self):
         e,home,fleet,hub=self.setup_market([0],[100]);ship,cfg=fleet[0]
         far=e.sector('far');e.connect(home['sector'],far)
-        ship.update(sector=far,zone=Obj(name='far zone'));ship['blocked'].add(home['sector']);hub['allIdle']=True
+        ship.update(sector=far,zone=Obj(name='far zone'));ship['blocked'].add(home['sector'])
         self.return_home(e,hub,ship,cfg)
         self.assertEqual(e.moves,[]);self.assertIn('旅行黑名单',cfg['origin']['failure'])
         self.assertIn(ship['idcode'],cfg['origin']['failure'])
@@ -1224,23 +1379,89 @@ class XMLDispatchChecks(unittest.TestCase):
         self.assertEqual(len(ship['orders']),2);self.assertNotIn('failure',cfg['origin'])
         self.assertEqual(len(e.moves),1)
 
-    def test_return_timer_is_bounded_and_stale_timers_cannot_interrupt_new_leg(self):
+    def test_return_poll_keeps_flight_and_stale_timers_cannot_interrupt_new_leg(self):
         root=ET.parse(SRC/'aiscripts/mule.fleet.home.xml').getroot()
         timer=root.find('./attention/actions/signal_objects');self.assertEqual(timer.get('delay'),'30s')
         conditions=root.find('./interrupts/handler/conditions')
         self.assertEqual(conditions.find('event_object_signalled').get('param'),timer.get('param'))
-        self.assertEqual(root.find('./interrupts/handler/actions/abort_called_scripts').get('resume'),'finish')
+        actions=root.find('./interrupts/handler/actions')
+        self.assertIsNone(actions.find('abort_called_scripts'))
+        self.assertEqual(actions.find('run_interrupt_script').get('abortscripts'),'false')
         e,home,fleet,hub=self.setup_market([0],[100]);ship,cfg=fleet[0]
-        hub['allIdle']=True;ship['zone']=Obj(name='remote zone')
+        ship['zone']=Obj(name='remote zone')
         self.return_home(e,hub,ship,cfg)
         old=e.signals[-1]['param2'];ship['zone']=Obj(name='remote zone again')
         self.return_home(e,hub,ship,cfg);new=e.signals[-1]['param2']
-        self.assertIsNot(old,new);self.assertEqual(e.signals[-1]['delay'],30)
+        self.assertNotEqual(old,new);self.assertEqual(e.signals[-1]['delay'],30)
         expr=conditions.find('check_value').get('value')
         e.roots['event']=Obj(param2=old)
         self.assertFalse(e.runner.value(expr,{'returnToken':new}))
         e.roots['event']=Obj(param2=new)
         self.assertTrue(e.runner.value(expr,{'returnToken':new}))
+
+    def test_sector_return_avoids_native_null_sector_shortcut(self):
+        for zone in (True,False):
+            with self.subTest(has_normal_zone=zone):
+                e,home,fleet,hub=self.setup_market([0],[100]);ship,cfg=fleet[0]
+                sector=home['sector'];sector['sector']=None
+                cfg['home']=cfg['origin']['home']=hub['home']=sector;cfg['bound']=False
+                far=e.sector('far');e.connect(far,sector);ship['sector']=far
+                if not zone:sector['returnzone']=None
+                self.return_home(e,hub,ship,cfg)
+                move=e.moves[0];destination=move['destination']
+                self.assertFalse(move['endintargetsector'] and not destination.get('sector'))
+                self.assertFalse(move['noboost'])
+                if zone:self.assertIs(destination['sector'],sector)
+
+    def test_periodic_poll_without_trade_preserves_current_movement(self):
+        e,home,fleet,hub=self.setup_market([0],[100]);ship,cfg=fleet[0]
+        cfg=e.runner.script('mule.fleet.config',{'cfg':cfg})['cfg'];hub['members'][ship]=cfg
+        e.global_['mwexFleetHubs']=Obj({home:hub});hub['next']=0
+        ship['zone']=Obj(name='far zone')
+        root=ET.parse(SRC/'aiscripts/mule.fleet.home.xml').getroot()
+        actions=root.find('./interrupts/handler/actions')
+        def poll(engine,params):
+            for _ in range(3):
+                engine.player['age']+=30
+                local=dict(cfg=cfg,hub=hub,ship=ship,home=home,returnToken=ship['pilot']['mwexFleetReturnSerial'])
+                engine.runner.children(list(actions),local)
+        e.on_move=poll
+        self.return_home(e,hub,ship,cfg)
+        self.assertEqual(len(e.moves),1)
+        self.assertEqual(ship['orders'],[])
+        self.assertEqual(len([s for s in e.signals if s['param']=='mwex_capacity_return_refresh']),4)
+        self.assertFalse(any(s['param']=='mwex_capacity_return_stop' for s in e.signals))
+
+    def test_periodic_poll_assigns_new_trade_and_signals_only_real_departure(self):
+        e,home,fleet,hub=self.setup_market([80],[100]);ship,cfg=fleet[0]
+        cfg=e.runner.script('mule.fleet.config',{'cfg':cfg})['cfg'];hub['members'][ship]=cfg
+        e.global_['mwexFleetHubs']=Obj({home:hub});e.global_.pop('mwexFleetLock',None)
+        e.roots['this']=Obj(ship=ship,assignedcontrolled=ship)
+        e.runner.script('mule.fleet.run',{'cfg':cfg,'once':True,'returnToken':7})
+        self.assertEqual(len(ship['orders']),2);self.assertEqual(e.moves,[])
+        stop=[s for s in e.signals if s['param']=='mwex_capacity_return_stop']
+        self.assertEqual(len(stop),1);self.assertEqual(stop[0]['param2'],7)
+        self.assertNotIn('mwexFleetLock',e.global_)
+
+    def test_semantically_identical_saved_config_copy_can_plan_and_commit(self):
+        e,home,fleet,hub=self.setup_market([80],[100]);ship,cfg=fleet[0]
+        copied=Obj(cfg);self.assertIsNot(copied,cfg)
+        hub['members'][ship]=copied
+        self.dispatch(e,hub)
+        self.assertEqual(len(ship['orders']),2)
+
+    def test_unrestricted_sector_home_still_prefers_new_home_demand(self):
+        e,home,fleet,_=self.setup_market([80],[100]);ship,cfg=fleet[0]
+        old=home['sector'];new=e.sector('new home');e.connect(old,new)
+        cfg.update(home=old,bound=False,dedicatedServe=False)
+        cfg['origin'].update(home=new,dedicatedServe=False)
+        hub=e.hub(old,fleet);e.global_['mwexFleetHubs']=Obj({old:hub})
+        e.global_.pop('mwexFleetLock',None);e.roots['this']=Obj(ship=ship,name='pilot')
+        receiver=e.station('New receiver',new);source=e.station('New supplier',new,'ai')
+        need=e.offer(receiver,e.wares[0],80,110,True);e.offer(source,e.wares[0],80,100,False)
+        e.runner.script('mule.fleet.run',{'cfg':cfg})
+        self.assertEqual(len(ship['orders']),2);self.assertIs(ship['orders'][1]['offer'],need)
+        self.assertNotIn(ship,hub['members'])
 
     def test_identical_drone_less_ships_each_get_their_own_failure_record(self):
         e,home,fleet,hub=self.setup_market([80],[100,100]);a,ac=fleet[0];b,bc=fleet[1]
@@ -1297,7 +1518,7 @@ def syntax_check():
 if __name__=='__main__':
     count=syntax_check()
     suite=unittest.defaultTestLoader.loadTestsFromTestCase(XMLDispatchChecks)
-    # Run the earlier ten regression cases without rewriting their historical reports.
+    # Keep regressions for the other behaviors and the public M4 load slider.
     old_script=HERE/'test_legacy.py'
     saved_argv=sys.argv[:]
     try:

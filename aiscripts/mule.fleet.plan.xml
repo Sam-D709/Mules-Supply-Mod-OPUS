@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<aiscript name="mule.fleet.plan" version="5">
+<aiscript name="mule.fleet.plan" version="6">
   <params><param name="hub"/><param name="cfg"/><param name="relaxed" default="false"/></params>
+  <patch sinceversion="6"><return><retval name="plan" value="[]"/><retval name="volume" value="0"/><retval name="failure" value="'ship_changed'"/></return></patch>
   <patch sinceversion="5"><return><retval name="plan" value="[]"/><retval name="volume" value="0"/><retval name="failure" value="'ship_changed'"/></return></patch>
   <patch sinceversion="4"><return><retval name="plan" value="[]"/><retval name="volume" value="0"/><retval name="failure" value="'ship_changed'"/></return></patch>
   <attention min="unknown"><actions>
@@ -117,7 +118,7 @@
                 <set_value name="global.$mwexFleetLock.$time" exact="player.age"/>
                 <wait exact="1ms"/>
                 <set_value name="$examined" exact="0"/>
-                <do_if value="not $ship.isoperational or $ship.orders.count or not $ship.pilot.$mwexFleetCfg or $ship.pilot.$mwexFleetCfg != $cfg">
+                <do_if value="not $ship.isoperational or $ship.orders.count or not $ship.pilot.$mwexFleetCfg or ($ship.pilot.$mwexFleetCfg.$origin != $cfg.$origin or $ship.pilot.$mwexFleetCfg.$signature != $cfg.$signature or $ship.pilot.$mwexFleetCfg.$commander != $cfg.$commander or $ship.pilot.$mwexFleetCfg.$bound != $cfg.$bound)">
                   <return><retval name="plan" value="[]"/><retval name="volume" value="0"/><retval name="failure" value="'ship_changed'"/></return>
                 </do_if>
               </do_if>
