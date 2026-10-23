@@ -67,16 +67,16 @@
     <t id="4002">Home Station/Sector</t>
     <t id="4003">Assign Ship To Station</t>
     <t id="4004">Max Jumps From Home</t>
-    <t id="4005">Serve Source Only</t>
-    <t id="4006">Enable purchases from player factories</t>
+    <t id="4005">Supply Home Station/Sector Only</t>
+    <t id="4006">Prefer Player-Owned Suppliers</t>
     <t id="4007">Collect from AI Factions</t>
-    <t id="4008">Allow Build Storage</t>
-    <t id="4009">Allow Resources</t>
-    <t id="4010">Allow Intermediates</t>
+    <t id="4008">Supply Construction Storage</t>
+    <t id="4009">Supply Externally Produced Consumables</t>
+    <t id="4010">Supply Self-Produced Consumables</t>
     <t id="4011">Allow Trade Wares</t>
     <t id="4012">Lock Ware List</t>
     <t id="4013">Wares (all by default)</t>
-    <t id="4014">Max Trades</t>
+    <t id="4014">Maximum Procurement Lots Per Trip</t>
     <t id="4015">Player Buy Mod</t>
     <t id="4016">Collect from Player ONLY</t>
     <t id="4017">Priortize Build Storage</t>
@@ -84,18 +84,18 @@
     <t id="4019">Home Station/Sector</t>
     <t id="4020">Assign Ship To Station</t>
     <t id="4021">Max Trades</t>
-    <t id="4022">Fill Cargo Hold %</t>
+    <t id="4022">Minimum Total Trip Load %</t>
     <t id="4023">% of trades to eval</t>
-    <t id="4101">Supplies own Stations Needs</t>
+    <t id="4101">Procures supplies for the home station or stations in the configured service area.</t>
     <t id="4102">Home</t>
     <t id="4103">Assign to the home station if it's the players.</t>
     <t id="4104">Max gate distance to buy.</t>
-    <t id="4105">Will only serve the configured source station.</t>
-    <t id="4106">Use owned factories or warehouses only when this ware stock exceeds the configured percentage. Disabling excludes owned sources; NPC sources have a separate switch.</t>
+    <t id="4105">With a player station as home, supply only that station and its construction storage. With a sector as home, supply player stations in that sector. Disabling allows other player stations within range. Suppliers may be in other sectors within range. An explicitly selected NPC home follows its own NPC service rules.</t>
+    <t id="4106">When enabled, prefer eligible owned factories or warehouses for main and secondary lots; use NPC supply for unavailable or insufficient owned supply. When disabled, eligible owned and NPC sources compete under the same distance and price rules. The owned stock threshold and all range, path and trade checks apply in both modes. The NPC source switch controls NPC sources only.</t>
     <t id="4107">Allows buys from AI Faction Stations.</t>
-    <t id="4108">Allows buys for Station Build Storages.</t>
-    <t id="4109">Allows buys for Resources.</t>
-    <t id="4110">Allows buys for Intermediates.</t>
+    <t id="4108">Buy materials for delivery to the receiving station's construction storage, for building or expansion. This does not collect goods from construction storage.</t>
+    <t id="4109">Supply wares the receiver consumes or needs for resupply but does not produce itself, such as microchips for an advanced electronics factory. This is a receiver-use category, not a restriction to ore or gas. The ship must still carry the ware.</t>
+    <t id="4110">Supply wares the receiver both produces and consumes. For example, an integrated factory can buy refined metals when its own production cannot keep up with hull-part production.</t>
     <t id="4111">Allows buys for Trade Wares.</t>
     <t id="4112">Locks the ware selection, otherwise we need to wipe it each time we call the script.</t>
     <t id="4113">Warebasket</t>
@@ -117,12 +117,12 @@
     <t id="4201">%s: no executable procurement for %s within %s home jumps. Last rejection: %s.</t>
     <t id="4205">%s: incomplete submission; queued orders are withdrawn where possible. Running orders remain. After all orders end, remaining cargo is liquidated at ware average price. See M4 Capacity Dispatch.</t>
     <t id="4206">%s has remaining cargo that cannot currently be delivered to its planned receiver/home. Cargo is preserved. Check offers, funds and trade rules.</t>
-    <t id="4026">Allow player supply above stock %</t>
-    <t id="4126">Current ware stock divided by allocated ware storage; default 50%. Strictly above triggers eligibility, not a retained reserve: an accepted shipment may take all legally offered stock. Owned transfers ignore profit spread.</t>
+    <t id="4026">Player Supplier Stock Threshold %</t>
+    <t id="4126">Current ware stock divided by allocated ware storage; default 50%. Stock must strictly exceed the threshold in both preference modes. This is an eligibility trigger, not a retained reserve: an accepted shipment may take all legally offered stock. Zero allows positive stock; 100 requires stock above allocation. Zero allocation is skipped. Owned transfers ignore profit spread.</t>
     <t id="4300">No unmet demand matches service scope, ware category and cargo compatibility.</t>
     <t id="4301">No indexed supplier quote for this ware; waiting for quote updates.</t>
     <t id="4302">Cannot resolve actual partner price: quote may have disappeared, become restricted or changed. Skip and retry.</t>
-    <t id="4303">Owned stock below trigger: %s ware=%s stock=%s allocated=%s threshold=%s%%. Skip this supplier.</t>
+    <t id="4303">Owned stock does not exceed trigger: %s ware=%s stock=%s allocated=%s threshold=%s%%. Skip this supplier.</t>
     <t id="4304">Price spread rejected: ware=%s supplier=%s actual buy=%s Cr receiver=%s actual bid=%s Cr. External procurement requires bid above ask. Supplier raw quote=%s Cr.</t>
     <t id="4305">Outside corridor: supplier=%s deviation=%s jumps allowed=%s.</t>
     <t id="4306">Insufficient quantity/minimum lot: supplier=%s ware=%s net demand=%s net supply=%s free volume=%s after native storage/funds clamp=%s supplier minimum=%s receiver minimum=%s remaining budget=%s Cr actual buy=%s Cr.</t>
@@ -133,7 +133,7 @@
     <t id="4312">Native quote unavailable to this ship: station=%s ware=%s. Trade rules, activity blacklists, withdrawn quotes or reservations may apply; native query gives no finer reason.</t>
     <t id="4313">No compatible trade dock at %s for this ship; temporarily occupied berths do not count as incompatible.</t>
     <t id="4314">Cargo drones missing: neither this ship nor trading station %s has cargo drones for freight transfer.</t>
-    <t id="4315">Source ownership switch excludes supplier %s.</t>
+    <t id="4315">NPC purchases are disabled; NPC supplier %s is excluded.</t>
     <t id="4316">Supplier quote is invalid or has no remaining quantity, possibly reserved by other transports.</t>
     <t id="4320">%s: liquidated %s, %s units at average %s Cr/unit; credited player %s Cr. No station delivery occurred.</t>
     <t id="4321">%s: commit revalidation failed; no orders created. See adjacent COMMIT_CHECK records.</t>
@@ -146,5 +146,9 @@
     <t id="4328">Ship orders, assignment or settings changed</t>
     <t id="4330">M4: %s (%s), home %s. Procurement not executed: %s</t>
     <t id="4331">Cannot return to home %s: no route from the current sector complies with this ship's travel blacklist. Trade searches will continue and return will be retried.</t>
+    <t id="4340">M4 station assignment failed</t>
+    <t id="4341">%s (%s) could not be assigned to %s. M4 will continue searching for trades. Assignment diagnostics are stored on the pilot and can be inspected in a save.</t>
+    <t id="4342">M4 home configuration</t>
+    <t id="4343">%s (%s) has a sector as home and cannot be assigned as a station subordinate. Select a specific station in the M4 home setting to enable assignment. Sector supply mode will continue.</t>
   </page>
 </language>
