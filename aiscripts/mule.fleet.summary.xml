@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<aiscript name="mule.fleet.summary" version="1">
+  <params><param name="diagnostic"/></params>
+  <attention min="unknown"><actions>
+    <set_value name="$d" exact="$diagnostic"/>
+    <set_value name="$text" exact="{61552,4407}.[if $d.$relaxed then {61552,4352} else {61552,4351},$d.$lots,$d.$volume,$d.$capacity,if $d.$capacity gt 0 then (($d.$volume*10000/$d.$capacity)i)/100.0 else 0,$d.$checks]"/>
+    <set_value name="$text" exact="$text+'\n'+(if $d.$stop == 1 then {61552,4413} else if $d.$stop == 2 then {61552,4414} else {61552,4415})"/>
+    <do_if value="$d.$price"><set_value name="$text" exact="$text+'\n'+{61552,4408}.[$d.$price,$d.$secondaryPrice,$d.$minGap,$d.$gapWare.name]"/></do_if>
+    <do_if value="$d.$range"><set_value name="$text" exact="$text+'\n'+{61552,4409}.[$d.$range,$d.$minExtra,$d.$rangeWare.name]"/></do_if>
+    <do_if value="$d.$route"><set_value name="$text" exact="$text+'\n'+{61552,4410}.[$d.$route]"/></do_if>
+    <do_if value="$d.$other"><set_value name="$text" exact="$text+'\n'+{61552,4411}.[$d.$other]"/></do_if>
+    <return><retval name="text" value="$text"/></return>
+  </actions></attention>
+</aiscript>

@@ -1,10 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<aiscript name="mule.fleet.plan" version="6">
+<aiscript name="mule.fleet.plan" version="8">
   <params><param name="hub"/><param name="cfg"/><param name="relaxed" default="false"/></params>
+  <patch sinceversion="8"><return><retval name="plan" value="[]"/><retval name="volume" value="0"/><retval name="failure" value="'ship_changed'"/></return></patch>
+  <patch sinceversion="7"><return><retval name="plan" value="[]"/><retval name="volume" value="0"/><retval name="failure" value="'ship_changed'"/></return></patch>
   <patch sinceversion="6"><return><retval name="plan" value="[]"/><retval name="volume" value="0"/><retval name="failure" value="'ship_changed'"/></return></patch>
   <patch sinceversion="5"><return><retval name="plan" value="[]"/><retval name="volume" value="0"/><retval name="failure" value="'ship_changed'"/></return></patch>
   <patch sinceversion="4"><return><retval name="plan" value="[]"/><retval name="volume" value="0"/><retval name="failure" value="'ship_changed'"/></return></patch>
   <attention min="unknown"><actions>
+    <set_value name="$diagnostic" exact="table[$ship=$cfg.$ship,$relaxed=$relaxed,$price=0,$secondaryPrice=0,$range=0,$route=0,$other=0,$checks=0,$lots=0,$volume=0,$capacity=0,$minGap=2147483647,$minExtra=2147483647]"/>
     <set_value name="$ship" exact="$cfg.$ship"/>
     <set_value name="$home" exact="$cfg.$home"/>
     <set_value name="$homeSector" exact="if $home.isclass.sector then $home else $home.sector"/>
@@ -24,6 +27,8 @@
     <set_value name="$deviations" exact="table[]"/>
     <set_value name="$batch" exact="20"/>
     <set_value name="$failure" exact="{61552,4300}"/>
+    <do_if value="@global.$mwexDebug"><run_script name="'mule.fleet.trace'"><param name="diagnostic" value="$diagnostic"/><param name="text" value="if $relaxed then {61552,4355} else {61552,4356}"/></run_script></do_if>
+    <do_if value="@global.$mwexDebug"><run_script name="'mule.fleet.trace'"><param name="diagnostic" value="$diagnostic"/><param name="text" value="{61552,4358}.[$cfg.$allowPlayerSuppliers,$cfg.$allowAiSuppliers,$cfg.$dedicatedServe,$cfg.$allowBuildstorage,$cfg.$allowResources,$cfg.$allowIntermediates,$cfg.$lockWares]"/></run_script></do_if>
     <!-- Build category/scope buckets; volume is compared WITHIN a bucket, never against different unit prices. -->
     <do_for_each name="$need" in="$hub.$needs">
       <set_value name="$rankChecks" operation="add" exact="1"/>
@@ -31,35 +36,35 @@
         <set_value name="global.$mwexFleetLock.$time" exact="player.age"/><wait exact="1ms"/>
         <set_value name="$rankChecks" exact="0"/>
       </do_if>
-      <do_if value="not @$need.exists or $ship.cargo.{$need.ware}.max le 0"><continue/></do_if>
-      <do_if value="$cfg.$lockWares and not $cfg.$wares.indexof.{$need.ware}"><continue/></do_if>
+      <do_if value="not @$need.exists or $ship.cargo.{$need.ware}.max le 0"><set_value name="$diagnostic.$other" operation="add" exact="1"/><do_if value="@global.$mwexDebug"><run_script name="'mule.fleet.trace'"><param name="diagnostic" value="$diagnostic"/><param name="text" value="{61552,4376}"/></run_script></do_if><continue/></do_if>
+      <do_if value="$cfg.$lockWares and not $cfg.$wares.indexof.{$need.ware}"><set_value name="$diagnostic.$other" operation="add" exact="1"/><do_if value="@global.$mwexDebug"><run_script name="'mule.fleet.trace'"><param name="diagnostic" value="$diagnostic"/><param name="text" value="{61552,4361}.[$need.ware.name,$need.owner.knownname,{61552,4377}]"/></run_script></do_if><continue/></do_if>
       <set_value name="$owner" exact="if $need.owner.isclass.buildstorage then $need.owner.base else $need.owner"/>
       <set_value name="$scope" exact="2"/>
       <do_if value="$owner == $home"><set_value name="$scope" exact="0"/></do_if>
       <do_elseif value="$owner.sector == $homeSector"><set_value name="$scope" exact="1"/></do_elseif>
-      <do_if value="$cfg.$dedicatedServe and (($home.isclass.sector and $scope gt 1) or (not $home.isclass.sector and $scope gt 0))"><continue/></do_if>
-      <do_if value="$scope gt 0 and not $home.isclass.sector and $home.owner != faction.player and $owner.owner == faction.player"><continue/></do_if>
-      <do_if value="$scope gt 0 and ($home.isclass.sector or $home.owner == faction.player) and $owner.owner != faction.player"><continue/></do_if>
-      <do_if value="$scope gt 1 and not $home.isclass.sector and $home.owner != faction.player"><continue/></do_if>
+      <do_if value="$cfg.$dedicatedServe and (($home.isclass.sector and $scope gt 1) or (not $home.isclass.sector and $scope gt 0))"><set_value name="$diagnostic.$other" operation="add" exact="1"/><do_if value="@global.$mwexDebug"><run_script name="'mule.fleet.trace'"><param name="diagnostic" value="$diagnostic"/><param name="text" value="{61552,4361}.[$need.ware.name,$need.owner.knownname,{61552,4378}]"/></run_script></do_if><continue/></do_if>
+      <do_if value="$scope gt 0 and not $home.isclass.sector and $home.owner != faction.player and $owner.owner == faction.player"><set_value name="$diagnostic.$other" operation="add" exact="1"/><do_if value="@global.$mwexDebug"><run_script name="'mule.fleet.trace'"><param name="diagnostic" value="$diagnostic"/><param name="text" value="{61552,4361}.[$need.ware.name,$need.owner.knownname,{61552,4378}]"/></run_script></do_if><continue/></do_if>
+      <do_if value="$scope gt 0 and ($home.isclass.sector or $home.owner == faction.player) and $owner.owner != faction.player"><set_value name="$diagnostic.$other" operation="add" exact="1"/><do_if value="@global.$mwexDebug"><run_script name="'mule.fleet.trace'"><param name="diagnostic" value="$diagnostic"/><param name="text" value="{61552,4361}.[$need.ware.name,$need.owner.knownname,{61552,4378}]"/></run_script></do_if><continue/></do_if>
+      <do_if value="$scope gt 1 and not $home.isclass.sector and $home.owner != faction.player"><set_value name="$diagnostic.$other" operation="add" exact="1"/><do_if value="@global.$mwexDebug"><run_script name="'mule.fleet.trace'"><param name="diagnostic" value="$diagnostic"/><param name="text" value="{61552,4361}.[$need.ware.name,$need.owner.knownname,{61552,4378}]"/></run_script></do_if><continue/></do_if>
       <set_value name="$category" exact="3"/>
       <do_if value="$need.owner.isclass.buildstorage">
-        <do_if value="not $cfg.$allowBuildstorage"><continue/></do_if>
+        <do_if value="not $cfg.$allowBuildstorage"><set_value name="$diagnostic.$other" operation="add" exact="1"/><do_if value="@global.$mwexDebug"><run_script name="'mule.fleet.trace'"><param name="diagnostic" value="$diagnostic"/><param name="text" value="{61552,4361}.[$need.ware.name,$need.owner.knownname,{61552,4379}]"/></run_script></do_if><continue/></do_if>
         <set_value name="$category" exact="0"/>
       </do_if>
       <do_else>
         <set_value name="$resource" exact="$need.owner.resources.{$need.ware}.exists or $need.owner.supplyresources.{$need.ware}.exists"/>
         <set_value name="$product" exact="$need.owner.products.{$need.ware}.exists"/>
         <do_if value="$resource and not $product">
-          <do_if value="not $cfg.$allowResources"><continue/></do_if>
+          <do_if value="not $cfg.$allowResources"><set_value name="$diagnostic.$other" operation="add" exact="1"/><do_if value="@global.$mwexDebug"><run_script name="'mule.fleet.trace'"><param name="diagnostic" value="$diagnostic"/><param name="text" value="{61552,4361}.[$need.ware.name,$need.owner.knownname,{61552,4379}]"/></run_script></do_if><continue/></do_if>
           <set_value name="$category" exact="1"/>
         </do_if>
         <do_elseif value="$resource and $product">
-          <do_if value="not $cfg.$allowIntermediates"><continue/></do_if>
+          <do_if value="not $cfg.$allowIntermediates"><set_value name="$diagnostic.$other" operation="add" exact="1"/><do_if value="@global.$mwexDebug"><run_script name="'mule.fleet.trace'"><param name="diagnostic" value="$diagnostic"/><param name="text" value="{61552,4361}.[$need.ware.name,$need.owner.knownname,{61552,4379}]"/></run_script></do_if><continue/></do_if>
           <set_value name="$category" exact="2"/>
         </do_elseif>
         <do_else>
           <!-- Trade-only stock is supplied from real buy offers, without a separate ware-class switch. -->
-          <do_if value="$product or not $need.owner.tradewares.{$need.ware}.exists"><continue/></do_if>
+          <do_if value="$product or not $need.owner.tradewares.{$need.ware}.exists"><set_value name="$diagnostic.$other" operation="add" exact="1"/><do_if value="@global.$mwexDebug"><run_script name="'mule.fleet.trace'"><param name="diagnostic" value="$diagnostic"/><param name="text" value="{61552,4361}.[$need.ware.name,$need.owner.knownname,{61552,4379}]"/></run_script></do_if><continue/></do_if>
         </do_else>
       </do_else>
       <set_value name="$rank" exact="$scope*4+$category+1"/>
@@ -77,16 +82,16 @@
             <set_value name="global.$mwexFleetLock.$time" exact="player.age"/><wait exact="1ms"/>
             <set_value name="$rankChecks" exact="0"/>
           </do_if>
-          <do_if value="$receiver and $need.owner != $receiver"><continue/></do_if>
-          <do_if value="$cargoTag and $need.ware.transporttag != $cargoTag"><continue/></do_if>
+          <do_if value="$receiver and $need.owner != $receiver"><set_value name="$diagnostic.$other" operation="add" exact="1"/><do_if value="@global.$mwexDebug"><run_script name="'mule.fleet.trace'"><param name="diagnostic" value="$diagnostic"/><param name="text" value="{61552,4360}.[$lotIndex,$need.ware.name,$need.owner.knownname,{61552,4380}]"/></run_script></do_if><continue/></do_if>
+          <do_if value="$cargoTag and $need.ware.transporttag != $cargoTag"><set_value name="$diagnostic.$other" operation="add" exact="1"/><do_if value="@global.$mwexDebug"><run_script name="'mule.fleet.trace'"><param name="diagnostic" value="$diagnostic"/><param name="text" value="{61552,4360}.[$lotIndex,$need.ware.name,$need.owner.knownname,{61552,4381}]"/></run_script></do_if><continue/></do_if>
           <run_script name="'mule.fleet.net'"><param name="offer" value="$need"/><save_retval name="net" variable="$net"/></run_script>
           <set_value name="$net" exact="[$net - (if $usedNeed.{$need}? then $usedNeed.{$need} else 0),0].max"/>
-          <do_if value="$net gt 0"><set_value name="$volumes.{$need}" exact="$net*$need.ware.volume"/></do_if>
+          <do_if value="$net gt 0"><set_value name="$volumes.{$need}" exact="$net*$need.ware.volume"/></do_if><do_else><do_if value="@global.$mwexDebug"><run_script name="'mule.fleet.trace'"><param name="diagnostic" value="$diagnostic"/><param name="text" value="{61552,4360}.[$lotIndex,$need.ware.name,$need.owner.knownname,{61552,4382}]"/></run_script></do_if></do_else>
         </do_for_each>
         <do_for_each name="$need" in="$volumes.keys.sorted" reverse="true">
           <set_value name="$failure" exact="{61552,4301}"/>
           <do_if value="not $hub.$sources.{$need.ware}?">
-            <set_value name="$hub.$failures.{$need}" exact="{61552,4301}"/>
+            <set_value name="$hub.$failures.{$need}" exact="{61552,4301}"/><do_if value="@global.$mwexDebug"><run_script name="'mule.fleet.trace'"><param name="diagnostic" value="$diagnostic"/><param name="text" value="{61552,4360}.[$lotIndex,$need.ware.name,$need.owner.knownname,{61552,4301}]"/></run_script></do_if>
             <set_value name="$hub.$cacheDirty" exact="true"/>
             <continue/>
           </do_if>
@@ -95,7 +100,7 @@
             <save_retval name="offer" variable="$validNeed"/><save_retval name="reason" variable="$failure"/>
           </run_script>
           <do_if value="not $validNeed">
-            <set_value name="$hub.$failures.{$need}" exact="$failure"/>
+            <set_value name="$hub.$failures.{$need}" exact="$failure"/><set_value name="$diagnostic.$other" operation="add" exact="1"/><do_if value="@global.$mwexDebug"><run_script name="'mule.fleet.trace'"><param name="diagnostic" value="$diagnostic"/><param name="text" value="{61552,4360}.[$lotIndex,$need.ware.name,$need.owner.knownname,$failure]"/></run_script></do_if>
             <continue/>
           </do_if>
           <set_value name="$bestSource" exact="null"/>
@@ -106,46 +111,52 @@
           <set_value name="$bestAmount" exact="0"/>
           <set_value name="$ware" exact="$need.ware"/>
           <run_script name="'mule.fleet.price'"><param name="offer" value="$validNeed"/><param name="ship" value="$ship"/><param name="cache" value="$hub.$prices"/><save_retval name="price" variable="$needPrice"/><save_retval name="ok" variable="$priced"/></run_script>
-          <do_if value="not $priced"><set_value name="$failure" exact="{61552,4302}"/><set_value name="$hub.$failures.{$need}" exact="$failure"/><continue/></do_if>
+          <do_if value="not $priced"><set_value name="$failure" exact="{61552,4302}"/><set_value name="$hub.$failures.{$need}" exact="$failure"/><set_value name="$diagnostic.$other" operation="add" exact="1"/><do_if value="@global.$mwexDebug"><run_script name="'mule.fleet.trace'"><param name="diagnostic" value="$diagnostic"/><param name="text" value="{61552,4360}.[$lotIndex,$need.ware.name,$need.owner.knownname,$failure]"/></run_script></do_if><continue/></do_if>
           <set_value name="$legCapacity" exact="$ship.cargo.{$ware}.max*$ware.volume"/>
           <set_value name="$free" exact="[($ship.cargo.{$ware}.free*$ware.volume)-$volume,$ship.cargo.free.all-$volume].min"/>
           <run_script name="'mule.fleet.net'"><param name="offer" value="$need"/><save_retval name="net" variable="$needNet"/></run_script>
           <set_value name="$needNet" exact="[$needNet - (if $usedNeed.{$need}? then $usedNeed.{$need} else 0),0].max"/>
           <do_for_each valuename="$sectorSources" in="$hub.$sources.{$ware}">
             <do_for_each valuename="$source" in="$sectorSources">
-              <set_value name="$examined" operation="add" exact="1"/>
+              <set_value name="$examined" operation="add" exact="1"/><set_value name="$diagnostic.$checks" operation="add" exact="1"/>
               <do_if value="$examined ge $batch">
                 <set_value name="global.$mwexFleetLock.$time" exact="player.age"/>
                 <wait exact="1ms"/>
                 <set_value name="$examined" exact="0"/>
                 <do_if value="not $ship.isoperational or $ship.orders.count or not $ship.pilot.$mwexFleetCfg or ($ship.pilot.$mwexFleetCfg.$origin != $cfg.$origin or $ship.pilot.$mwexFleetCfg.$signature != $cfg.$signature or $ship.pilot.$mwexFleetCfg.$commander != $cfg.$commander or $ship.pilot.$mwexFleetCfg.$bound != $cfg.$bound)">
-                  <return><retval name="plan" value="[]"/><retval name="volume" value="0"/><retval name="failure" value="'ship_changed'"/></return>
+                  <return><retval name="plan" value="[]"/><retval name="volume" value="0"/><retval name="failure" value="'ship_changed'"/><retval name="diagnostic" value="$diagnostic"/></return>
                 </do_if>
               </do_if>
-              <do_if value="not @$source.available"><set_value name="$failure" exact="{61552,4316}"/><debug_to_file directory="'MulesExtended'" name="'M4 Capacity Candidates'" append="true" text="'REJECT ship=%s offer=%s reason=%s'.[$ship.idcode,$source,$failure]"/><continue/></do_if>
-              <do_if value="$source.owner == $need.owner"><continue/></do_if>
+              <do_if value="not @$source.available"><set_value name="$failure" exact="{61552,4316}"/><do_if value="@global.$mwexDebug"><debug_to_file directory="'MulesExtended'" name="'debug.txt'" append="true" text="'REJECT ship=%s offer=%s reason=%s'.[$ship.idcode,$source,$failure]"/></do_if><set_value name="$diagnostic.$other" operation="add" exact="1"/><do_if value="@global.$mwexDebug"><run_script name="'mule.fleet.trace'"><param name="diagnostic" value="$diagnostic"/><param name="text" value="{61552,4360}.[$lotIndex,$need.ware.name,$need.owner.knownname,$failure]"/></run_script></do_if><continue/></do_if>
+              <do_if value="$source.owner == $need.owner"><set_value name="$diagnostic.$other" operation="add" exact="1"/><do_if value="@global.$mwexDebug"><run_script name="'mule.fleet.trace'"><param name="diagnostic" value="$diagnostic"/><param name="text" value="{61552,4360}.[$lotIndex,$need.ware.name,$need.owner.knownname,{61552,4383}]"/></run_script></do_if><continue/></do_if>
               <!-- The legacy parameter now controls preference, never owned-source permission. -->
               <do_if value="$source.owner.owner != faction.player and not $cfg.$allowAiSuppliers">
                 <set_value name="$failure" exact="{61552,4315}.[$source.owner.knownname]"/>
-                <debug_to_file directory="'MulesExtended'" name="'M4 Capacity Candidates'" append="true" text="$failure"/><continue/>
+                <do_if value="@global.$mwexDebug"><debug_to_file directory="'MulesExtended'" name="'debug.txt'" append="true" text="$failure"/></do_if><set_value name="$diagnostic.$other" operation="add" exact="1"/><do_if value="@global.$mwexDebug"><run_script name="'mule.fleet.trace'"><param name="diagnostic" value="$diagnostic"/><param name="text" value="{61552,4360}.[$lotIndex,$need.ware.name,$need.owner.knownname,$failure]"/></run_script></do_if><continue/>
               </do_if>
-              <do_if value="$usedSource.{$source}?"><continue/></do_if>
+              <do_if value="$usedSource.{$source}?"><set_value name="$diagnostic.$other" operation="add" exact="1"/><do_if value="@global.$mwexDebug"><run_script name="'mule.fleet.trace'"><param name="diagnostic" value="$diagnostic"/><param name="text" value="{61552,4360}.[$lotIndex,$need.ware.name,$need.owner.knownname,{61552,4384}.[$source.owner.knownname]]"/></run_script></do_if><continue/></do_if>
               <set_value name="$selfOwned" exact="$source.owner.owner == $ship.owner"/>
               <do_if value="$selfOwned and ($source.owner.cargo.{$ware}.target le 0 or $source.owner.cargo.{$ware}.count*100 le $source.owner.cargo.{$ware}.target*$cfg.$playerStockThreshold)">
                 <set_value name="$failure" exact="{61552,4303}.[$source.owner.knownname,$ware.name,$source.owner.cargo.{$ware}.count,$source.owner.cargo.{$ware}.target,$cfg.$playerStockThreshold]"/>
-                <debug_to_file directory="'MulesExtended'" name="'M4 Capacity Candidates'" append="true" text="$failure"/><continue/>
+                <do_if value="@global.$mwexDebug"><debug_to_file directory="'MulesExtended'" name="'debug.txt'" append="true" text="$failure"/></do_if><set_value name="$diagnostic.$other" operation="add" exact="1"/><do_if value="@global.$mwexDebug"><run_script name="'mule.fleet.trace'"><param name="diagnostic" value="$diagnostic"/><param name="text" value="{61552,4360}.[$lotIndex,$need.ware.name,$need.owner.knownname,$failure]"/></run_script></do_if><continue/>
               </do_if>
               <run_script name="'mule.fleet.offer'">
                 <param name="offer" value="$source"/><param name="ship" value="$ship"/><param name="home" value="$home"/><param name="maxDist" value="$cfg.$maxDist"/>
                 <save_retval name="offer" variable="$validSource"/><save_retval name="reason" variable="$failure"/><save_retval name="distance" variable="$distance"/>
               </run_script>
-              <do_if value="not $validSource"><continue/></do_if>
+              <do_if value="not $validSource"><set_value name="$diagnostic.$other" operation="add" exact="1"/><do_if value="@global.$mwexDebug"><run_script name="'mule.fleet.trace'"><param name="diagnostic" value="$diagnostic"/><param name="text" value="{61552,4360}.[$lotIndex,$need.ware.name,$need.owner.knownname,{61552,4362}.[$source.owner.knownname,$failure]]"/></run_script></do_if><continue/></do_if>
               <run_script name="'mule.fleet.price'"><param name="offer" value="$validSource"/><param name="ship" value="$ship"/><param name="cache" value="$hub.$prices"/><save_retval name="price" variable="$supplyPrice"/><save_retval name="ok" variable="$priced"/></run_script>
-              <do_if value="not $priced"><set_value name="$failure" exact="{61552,4302}"/><continue/></do_if>
+              <do_if value="not $priced"><set_value name="$failure" exact="{61552,4302}"/><set_value name="$diagnostic.$other" operation="add" exact="1"/><do_if value="@global.$mwexDebug"><run_script name="'mule.fleet.trace'"><param name="diagnostic" value="$diagnostic"/><param name="text" value="{61552,4360}.[$lotIndex,$need.ware.name,$need.owner.knownname,{61552,4362}.[$source.owner.knownname,$failure]]"/></run_script></do_if><continue/></do_if>
               <set_value name="$builder" exact="$cfg.$allowBuildstorage and not $cfg.$allowResources and not $cfg.$allowIntermediates and $need.owner.isclass.buildstorage and $need.owner.owner == faction.player"/>
               <do_if value="not $selfOwned and not $builder and $needPrice le $supplyPrice">
+                <set_value name="$diagnostic.$price" operation="add" exact="1"/>
+                <do_if value="$plan.count"><set_value name="$diagnostic.$secondaryPrice" operation="add" exact="1"/></do_if>
+                <do_if value="$diagnostic.$price == 1 or ($supplyPrice-$needPrice)/1Cr lt $diagnostic.$minGap">
+                  <set_value name="$diagnostic.$minGap" exact="($supplyPrice-$needPrice)/1Cr"/>
+                  <set_value name="$diagnostic.$gapWare" exact="$ware"/>
+                </do_if>
                 <set_value name="$failure" exact="{61552,4304}.[$ware.name,$source.owner.knownname,$supplyPrice/1Cr,$need.owner.knownname,$needPrice/1Cr,$source.unitprice/1Cr]"/>
-                <debug_to_file directory="'MulesExtended'" name="'M4 Capacity Candidates'" append="true" text="$failure"/><continue/>
+                <do_if value="@global.$mwexDebug"><debug_to_file directory="'MulesExtended'" name="'debug.txt'" append="true" text="$failure"/></do_if><do_if value="@global.$mwexDebug"><run_script name="'mule.fleet.trace'"><param name="diagnostic" value="$diagnostic"/><param name="text" value="{61552,4360}.[$lotIndex,$need.ware.name,$need.owner.knownname,$failure]"/></run_script></do_if><continue/>
               </do_if>
               <set_value name="$deviation" exact="0"/>
               <set_value name="$detour" exact="0"/>
@@ -160,17 +171,27 @@
                   <set_value name="$deviations.{$source.owner.sector}" exact="$deviation"/>
                 </do_if>
                 <set_value name="$deviation" exact="$deviations.{$source.owner.sector}"/>
-                <set_value name="$failure" exact="{61552,4305}.[$source.owner.knownname,$deviation,$cfg.$corridorDepth]"/>
-                <do_if value="$deviation gt $cfg.$corridorDepth"><debug_to_file directory="'MulesExtended'" name="'M4 Capacity Candidates'" append="true" text="$failure"/><continue/></do_if>
+                <do_if value="$deviation gt $cfg.$corridorDepth">
+                  <set_value name="$failure" exact="{61552,4305}.[$source.owner.knownname,$deviation,$cfg.$corridorDepth]"/>
+                  <do_if value="$deviation == 2147483647"><set_value name="$diagnostic.$route" operation="add" exact="1"/></do_if>
+                  <do_else>
+                    <set_value name="$diagnostic.$range" operation="add" exact="1"/>
+                    <do_if value="$diagnostic.$range == 1 or $deviation-$cfg.$corridorDepth lt $diagnostic.$minExtra">
+                      <set_value name="$diagnostic.$minExtra" exact="$deviation-$cfg.$corridorDepth"/>
+                      <set_value name="$diagnostic.$rangeWare" exact="$ware"/>
+                    </do_if>
+                  </do_else><do_if value="@global.$mwexDebug"><debug_to_file directory="'MulesExtended'" name="'debug.txt'" append="true" text="$failure"/></do_if><do_if value="@global.$mwexDebug"><run_script name="'mule.fleet.trace'"><param name="diagnostic" value="$diagnostic"/><param name="text" value="{61552,4360}.[$lotIndex,$need.ware.name,$need.owner.knownname,$failure]"/></run_script></do_if><continue/></do_if>
                 <set_value name="$fromPrevious" exact="$previous.sector.gatedistance.{$source.owner.sector}.{blacklistgroup.civilian}.{$ship}"/>
                 <set_value name="$backPrevious" exact="$previous.sector.gatedistance.{$homeSector}.{blacklistgroup.civilian}.{$ship}"/>
-                <do_if value="$fromPrevious lt 0 or $backPrevious lt 0"><set_value name="$failure" exact="{61552,4307}"/><continue/></do_if>
+                <do_if value="$fromPrevious lt 0 or $backPrevious lt 0"><set_value name="$failure" exact="{61552,4307}"/><set_value name="$diagnostic.$other" operation="add" exact="1"/><do_if value="@global.$mwexDebug"><run_script name="'mule.fleet.trace'"><param name="diagnostic" value="$diagnostic"/><param name="text" value="{61552,4360}.[$lotIndex,$need.ware.name,$need.owner.knownname,{61552,4362}.[$source.owner.knownname,$failure]]"/></run_script></do_if><continue/></do_if>
                 <set_value name="$detour" exact="$fromPrevious+$distance-$backPrevious"/>
               </do_if>
               <run_script name="'mule.fleet.net'"><param name="offer" value="$source"/><save_retval name="net" variable="$sourceNet"/></run_script>
               <set_value name="$amount" exact="[$needNet,$sourceNet,($free/$ware.volume)i].min"/>
+              <do_if value="@global.$mwexDebug"><set_value name="$journalRawAmount" exact="$amount"/></do_if>
               <clamp_trade_amount trade="$validSource" amount="$amount" buyer="$ship" seller="$source.owner" result="$amount"/>
               <clamp_trade_amount trade="$validNeed" amount="$amount" buyer="$need.owner" result="$amount"/>
+              <do_if value="@global.$mwexDebug"><set_value name="$journalNativeAmount" exact="$amount"/></do_if>
               <set_value name="$paidPrice" exact="if $source.buyfree.{$ship} then 0Cr else $supplyPrice"/>
               <do_if value="$paidPrice gt 0Cr"><set_value name="$amount" exact="[$amount,($budget/$paidPrice)i].min"/></do_if>
               <do_if value="$receiver and not ($need.buyfree or $receiver.owner == $ship.owner) and $needPrice gt 0Cr">
@@ -179,8 +200,8 @@
               <do_if value="$receiver">
                 <set_value name="$amount" exact="[$amount,(($receiver.cargo.free.{$ware.transporttag}-$volume)/$ware.volume)i].min"/>
               </do_if>
-              <set_value name="$failure" exact="{61552,4306}.[$source.owner.knownname,$ware.name,$needNet,$sourceNet,$free,$amount,$source.minamount,$need.minamount,$budget/1Cr,$supplyPrice/1Cr]"/>
-              <do_if value="$amount le 0 or $amount lt $source.minamount or $amount lt $need.minamount"><debug_to_file directory="'MulesExtended'" name="'M4 Capacity Candidates'" append="true" text="$failure"/><continue/></do_if>
+              <do_if value="$amount le 0 or $amount lt $source.minamount or $amount lt $need.minamount"><set_value name="$failure" exact="{61552,4306}.[$source.owner.knownname,$ware.name,$needNet,$sourceNet,$free,$amount,$source.minamount,$need.minamount,$budget/1Cr,$supplyPrice/1Cr]"/><do_if value="@global.$mwexDebug"><debug_to_file directory="'MulesExtended'" name="'debug.txt'" append="true" text="$failure"/></do_if><set_value name="$diagnostic.$other" operation="add" exact="1"/><do_if value="@global.$mwexDebug"><run_script name="'mule.fleet.trace'"><param name="diagnostic" value="$diagnostic"/><param name="text" value="{61552,4360}.[$lotIndex,$need.ware.name,$need.owner.knownname,$failure]"/></run_script></do_if><continue/></do_if>
+              <do_if value="@global.$mwexDebug"><run_script name="'mule.fleet.trace'"><param name="diagnostic" value="$diagnostic"/><param name="text" value="{61552,4388}.[$lotIndex,$ware.name,$source.owner.knownname,$needNet,$sourceNet,$free,$journalRawAmount,$journalNativeAmount,$amount,$budget/1Cr,if $receiver then $receiverBudget/1Cr else $need.owner.money/1Cr]"/></run_script></do_if>
               <set_value name="$score" exact="$supplyPrice*(1+$deviation*$cfg.$corridorMarkup/100.0)"/>
               <!-- Rank only executable candidates. Preserve distance/price rules inside each tier. -->
               <set_value name="$supplierRank" exact="if $cfg.$allowPlayerSuppliers and $selfOwned then 0 else 1"/>
@@ -196,8 +217,9 @@
                   <set_value name="$better" exact="$distance lt $bestDistance or ($distance == $bestDistance and $score lt $bestScore)"/>
                 </do_else>
               </do_if>
-              <debug_to_file directory="'MulesExtended'" name="'M4 Capacity Candidates'" append="true"
-                text="'CANDIDATE ship=%s need=%s supplier=%s ware=%s amount=%s homeDist=%s d=%s raw=%sCr actual=%sCr score=%sCr preferOwned=%s supplierRank=%s better=%s'.[$ship.idcode,$need.owner,$source.owner,$ware,$amount,$distance,$deviation,$source.unitprice/1Cr,$supplyPrice/1Cr,$score/1Cr,$cfg.$allowPlayerSuppliers,$supplierRank,$better]"/>
+              <do_if value="@global.$mwexDebug"><run_script name="'mule.fleet.trace'"><param name="diagnostic" value="$diagnostic"/><param name="text" value="{61552,4363}.[$lotIndex,$ware.name,$source.owner.knownname,$source.owner.idcode,$amount,$distance,$source.unitprice/1Cr,$supplyPrice/1Cr,$needPrice/1Cr,$deviation,$score/1Cr,$supplierRank,if $better then {61552,4385} else {61552,4386}]"/></run_script></do_if>
+              <do_if value="@global.$mwexDebug"><debug_to_file directory="'MulesExtended'" name="'debug.txt'" append="true"
+                text="'CANDIDATE ship=%s need=%s supplier=%s ware=%s amount=%s homeDist=%s d=%s raw=%sCr actual=%sCr score=%sCr preferOwned=%s supplierRank=%s better=%s'.[$ship.idcode,$need.owner,$source.owner,$ware,$amount,$distance,$deviation,$source.unitprice/1Cr,$supplyPrice/1Cr,$score/1Cr,$cfg.$allowPlayerSuppliers,$supplierRank,$better]"/></do_if>
               <do_if value="$better">
                 <set_value name="$bestSource" exact="$source"/><set_value name="$bestPrice" exact="$supplyPrice"/>
                 <set_value name="$bestSupplierRank" exact="$supplierRank"/>
@@ -216,7 +238,7 @@
         </do_for_each>
         <do_if value="$chosen"><break/></do_if>
       </do_all>
-      <do_if value="not $chosen"><break/></do_if>
+      <do_if value="not $chosen"><do_if value="@global.$mwexDebug"><run_script name="'mule.fleet.trace'"><param name="diagnostic" value="$diagnostic"/><param name="text" value="{61552,4364}.[$lotIndex,$plan.count,$cfg.$maxTrades]"/></run_script></do_if><break/></do_if>
       <do_if value="not $plan.count">
         <set_value name="$receiver" exact="$chosen.$need.owner"/>
         <set_value name="$receiverBudget" exact="$receiver.money"/>
@@ -226,7 +248,7 @@
           <start object="$home"/><end object="$chosen.$source.owner"/>
         </get_global_path>
         <do_if value="$pathLength lt 0">
-          <return><retval name="plan" value="[]"/><retval name="volume" value="0"/><retval name="failure" value="{61552,4307}"/></return>
+          <return><retval name="plan" value="[]"/><retval name="volume" value="0"/><retval name="failure" value="{61552,4307}"/><retval name="diagnostic" value="$diagnostic"/></return>
         </do_if>
         <set_value name="$corridor" exact="[$homeSector]"/>
         <do_for_each name="$component" in="$path">
@@ -234,7 +256,13 @@
           <do_if value="$sector and not $corridor.indexof.{$sector}"><append_to_list name="$corridor" exact="$sector"/></do_if>
         </do_for_each>
         <do_if value="not $corridor.indexof.{$chosen.$source.owner.sector}"><append_to_list name="$corridor" exact="$chosen.$source.owner.sector"/></do_if>
+        <do_if value="@global.$mwexDebug">
+        <set_value name="$journalPath" exact="''"/>
+        <do_for_each name="$pathSector" in="$corridor"><set_value name="$journalPath" exact="$journalPath + (if $journalPath == '' then '' else ' → ') + $pathSector.knownname"/></do_for_each>
+        <do_if value="@global.$mwexDebug"><run_script name="'mule.fleet.trace'"><param name="diagnostic" value="$diagnostic"/><param name="text" value="{61552,4390}.[$journalPath]"/></run_script></do_if>
+        </do_if>
       </do_if>
+      <do_if value="@global.$mwexDebug"><run_script name="'mule.fleet.trace'"><param name="diagnostic" value="$diagnostic"/><param name="text" value="{61552,4365}.[$lotIndex,$chosen.$ware.name,$chosen.$amount,$chosen.$source.owner.knownname,$chosen.$source.owner.idcode,$chosen.$need.owner.knownname,$chosen.$need.owner.idcode,$chosen.$buyprice/1Cr,$chosen.$sellprice/1Cr]"/></run_script></do_if>
       <append_to_list name="$plan" exact="$chosen"/>
       <set_value name="$volume" operation="add" exact="$chosen.$amount*$chosen.$ware.volume"/>
       <set_value name="$budget" exact="$budget - (if $chosen.$source.buyfree.{$ship} then 0Cr else $chosen.$amount*$chosen.$buyprice)"/>
@@ -242,13 +270,23 @@
       <set_value name="$usedNeed.{$chosen.$need}" exact="(if $usedNeed.{$chosen.$need}? then $usedNeed.{$chosen.$need} else 0)+$chosen.$amount"/>
       <set_value name="$usedSource.{$chosen.$source}" exact="$chosen.$amount"/>
       <set_value name="$previous" exact="$chosen.$source.owner"/>
-      <do_if value="$volume ge $capacity"><break/></do_if>
+      <do_if value="$volume ge $capacity"><do_if value="@global.$mwexDebug"><run_script name="'mule.fleet.trace'"><param name="diagnostic" value="$diagnostic"/><param name="text" value="{61552,4366}"/></run_script></do_if><break/></do_if>
     </do_all>
+    <do_if value="$plan.count == $cfg.$maxTrades and $volume lt $capacity"><do_if value="@global.$mwexDebug"><run_script name="'mule.fleet.trace'"><param name="diagnostic" value="$diagnostic"/><param name="text" value="{61552,4389}.[$cfg.$maxTrades]"/></run_script></do_if></do_if>
+    <set_value name="$diagnostic.$lots" exact="$plan.count"/>
+    <set_value name="$diagnostic.$volume" exact="$volume"/>
+    <set_value name="$diagnostic.$capacity" exact="$capacity"/>
+    <set_value name="$diagnostic.$stop" exact="if $capacity gt 0 and $volume ge $capacity then 1 else if $plan.count == $cfg.$maxTrades then 2 else 0"/>
     <set_value name="$accepted" exact="$plan.count and ($relaxed or $volume*100 ge $capacity*$cfg.$minCargoUsed)"/>
     <do_if value="$plan.count and not $accepted"><set_value name="$failure" exact="{61552,4308}.[$volume,$capacity,$cfg.$minCargoUsed,$plan.count,$cfg.$maxTrades]"/><do_for_each name="$leg" in="$plan"><set_value name="$hub.$failures.{$leg.$need}" exact="$failure"/></do_for_each></do_if>
     <do_if value="$accepted"><set_value name="$failure" exact="'ok'"/></do_if>
-    <debug_to_file directory="'MulesExtended'" name="'M4 Capacity Dispatch'" append="true"
-      text="'DRAFT ship=%s capacity=%s volume=%s lots=%s max=%s relaxed=%s accepted=%s reason=%s'.[$ship.idcode,$capacity,$volume,$plan.count,$cfg.$maxTrades,$relaxed,$accepted,$failure]"/>
-    <return><retval name="plan" value="if $accepted then $plan else []"/><retval name="volume" value="$volume"/><retval name="failure" value="$failure"/></return>
+    <do_if value="@global.$mwexDebug"><run_script name="'mule.fleet.trace'"><param name="diagnostic" value="$diagnostic"/><param name="text" value="{61552,4367}.[$plan.count,$cfg.$maxTrades,$volume,$capacity,if $capacity gt 0 then (($volume*10000/$capacity)i)/100.0 else 0,$cfg.$minCargoUsed]"/></run_script></do_if>
+    <do_if value="$accepted">
+      <do_if value="@global.$mwexDebug"><run_script name="'mule.fleet.trace'"><param name="diagnostic" value="$diagnostic"/><param name="text" value="if $relaxed then {61552,4369} else {61552,4368}"/></run_script></do_if>
+    </do_if>
+    <do_else><do_if value="@global.$mwexDebug"><run_script name="'mule.fleet.trace'"><param name="diagnostic" value="$diagnostic"/><param name="text" value="if $plan.count then {61552,4370} else {61552,4371}"/></run_script></do_if></do_else>
+    <do_if value="@global.$mwexDebug"><debug_to_file directory="'MulesExtended'" name="'debug.txt'" append="true"
+      text="'DRAFT ship=%s capacity=%s volume=%s lots=%s max=%s relaxed=%s accepted=%s reason=%s'.[$ship.idcode,$capacity,$volume,$plan.count,$cfg.$maxTrades,$relaxed,$accepted,$failure]"/></do_if>
+    <return><retval name="plan" value="if $accepted then $plan else []"/><retval name="volume" value="$volume"/><retval name="failure" value="$failure"/><retval name="diagnostic" value="$diagnostic"/></return>
   </actions></attention>
 </aiscript>

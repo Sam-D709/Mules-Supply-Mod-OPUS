@@ -30,8 +30,8 @@
         <set_value name="$nativeOwn" exact="[$offer.offeramount.{$entry.$ship} - $offer.amount,0].max"/>
         <set_value name="$missing" exact="[$entry.$amount - $nativeOwn,0].max"/>
         <set_value name="$net" exact="[$net - $missing,0].max"/>
-        <debug_to_file directory="'MulesExtended'" name="'M4 Capacity Accounting'" append="true"
-          text="'NET t=%s offer=%s ship=%s amount=%s expected=%s nativeOwn=%s localMissing=%s net=%s'.[player.age,$offer,$entry.$ship.idcode,$offer.amount,$entry.$amount,$nativeOwn,$missing,$net]"/>
+        <do_if value="@global.$mwexDebug"><debug_to_file directory="'MulesExtended'" name="'debug.txt'" append="true"
+          text="'NET t=%s offer=%s ship=%s amount=%s expected=%s nativeOwn=%s localMissing=%s net=%s'.[player.age,$offer,$entry.$ship.idcode,$offer.amount,$entry.$amount,$nativeOwn,$missing,$net]"/></do_if>
         <do_if value="$missing == 0">
           <remove_from_list name="global.$mwexFleetPending" list="$entry.$holds"/>
         </do_if>

@@ -1,5 +1,7 @@
 # Mules-Supply-Mod-OPUS
 
+**Public pre-release: [v0.1.0-beta.3](https://github.com/Sam-D709/Mules-Supply-Mod-OPUS/releases/tag/v0.1.0-beta.3), internal version 665.** [Release notes](docs/releases/v0.1.0-beta.3.md). Ship logs now contain compact dispatch results and throttled idle summaries. Detailed disk logging is optional and off by default; procurement rules remain those of beta.1.
+
 [简体中文](README.md) | **English**
 
 A supply-focused mod for **X4: Foundations**, based on **Mules, Supply and Warehouses Extended 6.60**. It mainly rewrites **M4 — Supply Mule**: allocate ships by actual cargo capacity, combine procurement lots, and complete small remaining demands. M1, M2 and M3 remain available.
@@ -8,9 +10,9 @@ Existing gameplay feedback is from **X4 8.00 Hotfix 4 (legacy) with Star Wars In
 
 ## Download and install
 
-Download **`Mules-Supply-Mod-OPUS-v0.1.0-beta.1.zip`** from [Releases](https://github.com/Sam-D709/Mules-Supply-Mod-OPUS/releases/tag/v0.1.0-beta.1). Choose the named mod ZIP under **Assets**, rather than GitHub's automatically generated **Source code** archives. GitHub Packages is not used for this mod.
+Download **`Mules-Supply-Mod-OPUS-v0.1.0-beta.3.zip`** from [Releases](https://github.com/Sam-D709/Mules-Supply-Mod-OPUS/releases/tag/v0.1.0-beta.3). Choose the named mod ZIP under **Assets**, rather than GitHub's automatically generated **Source code** archives. GitHub Packages is not used for this mod.
 
-This is a public beta, with X4 internal version **663**. The public version is stored in `VERSION`; maintainers can follow the [versioning and publishing guide (Chinese)](docs/VERSIONING.zh-CN.md).
+This is a public beta, with X4 internal version **665**. The public version is stored in `VERSION`; maintainers can follow the [versioning and publishing guide (Chinese)](docs/VERSIONING.zh-CN.md).
 
 1. Exit X4 and back up your saves. When upgrading, move the old `mules_and_warehouses_extended` folder outside `extensions` before installing the replacement.
 2. Extract the downloaded ZIP. It contains one folder: **`mules_and_warehouses_extended`**.
@@ -35,6 +37,19 @@ For example: `E:\SteamLibrary\steamapps\common\X4 Foundations\extensions\mules_a
 This replaces the original Mules mod and retains extension ID `ws_2013772865` for saved-order compatibility. **Do not enable both versions.** Do not nest the extracted folder inside another mod folder. Steam Workshop updates may overwrite the original mod directory. The ZIP includes Chinese and English resources; X4 selects them using its game language. The explicit English `l044` resource is generated from the default English text during packaging.
 
 Existing settings may be preserved: change old ships from one procurement lot to three if desired. The retired Player Buy Mod percentage is not converted into the new stock threshold, which defaults to 50%.
+
+## Dependencies and optional mods
+
+Core procurement and compact ship logs have **no mandatory third-party mod dependency**. No additional DLC requirement is declared.
+
+| Mod | Requirement | Purpose |
+|---|---|---|
+| [SirNukes Mod Support APIs](https://steamcommunity.com/sharedfiles/filedetails/?id=2042901274) | **Optional; required for the Debug menu** | Supplies Extension Options. Without it, the menu is unavailable and detailed Debug defaults to off; core procurement is independent. |
+| kuertee UI Extensions and HUD | Not required | The menu calls SirNukes APIs directly, with no direct UIX API dependency. |
+| Civilian Fleets | Optional compatibility | Detected to avoid duplicate subordinate behavior synchronization. |
+| Subordinate Order Access | Optional convenience | Helps manage subordinate orders; not a runtime dependency. |
+
+SWI is the current test environment, not a dependency. ship_sorter, TacticalResponsePolice and Options Helper are not required. The original Mules mod is included/replaced, not a separate prerequisite. The `-scriptlogfiles` startup flag is only needed for detailed disk logging.
 
 ## M4 settings compared with the original
 
@@ -102,11 +117,19 @@ comparison price = actual unit price × (1 + off-route jumps × markup / 100)
 
 At 5% per jump, an on-route price of 103 beats a one-jump-off-route price of 100, whose comparison price is 105. Actual payment remains 100 if that off-route source is selected. A sole valid source is not rejected simply because the comparison markup increases its score. Zero markup does not disable distance limits. The route combination is greedy, not a global shortest-route solver.
 
+## Known limitation and next stage
+
+This release changes logging, not procurement decisions. The first demand with an executable supplier anchors the main ware and route. If the combined trip fails its load threshold, the planner **does not retry the whole draft with another main ware or another main supplier**. A nearby factory offering small newly produced quantities can therefore repeatedly anchor an unsuitable large-ship draft, or cause a low-load tail trip, even when another main ware could form a fuller trip.
+
+The next stage will evaluate bounded retries across main wares and suppliers, with a per-round work budget to balance distance preference and cargo utilization. **This remains unresolved in beta.3.** Empty offers and fully reserved quantities are still skipped; this is not unconditional procurement from an empty factory.
+
 ## Cancellations, diagnostics and idle ships
 
 - Canceling a trade releases its demand for later reassignment without counting native reservations twice.
 - Changing the home sector moves the ship to the new home's dispatch group and search area. An idle ship with no suitable trade returns to the new home. Already queued trades remain intact.
 - Check an individual ship's **Information → Behavior** failure message for rejection reasons. This is a behavior diagnostic, not financial transaction history. It reports the last actual rejection, not an exhaustive explanation of all suppliers.
+- **Information → Logbook** records one compact report per actual dispatch: settings, normal/tail mode, selected purchases, total load and aggregate rejections. Idle/failure reports have a 10-minute cooldown that price/stock fluctuations cannot reset. Counts and the smallest price/range shortfall use existing checks, without extra searches; they are first-failure observations, not unique supplier counts or proof that all later checks would pass. Native ship log entries also appear in the general logbook.
+- For detailed diagnostics, start X4 with **`-scriptlogfiles`**, then enable **Extension Options → Mules-Supply-Mod-OPUS → Debug: detailed disk logging**. The menu uses the public SirNukes Mod Support APIs interface alongside kuertee UI Extensions; Mod Support APIs is needed for the menu, while normal procurement works without it. The switch is off by default and saved per savegame. Detailed candidates go only to **Documents/Egosoft/X4/[user ID]/logs/MulesExtended/debug.txt**. X4 scripts cannot write directly into the mod installation folder. Debug can reduce performance; disable it after reproducing the issue. Upgrading preserves old log entries and queued trades, and removes only obsolete full-report caches.
 - Each idle M4 with no active or queued orders returns near its home station or into its home sector, unless the player is flying it. Other busy M4 ships do not delay its return. Returning ships do not need to occupy a trade berth.
 - Return flight continues across 30-second dispatch checks; a check with no new job does not restart the route or travel-drive charging. Disabling home-only service still allows other player receivers within the current home's range.
 - When a ship has no active or queued orders, leftover cargo is virtually liquidated: cargo is deleted and its average-price value is credited to the player. This is not a station delivery and can include manually loaded cargo.
@@ -114,7 +137,7 @@ At 5% per jump, an on-route price of 103 beats a one-jump-off-route price of 100
 
 ## Verification and source
 
-**116 script checks, 2 release-package checks, 24 XML schema validations and 3 native patch-selector checks passed.** English diagnostic execution and text-format argument parity are covered by local checks. The retired M4 search loop and its two unused helper scripts have been removed.
+**127 script checks, 2 release-package checks, 28 XML schema validations and 3 native patch-selector checks passed.** English diagnostic execution and text-format argument parity are covered by local checks. The retired M4 search loop and its two unused helper scripts have been removed.
 
 The install ZIP is extracted into an isolated test `extensions` directory and checked for correct nesting, metadata, CAT/DAT content, language files and both READMEs. A `SHA256SUMS.txt` release asset verifies the download.
 
@@ -126,6 +149,6 @@ python tests/test_package.py
 python tools/build.py
 ```
 
-The build generates `dist/Mules-Supply-Mod-OPUS-v0.1.0-beta.1.zip`. Advanced implementation notes and the testing matrix are currently in Chinese: [design](docs/DESIGN.zh-CN.md), [testing](docs/TESTING.zh-CN.md), [changes](docs/CHANGELOG.zh-CN.md).
+The local build generates `dist/Mules-Supply-Mod-OPUS-v0.1.0-beta.3.zip`; this is the beta.3 public download. Advanced implementation notes and the testing matrix are currently in Chinese: [design](docs/DESIGN.zh-CN.md), [testing](docs/TESTING.zh-CN.md), [changes](docs/CHANGELOG.zh-CN.md).
 
 Derived from [Mules and Warehouses Extended](https://github.com/Misunderstood-Wookiee/Mules-and-Warehouses-Extended), retaining **CC BY 4.0** and upstream attribution. See [LICENCE.md](LICENCE.md) and [ATTRIBUTION.md](ATTRIBUTION.md). This is an independently maintained derivative, not an official upstream or Egosoft release.

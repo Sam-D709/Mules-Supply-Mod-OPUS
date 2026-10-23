@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<aiscript name="mule.fleet.wave" version="9">
+<aiscript name="mule.fleet.wave" version="11">
   <params><param name="hub"/></params>
+  <patch sinceversion="11"><return/></patch>
+  <patch sinceversion="10"><return/></patch>
   <patch sinceversion="9"><return/></patch>
   <patch sinceversion="8"><return/></patch>
   <patch sinceversion="7"><return/></patch>
@@ -12,6 +14,9 @@
     <set_value name="$hub.$prices" exact="table[]"/>
     <set_value name="$hub.$failures" exact="table[]"/>
     <set_value name="$negative" exact="table[]"/>
+    <set_value name="$negativeDiagnostic" exact="table[]"/>
+    <set_value name="$normalDiagnostics" exact="table[]"/>
+    <set_value name="$shipDiagnostics" exact="table[]"/>
     <set_value name="$failedCommit" exact="table[]"/>
     <set_value name="$shipFailures" exact="table[]"/>
     <set_value name="$visits" exact="0"/>
@@ -48,18 +53,29 @@
           <set_value name="$failureKey" exact="'$failure/%s/%s/%s/%s/%s/%s/%s'.[$groupKey,$cfg.$signature,$ship.money,$ship.commander,($ship.units.{unitcategory.transport}.count gt 0),if $personal then $ship else '-',$relaxed]"/>
           <do_if value="$negative.{$failureKey}?">
             <set_value name="$shipFailures.{$ship}" exact="$negative.{$failureKey}"/>
-            <debug_to_file directory="'MulesExtended'" name="'M4 Capacity Dispatch'" append="true" text="'MODEL_SKIP ship=%s key=%s reason=%s'.[$ship.idcode,$failureKey,$negative.{$failureKey}]"/>
+            <do_if value="@global.$mwexDebug"><debug_to_file directory="'MulesExtended'" name="'debug.txt'" append="true" text="'MODEL_SKIP ship=%s key=%s reason=%s'.[$ship.idcode,$failureKey,$negative.{$failureKey}]"/></do_if>
+            <set_value name="$diagnostic" exact="$negativeDiagnostic.{$failureKey}"/>
+            <set_value name="$shipDiagnostics.{$ship}" exact="$diagnostic"/>
+            <do_if value="not $relaxed"><set_value name="$normalDiagnostics.{$ship}" exact="$diagnostic"/></do_if>
             <continue/>
           </do_if>
           <run_script name="'mule.fleet.plan'">
             <param name="hub" value="$hub"/><param name="cfg" value="$cfg"/><param name="relaxed" value="$relaxed"/>
-            <save_retval name="plan" variable="$plan"/><save_retval name="failure" variable="$reason"/>
+            <save_retval name="plan" variable="$plan"/><save_retval name="failure" variable="$reason"/><save_retval name="diagnostic" variable="$diagnostic"/>
           </run_script>
+          <set_value name="$shipDiagnostics.{$ship}" exact="$diagnostic"/>
+          <do_if value="not $relaxed"><set_value name="$normalDiagnostics.{$ship}" exact="$diagnostic"/></do_if>
           <do_if value="$plan.count">
             <run_script name="'mule.fleet.commit'"><param name="cfg" value="$cfg"/><param name="plan" value="$plan"/><save_retval name="ok" variable="$ok"/><save_retval name="failure" variable="$commitReason"/></run_script>
+            <run_script name="'mule.fleet.journal'">
+              <param name="cfg" value="$cfg"/><param name="diagnostic" value="$diagnostic"/><param name="normal" value="@$normalDiagnostics.{$ship}"/>
+              <param name="plan" value="$plan"/><param name="phase" value="'$commit'"/><param name="force" value="$ok"/>
+              <param name="outcome" value="if $ok then {61552,4375}.[if $relaxed then {61552,4352} else {61552,4351},$plan.count] else {61552,4387}.[$commitReason]"/>
+            </run_script>
             <do_if value="$ok">
               <set_value name="$successes" operation="add" exact="1"/>
               <set_value name="$negative" exact="table[]"/>
+              <set_value name="$negativeDiagnostic" exact="table[]"/>
               <remove_value name="$shipFailures.{$ship}"/>
               <run_script name="'mule.fleet.report'"><param name="cfg" value="$cfg"/></run_script>
               <do_for_each name="$leg" in="$plan">
@@ -69,7 +85,7 @@
             </do_if>
             <do_else><set_value name="$failedCommit.{$ship}" exact="true"/><set_value name="$shipFailures.{$ship}" exact="$commitReason"/></do_else>
           </do_if>
-          <do_elseif value="$reason != 'ship_changed'"><set_value name="$negative.{$failureKey}" exact="$reason"/><set_value name="$shipFailures.{$ship}" exact="$reason"/></do_elseif>
+          <do_elseif value="$reason != 'ship_changed'"><set_value name="$negative.{$failureKey}" exact="$reason"/><set_value name="$negativeDiagnostic.{$failureKey}" exact="$diagnostic"/><set_value name="$shipFailures.{$ship}" exact="$reason"/></do_elseif>
         </do_for_each>
       </do_for_each>
     </do_all>
@@ -78,6 +94,10 @@
       <do_if value="$cfg.$home != $hub.$home or ($ship.defaultorder.id == 'SupplyMule' and $ship.defaultorder.$home != $cfg.$home)"><continue/></do_if>
       <do_if value="not $ship.isoperational or not $ship.pilot.exists or $ship.defaultorder != $cfg.$origin or ($ship.pilot.$mwexFleetCfg.$origin != $cfg.$origin or $ship.pilot.$mwexFleetCfg.$signature != $cfg.$signature or $ship.pilot.$mwexFleetCfg.$commander != $cfg.$commander or $ship.pilot.$mwexFleetCfg.$bound != $cfg.$bound) or ($cfg.$bound and $ship.commander != $cfg.$commander)"><continue/></do_if>
       <do_if value="$ship.orders.count or $ship == player.occupiedship"><continue/></do_if>
+      <do_if value="$shipFailures.{$ship}? and not $failedCommit.{$ship}?"><run_script name="'mule.fleet.journal'">
+        <param name="cfg" value="$cfg"/><param name="diagnostic" value="@$shipDiagnostics.{$ship}"/><param name="normal" value="@$normalDiagnostics.{$ship}"/>
+        <param name="phase" value="'$idle'"/><param name="outcome" value="{61552,4405}+'\n'+$shipFailures.{$ship}"/>
+      </run_script></do_if>
       <do_if value="$shipFailures.{$ship}?"><run_script name="'mule.fleet.report'"><param name="cfg" value="$cfg"/><param name="reason" value="$shipFailures.{$ship}"/></run_script></do_if>
     </do_for_each>
     <!-- Search is exhausted, not just one page. Notifications do not claim a precise cause beyond the last actual rejection. -->
@@ -96,7 +116,7 @@
     </do_if>
     <do_else><set_value name="$hub.$backoff" exact="[30s,$hub.$backoff*2].min"/></do_else>
     <set_value name="$hub.$next" exact="player.age+$hub.$backoff"/>
-    <debug_to_file directory="'MulesExtended'" name="'M4 Capacity Dispatch'" append="true" text="'WAVE home=%s assigned=%s next=%s'.[$hub.$home,$successes,$hub.$next]"/>
+    <do_if value="@global.$mwexDebug"><debug_to_file directory="'MulesExtended'" name="'debug.txt'" append="true" text="'WAVE home=%s assigned=%s next=%s'.[$hub.$home,$successes,$hub.$next]"/></do_if>
     <return/>
   </actions></attention>
 </aiscript>

@@ -231,6 +231,7 @@ class Runner:
         if operation=='subtract':value=target.get(key,0)-value
         target[key]=value
     def script(self,name,params):
+        self.engine.calls[name]=self.engine.calls.get(name,0)+1
         root=ET.parse(SRC/'aiscripts'/('supply_mule.xml' if name=='supplymule' else f'{name}.xml')).getroot();local=dict(params)
         for p in root.findall('./params/param'):
             if p.get('name') not in local:local[p.get('name')]=self.value(p.get('default','null'),local)
@@ -310,8 +311,15 @@ class Runner:
             if self.engine.on_wait:self.engine.on_wait(self.engine)
             return
         if tag in ('debug_to_file','debug_text'):
-            self.engine.logs.append(v('text'));return
-        if tag=='write_to_logbook':self.engine.notices.append(v('text'));return
+            text=v('text');self.engine.logs.append(text)
+            if tag=='debug_to_file':self.engine.disk_logs.append(Obj(name=v('name'),directory=v('directory'),text=text))
+            return
+        if tag=='signal_cue_instantly':
+            self.engine.cue_signals.append(Obj(cue=v('cue'),param=v('param')));return
+        if tag=='write_to_logbook':
+            text=v('text');self.engine.notices.append(text)
+            self.engine.logbook.append(Obj(title=v('title'),text=text,object=v('object'),category=node.get('category')))
+            return
         if tag=='set_order_failed':
             order=v('order');order['failure']=v('text');self.engine.ship_failures.append((order,v('text')));return
         if tag=='clear_order_failure':v('order').pop('failure',None);return
@@ -407,11 +415,12 @@ class Engine:
                     'assignment':Obj(trade='trade'),'unitcategory':Obj(transport='transport'),'blacklistgroup':Obj(civilian='civilian'),
                     'blacklisttype':Obj(sectortravel='travel',sectoractivity='activity',objectactivity='object')}
         self.wares=[];self.needs=[];self.sources=[];self.logs=[];self.notices=[];self.waits=0
+        self.calls={};self.disk_logs=[];self.cue_signals=[]
         self.delayed=delayed;self.created=0;self.fail_at=None;self.graph={};self.runner=Runner(self)
         self.on_wait=None;self.queries={};self.partial_at=None;self.running_partial=False
         self.strict_binding_reads=True
         self.assignments=[]
-        self.moves=[];self.on_move=None;self.ship_failures=[];self.signals=[]
+        self.moves=[];self.on_move=None;self.ship_failures=[];self.signals=[];self.logbook=[]
     def sector(self,name):
         s=Obj(name=name,**{'class':'sector'});s['sector']=s
         s['returnzone']=Obj(name=name+' navigation zone',sector=s,**{'class':'zone'})
@@ -489,6 +498,10 @@ class Engine:
 
 
 class XMLDispatchChecks(unittest.TestCase):
+    def assignment_notices(self,e):
+        titles={e.texts[('61552','4340')],e.texts[('61552','4342')]}
+        return [entry['text'] for entry in e.logbook if entry['title'] in titles]
+
     def entry(self,e,ship,cfg,home):
         local=dict(cfg,home=home,assignHome=True,specialWareBasket=[],restartScript=0)
         ship['defaultorder']['home']=home;ship['defaultorder']['assignHome']=True
@@ -510,7 +523,7 @@ class XMLDispatchChecks(unittest.TestCase):
         self.entry(e,ship,cfg,home['sector'])
         self.assertIsNone(ship['commander'])
         self.assertEqual(len(ship['orders']),2)
-        self.assertEqual(len(e.notices),1)
+        self.assertEqual(len(self.assignment_notices(e)),1)
 
     def test_native_blackboard_registration_keeps_fresh_member_and_dispatches(self):
         e,home,fleet,hub=self.setup_market([80],[100]);ship,cfg=fleet[0]
@@ -528,7 +541,7 @@ class XMLDispatchChecks(unittest.TestCase):
         diag=ship['pilot']['mwexFleetAssignmentCheck']
         self.assertFalse(diag['canHave']);self.assertFalse(diag['canTrade'])
         self.assertIsNone(diag['after']);self.assertNotIn('mwexFleetBoundOrigin',ship['pilot'])
-        self.assertEqual(len(e.notices),1);self.assertEqual(len(ship['orders']),2)
+        self.assertEqual(len(self.assignment_notices(e)),1);self.assertEqual(len(ship['orders']),2)
 
     def test_idle_registration_returns_to_refresh_within_eight_seconds(self):
         e,home,fleet,hub=self.setup_market([0],[100]);ship,cfg=fleet[0]
@@ -967,15 +980,17 @@ class XMLDispatchChecks(unittest.TestCase):
         e,home,fleet,hub=self.setup_market([80],[100],language='en');ship,cfg=fleet[0]
         ship.update(commander=None,reject_assignment=True);ship['pilot'].pop('mwexFleetCfg')
         self.entry(e,ship,cfg,home)
-        self.assertEqual(len(e.notices),1);self.assertIn('could not be assigned',e.notices[0])
-        self.assertNotRegex(e.notices[0],r'[\u4e00-\u9fff]');self.assertEqual(len(ship['orders']),2)
+        warnings=self.assignment_notices(e)
+        self.assertEqual(len(warnings),1);self.assertIn('could not be assigned',warnings[0])
+        self.assertNotRegex(warnings[0],r'[\u4e00-\u9fff]');self.assertEqual(len(ship['orders']),2)
 
     def test_english_sector_home_warning_is_localized_and_trade_continues(self):
         e,home,fleet,hub=self.setup_market([80],[100],language='en');ship,cfg=fleet[0]
         ship['commander']=None;ship['pilot'].pop('mwexFleetCfg')
         self.entry(e,ship,cfg,home['sector'])
-        self.assertEqual(len(e.notices),1);self.assertIn('has a sector as home',e.notices[0])
-        self.assertNotRegex(e.notices[0],r'[\u4e00-\u9fff]');self.assertEqual(len(ship['orders']),2)
+        warnings=self.assignment_notices(e)
+        self.assertEqual(len(warnings),1);self.assertIn('has a sector as home',warnings[0])
+        self.assertNotRegex(warnings[0],r'[\u4e00-\u9fff]');self.assertEqual(len(ship['orders']),2)
 
     def test_hidden_tuning_parameters_and_new_stock_slider(self):
         root=ET.parse(SRC/'aiscripts/supply_mule.xml').getroot();params={p.get('name'):p for p in root.findall('./order/params/param')}
@@ -1025,7 +1040,9 @@ class XMLDispatchChecks(unittest.TestCase):
     def test_exact_70_percent_is_normal(self):
         e,_,fleet,hub=self.setup_market([350,250,100],[1000,100])
         self.dispatch(e,hub)
-        self.assertTrue(any('volume=700.0' in x and 'relaxed=False' in x and 'accepted=True' in x for x in e.logs))
+        text='\n'.join(x['text'] for x in e.logbook if x['object'] is fleet[0][0])
+        self.assertIn('正常评估',text);self.assertNotIn('临时解除',text)
+        self.assertEqual(sum(o['amount'] for o in fleet[0][0]['orders'][:3]),700)
     def test_below_threshold_reaches_small_ship_first(self):
         e,_,fleet,hub=self.setup_market([699],[1000,100])
         self.dispatch(e,hub)
@@ -1465,6 +1482,7 @@ class XMLDispatchChecks(unittest.TestCase):
 
     def test_identical_drone_less_ships_each_get_their_own_failure_record(self):
         e,home,fleet,hub=self.setup_market([80],[100,100]);a,ac=fleet[0];b,bc=fleet[1]
+        e.global_['mwexDebug']=True
         for ship,cfg in fleet:
             ship['iscapitalship']=True;ship['size']='L';ship['units']['transport']['count']=0
         e.sources[0]['owner']['units']['transport']['count']=0
@@ -1486,6 +1504,162 @@ class XMLDispatchChecks(unittest.TestCase):
         self.assertNotIn('failure',cfg['origin'])
         e.needs[0]['total']=80;e.sources[0]['unitprice']=50;self.dispatch(e,hub)
         self.assertEqual(len(ship['orders']),2);self.assertNotIn('failure',cfg['origin'])
+
+    def test_ship_journal_explains_tail_with_one_committed_result(self):
+        e,home,fleet,hub=self.setup_market([204],[72000]);ship,cfg=fleet[0]
+        e.wares[0]['volume']=22
+        ship['cargo'][e.wares[0]].update(max=72000//22,free=72000//22)
+        cfg['minCargoUsed']=75;cfg['origin']['minCargoUsed']=75
+        self.dispatch(e,hub)
+        entries=[x for x in e.logbook if x['object'] is ship]
+        self.assertEqual(len(entries),1)
+        text=entries[0]['text']
+        for expected in ('6.23%','4488','临时解除','正常评估','尾单评估','实际派单成功'):
+            self.assertIn(expected,text)
+        self.assertIn(ship['idcode'],entries[0]['title'])
+        self.assertEqual(len(ship['orders']),2);self.assertEqual(ship['orders'][0]['amount'],204)
+        self.assertEqual(cfg['minCargoUsed'],75)
+        self.assertEqual(e.logs,[]);self.assertNotIn('mule.fleet.trace',e.calls)
+
+    def test_ship_journal_aggregates_other_ware_rejections_in_both_phases(self):
+        for kind in ('price','corridor'):
+            with self.subTest(kind=kind):
+                e,home,fleet,hub=self.setup_market([80,10],[1000]);ship,cfg=fleet[0]
+                if kind=='price':e.sources[1]['unitprice']=200
+                else:
+                    outside=e.sector('Outside corridor');e.connect(home['sector'],outside)
+                    e.sources[1]['owner']['sector']=outside
+                    cfg['corridorDepth']=0;cfg['origin']['corridorDepth']=0
+                    hub=e.hub(home,fleet)
+                self.dispatch(e,hub)
+                entries=[x for x in e.logbook if x['object'] is ship]
+                self.assertEqual(len(entries),1);text=entries[0]['text']
+                for phase in ('正常评估','尾单评估'):self.assertIn(phase,text)
+                expected='价格检查失败' if kind=='price' else '副单超出主路径偏离范围'
+                self.assertEqual(text.count(expected),2)
+                self.assertIn('w1',text)
+                self.assertIn('90.0 Cr' if kind=='price' else '超出设置1跳',text)
+                self.assertEqual(len(ship['orders']),2)
+
+    def test_ship_journal_mixed_dispatch_lists_actual_legs_only(self):
+        e,home,fleet,hub=self.setup_market([350,250,150],[1000]);ship,cfg=fleet[0]
+        self.dispatch(e,hub)
+        entries=[x for x in e.logbook if x['object'] is ship]
+        self.assertEqual(len(entries),1);text=entries[0]['text']
+        for ware in e.wares:self.assertIn(ware['name'],text)
+        self.assertIn('实际采购单价',text);self.assertIn('已创建3',text)
+        self.assertEqual(text.count('方案第'),3);self.assertEqual(len(ship['orders']),6)
+        self.assertEqual(e.logs,[])
+
+    def test_ship_journal_negative_cache_shares_numbers_without_candidate_lists(self):
+        e,home,fleet,hub=self.setup_market([80],[100,100])
+        for ship,cfg in fleet:ship['macro']='same'
+        hub=e.hub(home,fleet);e.sources[0]['unitprice']=300
+        self.dispatch(e,hub)
+        for ship,cfg in fleet:
+            entries=[x for x in e.logbook if x['object'] is ship]
+            self.assertEqual(len(entries),1);self.assertIn(ship['idcode'],entries[0]['title'])
+            self.assertEqual(entries[0]['text'].count('价格检查失败'),2)
+        self.assertEqual(e.calls['mule.fleet.plan'],2)
+        self.assertNotIn('mule.fleet.trace',e.calls);self.assertEqual(e.created,0)
+
+    def test_idle_journal_cooldown_survives_price_and_quantity_changes(self):
+        e,home,fleet,hub=self.setup_market([80],[100]);e.sources[0]['unitprice']=300
+        self.dispatch(e,hub);before=len(e.logbook)
+        for price in (301,302,310):
+            e.sources[0]['unitprice']=price;e.sources[0]['total']-=1
+            self.dispatch(e,hub);self.assertEqual(len(e.logbook),before)
+        e.player['age']+=601;self.dispatch(e,hub);self.assertEqual(len(e.logbook),before+1)
+        fleet[0][1]['signature']='edited-settings'
+        self.dispatch(e,hub);self.assertEqual(len(e.logbook),before+2)
+
+    def test_ship_journal_failed_commit_never_claims_actual_dispatch_success(self):
+        e,home,fleet,hub=self.setup_market([80],[100]);ship,cfg=fleet[0];e.fail_at=1
+        self.dispatch(e,hub)
+        committed=[x for x in e.logbook if x['object'] is ship and '提交结果' in x['title']]
+        self.assertEqual(len(committed),1);text=committed[0]['text']
+        self.assertIn('实际派单失败',text);self.assertNotIn('实际派单成功',text)
+        self.assertNotIn('方案第',text);self.assertEqual(ship['orders'],[])
+        self.dispatch(e,hub)
+        self.assertEqual(len([x for x in e.logbook if '提交结果' in x['title']]),2)
+
+    def test_debug_cannot_change_trade_queries_orders_or_ship_log_size(self):
+        results=[]
+        for debug in (False,True):
+            e,home,fleet,hub=self.setup_market([350,250,150,1],[1000])
+            e.global_['mwexDebug']=debug
+            self.dispatch(e,hub);ship,cfg=fleet[0]
+            results.append(([(o['offer']['ware']['name'],o['amount'],o['offer']['isbuyoffer']) for o in ship['orders']],dict(e.queries),len(e.logbook)))
+            if debug:
+                self.assertGreater(e.calls['mule.fleet.trace'],0)
+                self.assertTrue(e.disk_logs)
+                self.assertTrue(all(x['name']=='debug.txt' and x['directory']=='MulesExtended' for x in e.disk_logs))
+                self.assertTrue(any('ship=ship0' in x['text'] and 'relaxed=' in x['text'] for x in e.disk_logs))
+                before=len(e.disk_logs);e.global_['mwexDebug']=False
+                e.runner.script('mule.fleet.plan',dict(hub=hub,cfg=cfg,relaxed=True))
+                self.assertEqual(len(e.disk_logs),before)
+            else:
+                self.assertEqual(e.disk_logs,[]);self.assertNotIn('mule.fleet.trace',e.calls)
+        self.assertEqual(*results)
+
+    def test_many_candidates_produce_one_summary_and_exact_price_metrics(self):
+        e,home,fleet,hub=self.setup_market([80,10],[1000]);ship,cfg=fleet[0]
+        e.sources[1]['unitprice']=200
+        for n in range(80):
+            station=e.station('Rejected'+str(n),home['sector'],'ai')
+            e.offer(station,e.wares[1],10,111+n,False)
+        hub=e.hub(home,fleet)
+        result=e.runner.script('mule.fleet.plan',dict(hub=hub,cfg=cfg,relaxed=False))
+        d=result['diagnostic']
+        self.assertEqual(d['price'],81);self.assertEqual(d['secondaryPrice'],81)
+        self.assertEqual(d['minGap'],1);self.assertEqual(d['gapWare'],e.wares[1])
+        self.assertNotIn('lines',d);self.assertNotIn('seen',d)
+        self.dispatch(e,hub)
+        self.assertEqual(len(e.logbook),1);self.assertLess(len(e.logbook[0]['text']),2400)
+        self.assertEqual(e.logs,[])
+
+    def test_ship_journal_english_is_localized(self):
+        e,home,fleet,hub=self.setup_market([80,10],[1000],language='en');ship,cfg=fleet[0]
+        e.sources[1]['unitprice']=200;self.dispatch(e,hub)
+        entries=[x for x in e.logbook if x['object'] is ship]
+        self.assertEqual(len(entries),1)
+        for entry in entries:self.assertNotRegex(entry['title']+entry['text'],r'[\u4e00-\u9fff]')
+        text=entries[0]['text']
+        self.assertIn('Price check rejected',text);self.assertIn('minimum load waived',text)
+        self.assertNotIn('text:61552:',text)
+
+    def test_options_menu_toggles_disk_debug_without_changing_ship_config(self):
+        e,home,fleet,hub=self.setup_market([80],[100]);ship,cfg=fleet[0]
+        md=ET.parse(SRC/'md/mwex_options.xml').getroot()
+        api=Obj({name:name for name in ('Register_Options_Menu','Add_Row','Make_CheckBox','Make_Text')})
+        e.roots.update(md=Obj(Simple_Menu_API=api),Open='options-open',DebugChanged='debug-changed')
+        def cue(name):e.runner.children(list(md.find('./cues/cue[@name="'+name+'"]/actions')), {})
+        cue('Register');cue('Open')
+        check=next(s['param'] for s in e.cue_signals if s['cue']=='Make_CheckBox')
+        self.assertFalse(check['checked']);self.assertEqual(check['onClick'],'debug-changed')
+        e.roots['event']=Obj(param=Obj(checked=1));cue('DebugChanged')
+        self.assertTrue(e.global_['mwexDebug']);cue('Open')
+        check=next(s['param'] for s in reversed(e.cue_signals) if s['cue']=='Make_CheckBox')
+        self.assertTrue(check['checked'])
+        self.assertEqual(e.queries,{});self.assertIs(ship['pilot']['mwexFleetCfg'],cfg)
+        e.roots['event']=Obj(param=Obj(checked=0));cue('DebugChanged')
+        self.assertFalse(e.global_['mwexDebug'])
+        e.global_['mwexFleetHubs']=Obj({home:hub})
+        e.runner.children(list(ET.parse(SRC/'md/mwex_capacity.xml').getroot().find('./cues/cue[@name="Loaded"]/actions')), {})
+        self.assertFalse(e.global_['mwexDebug'])
+
+    def test_load_removes_legacy_full_report_caches_but_keeps_history_and_orders(self):
+        e,home,fleet,hub=self.setup_market([80],[100]);ship,cfg=fleet[0]
+        self.dispatch(e,hub);history=list(e.logbook);orders=list(ship['orders'])
+        ship['pilot']['mwexFleetJournalLast']=Obj(body='old'*10000)
+        ship['pilot']['mwexFleetJournalSerial']=3
+        e.global_['mwexFleetHubs']=Obj({home:hub});e.global_['mwexDebug']=True
+        md=ET.parse(SRC/'md/mwex_capacity.xml').getroot()
+        e.runner.children(list(md.find('./cues/cue[@name="Loaded"]/actions')), {})
+        self.assertNotIn('mwexFleetJournalLast',ship['pilot'])
+        self.assertNotIn('mwexFleetJournalSerial',ship['pilot'])
+        self.assertEqual(e.logbook,history);self.assertEqual(ship['orders'],orders)
+        self.assertTrue(e.global_['mwexDebug'])
 
     def test_commit_failure_returns_concrete_reason_for_ship_diagnostics(self):
         e,home,fleet,hub=self.setup_market([80],[100]);ship,cfg=fleet[0]

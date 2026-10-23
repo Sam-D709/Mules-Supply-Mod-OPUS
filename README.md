@@ -2,6 +2,8 @@
 
 **简体中文** | [English](README.en.md)
 
+**公开测试版：[v0.1.0-beta.3](https://github.com/Sam-D709/Mules-Supply-Mod-OPUS/releases/tag/v0.1.0-beta.3) / 内部665。** [本次发布说明](docs/releases/v0.1.0-beta.3.md) · [日志与Debug指南](docs/SHIP_LOG.zh-CN.md)：船只日志只记实际派单与冷却简报；扩展选项可开启详细磁盘日志，默认关闭。采购规则沿用beta.1。
+
 面向 **X4: Foundations** 的供应优化模组，基于 **Mules, Supply and Warehouses Extended 6.60**，主要重写 **M4 采购骡子**：按真实货仓容量分配任务，多笔采购合并运输，小额缺货也能补齐。M1、M2、M3 保留。
 目前仅在X4 Version 8.00 Hotfix 4 (legacy) + SWI星球大战模组中进行测试，至于原版 8.0 与 9.0 并未做测试，如果有任何适配性问题欢迎提出Issue
 
@@ -207,13 +209,14 @@ M4 以同一基点的船队为单位，按照**实际货仓容量从大到小**�
 |---|---|
 | 玩家取消贸易订单 | 释放相应需求占额，允许其他空闲船重新接单 |
 | 船只无法执行采购 | 在对应船的行为失败提示中显示原因 |
+| 查看为什么这样采购 | 在对应船的“日志”页保留设置、模式、组合与实际提交结果；价格和偏离范围失败按次数及最小缺口汇总。待命简报10分钟冷却。扩展选项的Debug默认关闭，开启并以 `-scriptlogfiles` 启动后，将候选详情写入文档目录的 `logs/MulesExtended/debug.txt` |
 | 单艘 M4 空闲且没有活动或排队命令、未由玩家驾驶 | 独立返回基点站附近或基点星区，其他 M4 忙碌不影响返航 |
 | 修改基点星区 | 切换到新基点的需求与货源搜索；无合适贸易时返回新基点，不沿用船所在星区或旧基点。已排队贸易仍完成 |
 | 船上有余货，且已无活动或排队订单 | 采用虚拟清仓：删除余货，按商品均价补偿玩家；不视为实际交付 |
 
 ## 安装与兼容
 
-从 [Releases 的 v0.1.0-beta.1 页面](https://github.com/Sam-D709/Mules-Supply-Mod-OPUS/releases/tag/v0.1.0-beta.1)下载 **`Mules-Supply-Mod-OPUS-v0.1.0-beta.1.zip`** 安装附件。当前为公开测试版，X4内部版本663。不要误选自动生成的 **Source code** 源码包；本模组不使用 GitHub Packages。后续维护见[版本命名与发布指南](docs/VERSIONING.zh-CN.md)。
+从 [Releases 的 v0.1.0-beta.3 页面](https://github.com/Sam-D709/Mules-Supply-Mod-OPUS/releases/tag/v0.1.0-beta.3)下载 **`Mules-Supply-Mod-OPUS-v0.1.0-beta.3.zip`** 安装附件。当前为公开测试版，X4内部版本665。不要误选自动生成的 **Source code** 源码包；本模组不使用 GitHub Packages。后续维护见[版本命名与发布指南](docs/VERSIONING.zh-CN.md)。
 
 1. 退出游戏，备份存档及原模组目录。
 2. 解压安装 ZIP，得到 **`mules_and_warehouses_extended`** 文件夹，将整个文件夹拖入 X4 的 **`extensions`** 目录。升级时先把旧模组文件夹移到 `extensions` 以外，再放入新文件夹，避免旧散装文件覆盖新归档。
@@ -235,9 +238,28 @@ E:\SteamLibrary\steamapps\common\X4 Foundations\extensions\
 
 本项目保留原扩展 ID 以兼容已有订单，**不能与原骡子模组并行安装**。Steam 创意工坊更新可能覆盖原目录。M4 依据空间站买报价补货，不修改游戏的自动仓储、自动定价或研究需求判定。
 
+### 依赖与可选模组
+
+核心采购与简要船只日志**没有第三方模组强依赖**，未声明额外DLC要求。
+
+| 模组 | 是否需要 | 用途 |
+|---|---|---|
+| [SirNukes Mod Support APIs](https://steamcommunity.com/sharedfiles/filedetails/?id=2042901274) | **可选；使用Debug菜单时需要** | 提供 Extension Options 菜单。未安装时不提供该菜单，默认关闭详细Debug；不阻止核心采购。 |
+| kuertee UI Extensions and HUD | 不需要 | 菜单直接使用 SirNukes 接口，没有直接调用UIX接口。 |
+| Civilian Fleets | 可选兼容 | 检测其存在以避免重复同步下属行为，不负责本模组调度。 |
+| Subordinate Order Access | 可选便利工具 | 便于管理下属命令，不是本模组依赖。 |
+
+SWI只是当前测试环境；ship_sorter、TacticalResponsePolice 和 Options Helper 均不是运行依赖。原版骡子已包含在本模组内，不需另装。`-scriptlogfiles` 仅是详细磁盘日志所需的启动参数。
+
+## 已知限制与下一阶段
+
+本版只调整日志，不改变采购决策。当前草案以第一个存在合法货源的主商品及其货源建立路径；若组合后装载率不足，**不会换另一种主商品或另一主单货源重试整趟方案**。因此较近工厂少量补产后，可能反复成为主单，造成大船正常阶段接单失败，或在尾单阶段低载运行；其他主商品本可能组合出更适合大船的方案。
+
+下一阶段拟评估有次数上限的主商品及同商品货源重试，并限制每轮计算量，兼顾距离优先和运力利用。该问题**尚未修复**；空报价与已经被预订完的数量仍会跳过，并非无条件反复采购空厂。
+
 ## 验证与文档
 
-116 项脚本检查、2 项安装包检查、24 项 XML 结构和 3 处补丁选择器检查通过。安装包经过实际解压、目录层级与CAT/DAT内容核对，并验证了英文提示与中英文本参数的一致性。返航每30秒检查新任务，无新任务时保持飞行，不反复重建路径或打断巡航充能。多单、容量调度、小额尾单、取消后重派及最新返航修复已有游戏反馈；玩家货源优先级、英文游戏显示、实际优惠价格和本船失败提示的完整组合仍待进一步游戏验证，尚无大规模船队 FPS 基准。
+127 项脚本检查、2 项安装包检查、28 项 XML 结构和 3 处补丁选择器检查通过。安装包经过实际解压、目录层级与CAT/DAT内容核对，并验证了英文提示与中英文本参数的一致性。返航每30秒检查新任务，无新任务时保持飞行，不反复重建路径或打断巡航充能。多单、容量调度、小额尾单、取消后重派及最新返航修复已有游戏反馈；玩家货源优先级、英文游戏显示、实际优惠价格和本船失败提示的完整组合仍待进一步游戏验证，尚无大规模船队 FPS 基准。
 
 已移除 M4 中不可执行的旧采购循环及两个无调用的辅助脚本；完整清理范围与保留原因见[代码清理说明](docs/CLEANUP.zh-CN.md)。关闭“仅服务基点”仍允许服务当前基点范围内其他玩家收货站，不表示强制只服务新基点。
 
@@ -247,6 +269,6 @@ E:\SteamLibrary\steamapps\common\X4 Foundations\extensions\
 - [源码变动清单](docs/BASELINE_SOURCE_MAP.md)
 - [GitHub 发布指引](docs/GITHUB_PUBLISH.zh-CN.md)
 
-本地检查：`python tests/checks.py`；安装包检查：`python tests/test_package.py`；生成安装包：`python tools/build.py`，输出 `dist/Mules-Supply-Mod-OPUS-v0.1.0-beta.1.zip`。
+本地检查：`python tests/checks.py`；安装包检查：`python tests/test_package.py`；生成安装包：`python tools/build.py`，输出 `dist/Mules-Supply-Mod-OPUS-v0.1.0-beta.3.zip`。
 
 衍生自 [Mules and Warehouses Extended](https://github.com/Misunderstood-Wookiee/Mules-and-Warehouses-Extended)，保留上游 **CC BY 4.0** 许可及作者署名。详见 [许可](LICENCE.md) 与 [来源及署名](ATTRIBUTION.md)。

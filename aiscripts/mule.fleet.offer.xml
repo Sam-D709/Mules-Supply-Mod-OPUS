@@ -60,7 +60,7 @@
       </do_elseif>
       <do_else><set_value name="$reason" exact="'ok'"/></do_else>
     </do_if>
-    <do_if value="not $valid"><debug_to_file directory="'MulesExtended'" name="'M4 Capacity Candidates'" append="true" text="'REJECT ship=%s station=%s ware=%s reason=%s'.[$ship.idcode,$offer.owner.knownname,$offer.ware.name,$reason]"/></do_if>
+    <do_if value="not $valid"><do_if value="@global.$mwexDebug"><debug_to_file directory="'MulesExtended'" name="'debug.txt'" append="true" text="'REJECT ship=%s station=%s ware=%s reason=%s'.[$ship.idcode,$offer.owner.knownname,$offer.ware.name,$reason]"/></do_if></do_if>
     <return><retval name="offer" value="$valid"/><retval name="reason" value="$reason"/><retval name="distance" value="$distance"/></return>
   </actions></attention>
 </aiscript>
