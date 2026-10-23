@@ -245,17 +245,24 @@ E:\SteamLibrary\steamapps\common\X4 Foundations\extensions\
 | 模组 | 是否需要 | 用途 |
 |---|---|---|
 | [SirNukes Mod Support APIs](https://steamcommunity.com/sharedfiles/filedetails/?id=2042901274) | **可选；使用Debug菜单时需要** | 提供 Extension Options 菜单。未安装时不提供该菜单，默认关闭详细Debug；不阻止核心采购。 |
-| kuertee UI Extensions and HUD | 不需要 | 菜单直接使用 SirNukes 接口，没有直接调用UIX接口。 |
 | Civilian Fleets | 可选兼容 | 检测其存在以避免重复同步下属行为，不负责本模组调度。 |
 | Subordinate Order Access | 可选便利工具 | 便于管理下属命令，不是本模组依赖。 |
 
 SWI只是当前测试环境；ship_sorter、TacticalResponsePolice 和 Options Helper 均不是运行依赖。原版骡子已包含在本模组内，不需另装。`-scriptlogfiles` 仅是详细磁盘日志所需的启动参数。
 
+## 提交bug
+
+确保安装SirNukes Mod Support APIs，在模组管理菜单打开Mules-Supply-Mod-OPUS/debug开关，随后复现问题，复现后去往文档Documents\Egosoft\X4\1112832858\logs\MulesExtended以压缩包形式发给我日志记录，存档位于C:\Users\SCP343\Documents\Egosoft\X4\1112832858\save，最好提供问题存档，包含复现问题前正常存档-复现问题后异常存档，如果存档过大建议开新档复现。
+
 ## 已知限制与下一阶段
 
-本版只调整日志，不改变采购决策。当前草案以第一个存在合法货源的主商品及其货源建立路径；若组合后装载率不足，**不会换另一种主商品或另一主单货源重试整趟方案**。因此较近工厂少量补产后，可能反复成为主单，造成大船正常阶段接单失败，或在尾单阶段低载运行；其他主商品本可能组合出更适合大船的方案。
+当前草案以第一个存在合法货源的主商品及其货源建立路径；若组合后装载率不足，**不会换另一种主商品或另一主单货源重试整趟方案**。因此较近工厂少量补产后，可能反复成为主单，造成大船正常阶段接单失败，或在尾单阶段低载运行；其他主商品本可能组合出更适合大船的方案。
+
+~~顺带一提我们X4的模组开发调试工具是真的少~~
 
 下一阶段拟评估有次数上限的主商品及同商品货源重试，并限制每轮计算量，兼顾距离优先和运力利用。该问题**尚未修复**；空报价与已经被预订完的数量仍会跳过，并非无条件反复采购空厂。
+
+解决该问题目前的替代方案是，多给工厂上点小船，就能在一定程度避免大船反复定位底仓储订单。~~对于主订单更换带来的匹配时间的变化和总的时间收益，可能需要等我完整体验完SWI模组后才进行测试~~
 
 ## 验证与文档
 
