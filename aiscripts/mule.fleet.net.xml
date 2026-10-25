@@ -1,42 +1,93 @@
 <?xml version="1.0" encoding="utf-8"?>
-<aiscript name="mule.fleet.net" version="1">
-  <params><param name="offer"/></params>
-  <attention min="unknown"><actions>
-    <!-- amount is native net. Only the part NOT visible in native reservations is held locally. -->
-    <set_value name="$net" exact="0"/>
-    <do_if value="@$offer.exists">
-      <set_value name="$net" exact="[$offer.amount,0].max"/>
-      <set_value name="$byShip" exact="table[]"/>
-      <do_for_each name="$hold" in="global.$mwexFleetPending.clone" reverse="true">
-        <do_if value="not @$hold.$order.exists or not @$hold.$ship.exists or not @$hold.$offer.exists">
-          <remove_from_list name="global.$mwexFleetPending" exact="$hold"/>
-          <continue/>
+<aiscript name="mule.fleet.net" version="2">
+  <params>
+    <param name="offer" />
+  </params>
+  <interrupts>
+    <library>
+      <actions name="MWEX_Fleet_net">
+        <!--Non-blocking. Inputs and outputs use a library-specific prefix; reset outputs on EVERY invocation.-->
+        <set_value name="$mwnet_out_net" exact="0" />
+        <!-- amount is native net. Only the part NOT visible in native reservations is held locally. -->
+        <set_value name="$mwnet_net" exact="0" />
+        <do_if value="@$mwnet_offer.exists">
+          <set_value name="$mwnet_net" exact="[$mwnet_offer.amount,0].max" />
+          <set_value name="$mwnet_byShip" exact="table[]" />
+          <do_for_each name="$mwnet_hold" in="global.$mwexFleetPending.clone" reverse="true">
+            <do_if value="not @$mwnet_hold.$order.exists or not @$mwnet_hold.$ship.exists or not @$mwnet_hold.$offer.exists">
+              <do_if value="@global.$mwexDebug">
+                <set_value name="$mwtrace_diagnostic" exact="table[$ship=@this.ship,$attempt=@this.ship.pilot.$mwexM4Search.$attempt,$relaxed=false,$voyage=@$mwnet_hold.$logVoyage]" />
+                <set_value name="$mwtrace_file" exact="'economy'" />
+                <set_value name="$mwtrace_text" exact="'HOLD_RELEASE reason=%s offer=%s order=%s ownerShip=%s amount=%s'.['invalid_reference',@$mwnet_hold.$offer,@$mwnet_hold.$logOrderId,@$mwnet_hold.$ship,$mwnet_hold.$amount]" />
+                <include_interrupt_actions ref="MWEX_Fleet_trace" />
+              </do_if>
+              <remove_from_list name="global.$mwexFleetPending" exact="$mwnet_hold" />
+              <continue />
+            </do_if>
+            <!-- Once transfer begins, native accounting has unquestionably taken over. -->
+            <do_if value="@$mwnet_hold.$order.trade.transferredamount gt 0">
+              <do_if value="@global.$mwexDebug">
+                <set_value name="$mwtrace_diagnostic" exact="table[$ship=@this.ship,$attempt=@this.ship.pilot.$mwexM4Search.$attempt,$relaxed=false,$voyage=@$mwnet_hold.$logVoyage]" />
+                <set_value name="$mwtrace_file" exact="'economy'" />
+                <set_value name="$mwtrace_text" exact="'HOLD_RELEASE reason=%s offer=%s order=%s ownerShip=%s amount=%s'.['native_transfer_started',@$mwnet_hold.$offer,@$mwnet_hold.$logOrderId,@$mwnet_hold.$ship,$mwnet_hold.$amount]" />
+                <include_interrupt_actions ref="MWEX_Fleet_trace" />
+              </do_if>
+              <remove_from_list name="global.$mwexFleetPending" exact="$mwnet_hold" />
+              <continue />
+            </do_if>
+            <do_if value="$mwnet_hold.$offer == $mwnet_offer">
+              <do_if value="not $mwnet_byShip.{$mwnet_hold.$ship}?">
+                <set_value name="$mwnet_byShip.{$mwnet_hold.$ship}" exact="table[$ship=$mwnet_hold.$ship,$amount=0,$holds=[]]" />
+              </do_if>
+              <set_value name="$mwnet_byShip.{$mwnet_hold.$ship}.$amount" operation="add" exact="$mwnet_hold.$amount" />
+              <append_to_list name="$mwnet_byShip.{$mwnet_hold.$ship}.$holds" exact="$mwnet_hold" />
+            </do_if>
+          </do_for_each>
+          <do_for_each valuename="$mwnet_entry" in="$mwnet_byShip">
+            <!-- Ship had no trade orders when dispatched, so these are its own newly submitted reservations. -->
+            <set_value name="$mwnet_nativeOwn" exact="[$mwnet_offer.offeramount.{$mwnet_entry.$ship} - $mwnet_offer.amount,0].max" />
+            <set_value name="$mwnet_missing" exact="[$mwnet_entry.$amount - $mwnet_nativeOwn,0].max" />
+            <set_value name="$mwnet_net" exact="[$mwnet_net - $mwnet_missing,0].max" />
+            <set_value name="$mwnet_logHold" exact="$mwnet_entry.$holds.{1}" />
+            <do_if value="@global.$mwexDebug and (not $mwnet_logHold.$logNet? or @$mwnet_logHold.$logNet != $mwnet_net or @$mwnet_logHold.$logNativeOwn != $mwnet_nativeOwn or @$mwnet_logHold.$logMissing != $mwnet_missing)">
+              <do_if value="@global.$mwexDebug">
+                <set_value name="$mwtrace_diagnostic" exact="table[$ship=@this.ship,$attempt=@this.ship.pilot.$mwexM4Search.$attempt,$relaxed=false]" />
+                <set_value name="$mwtrace_text" exact="'NET offer=%s ownerShip=%s amount=%s expected=%s nativeOwn=%s localMissing=%s net=%s'.[$mwnet_offer,$mwnet_entry.$ship.idcode,$mwnet_offer.amount,$mwnet_entry.$amount,$mwnet_nativeOwn,$mwnet_missing,$mwnet_net]" />
+                <set_value name="$mwtrace_file" exact="'economy'" />
+                <include_interrupt_actions ref="MWEX_Fleet_trace" />
+              </do_if>
+              <set_value name="$mwnet_logHold.$logNet" exact="$mwnet_net" />
+              <set_value name="$mwnet_logHold.$logNativeOwn" exact="$mwnet_nativeOwn" />
+              <set_value name="$mwnet_logHold.$logMissing" exact="$mwnet_missing" />
+            </do_if>
+            <do_if value="$mwnet_missing == 0">
+              <do_if value="@global.$mwexDebug">
+                <set_value name="$mwtrace_diagnostic" exact="table[$ship=@this.ship,$attempt=@this.ship.pilot.$mwexM4Search.$attempt,$relaxed=false]" />
+                <set_value name="$mwtrace_file" exact="'economy'" />
+                <set_value name="$mwtrace_text" exact="'HOLD_RELEASE reason=native_reservation_visible offer=%s ownerShip=%s expected=%s nativeOwn=%s'.[$mwnet_offer,$mwnet_entry.$ship,$mwnet_entry.$amount,$mwnet_nativeOwn]" />
+                <include_interrupt_actions ref="MWEX_Fleet_trace" />
+              </do_if>
+              <remove_from_list name="global.$mwexFleetPending" list="$mwnet_entry.$holds" />
+            </do_if>
+          </do_for_each>
         </do_if>
-        <!-- Once transfer begins, native accounting has unquestionably taken over. -->
-        <do_if value="@$hold.$order.trade.transferredamount gt 0">
-          <remove_from_list name="global.$mwexFleetPending" exact="$hold"/>
-          <continue/>
-        </do_if>
-        <do_if value="$hold.$offer == $offer">
-          <do_if value="not $byShip.{$hold.$ship}?">
-            <set_value name="$byShip.{$hold.$ship}" exact="table[$ship=$hold.$ship,$amount=0,$holds=[]]"/>
-          </do_if>
-          <set_value name="$byShip.{$hold.$ship}.$amount" operation="add" exact="$hold.$amount"/>
-          <append_to_list name="$byShip.{$hold.$ship}.$holds" exact="$hold"/>
-        </do_if>
-      </do_for_each>
-      <do_for_each valuename="$entry" in="$byShip">
-        <!-- Ship had no trade orders when dispatched, so these are its own newly submitted reservations. -->
-        <set_value name="$nativeOwn" exact="[$offer.offeramount.{$entry.$ship} - $offer.amount,0].max"/>
-        <set_value name="$missing" exact="[$entry.$amount - $nativeOwn,0].max"/>
-        <set_value name="$net" exact="[$net - $missing,0].max"/>
-        <do_if value="@global.$mwexDebug"><debug_to_file directory="'MulesExtended'" name="'debug.txt'" append="true"
-          text="'NET t=%s offer=%s ship=%s amount=%s expected=%s nativeOwn=%s localMissing=%s net=%s'.[player.age,$offer,$entry.$ship.idcode,$offer.amount,$entry.$amount,$nativeOwn,$missing,$net]"/></do_if>
-        <do_if value="$missing == 0">
-          <remove_from_list name="global.$mwexFleetPending" list="$entry.$holds"/>
-        </do_if>
-      </do_for_each>
-    </do_if>
-    <return><retval name="net" value="$net"/></return>
-  </actions></attention>
+        <set_value name="$mwnet_out_net" exact="$mwnet_net" />
+      </actions>
+    </library>
+  </interrupts>
+  <patch sinceversion="2">
+    <return>
+      <retval name="net" value="0" />
+    </return>
+  </patch>
+  <attention min="unknown">
+    <actions>
+      <!--Compatibility entry for saved calls and direct tools; live dispatch uses the action library.-->
+      <set_value name="$mwnet_offer" exact="$offer" />
+      <include_interrupt_actions ref="MWEX_Fleet_net" />
+      <return>
+        <retval name="net" value="$mwnet_out_net" />
+      </return>
+    </actions>
+  </attention>
 </aiscript>

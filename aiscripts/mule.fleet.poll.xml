@@ -1,0 +1,19 @@
+<?xml version='1.0' encoding='utf-8'?>
+<aiscript name="mule.fleet.poll" version="1" priority="1">
+  <params>
+    <param name="cfg"/>
+    <param name="once" default="true"/>
+    <param name="returnToken"/>
+  </params>
+  <attention min="unknown">
+    <actions>
+      <!-- Above ordinary movement (0), below attacked response (10). Never abort a live path to search. -->
+      <run_script name="'mule.fleet.run'">
+        <param name="cfg" value="$cfg"/>
+        <param name="once" value="true"/>
+        <param name="returnToken" value="$returnToken"/>
+      </run_script>
+      <return/>
+    </actions>
+  </attention>
+</aiscript>

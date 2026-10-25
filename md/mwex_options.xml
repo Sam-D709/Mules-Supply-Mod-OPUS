@@ -3,36 +3,51 @@
   <cues>
     <!-- Public Extension Options API; no replacement of kuertee UIX menus. -->
     <cue name="Register" instantiate="true">
-      <conditions><event_cue_signalled cue="md.Simple_Menu_API.Reloaded"/></conditions>
+      <conditions>
+        <event_cue_signalled cue="md.Simple_Menu_API.Reloaded" />
+      </conditions>
       <actions>
-        <signal_cue_instantly cue="md.Simple_Menu_API.Register_Options_Menu"
-          param="table[$id='mwex_opus_options',$title='Mules-Supply-Mod-OPUS',$columns=2,$onOpen=Open]"/>
+        <signal_cue_instantly cue="md.Simple_Menu_API.Register_Options_Menu" param="table[$id='mwex_opus_options',$title='Mules-Supply-Mod-OPUS',$columns=2,$onOpen=Open]" />
       </actions>
     </cue>
     <cue name="Open" instantiate="true">
-      <conditions><event_cue_signalled/></conditions>
+      <conditions>
+        <event_cue_signalled />
+      </conditions>
       <actions>
-        <signal_cue_instantly cue="md.Simple_Menu_API.Add_Row"/>
-        <signal_cue_instantly cue="md.Simple_Menu_API.Make_CheckBox"
-          param="table[$id='mwex_debug',$col=1,$checked=@global.$mwexDebug == true,$onClick=DebugChanged,$width='Helper.standardButtonHeight',$height='Helper.standardButtonHeight',$mouseOverText={61552,4402}]"/>
-        <signal_cue_instantly cue="md.Simple_Menu_API.Make_Text" param="table[$col=2,$text={61552,4401}]"/>
-        <signal_cue_instantly cue="md.Simple_Menu_API.Add_Row" param="table[$selectable=false]"/>
-        <signal_cue_instantly cue="md.Simple_Menu_API.Make_Text"
-          param="table[$col=1,$colSpan=2,$text={61552,4402},$wordwrap=true]"/>
-        <signal_cue_instantly cue="md.Simple_Menu_API.Add_Row" param="table[$selectable=false]"/>
-        <signal_cue_instantly cue="md.Simple_Menu_API.Make_Text"
-          param="table[$col=1,$colSpan=2,$text={61552,4403},$wordwrap=true]"/>
+        <signal_cue_instantly cue="md.Simple_Menu_API.Add_Row" />
+        <signal_cue_instantly cue="md.Simple_Menu_API.Make_CheckBox" param="table[$id='mwex_debug',$col=1,$checked=@global.$mwexDebug == true,$onClick=DebugChanged,$width='Helper.standardButtonHeight',$height='Helper.standardButtonHeight',$mouseOverText={61552,4402}]" />
+        <signal_cue_instantly cue="md.Simple_Menu_API.Make_Text" param="table[$col=2,$text={61552,4401}]" />
+        <signal_cue_instantly cue="md.Simple_Menu_API.Add_Row" param="table[$selectable=false]" />
+        <signal_cue_instantly cue="md.Simple_Menu_API.Make_Text" param="table[$col=1,$colSpan=2,$text={61552,4402},$wordwrap=true]" />
+        <signal_cue_instantly cue="md.Simple_Menu_API.Add_Row" param="table[$selectable=false]" />
+        <signal_cue_instantly cue="md.Simple_Menu_API.Make_Text" param="table[$col=1,$colSpan=2,$text={61552,4403},$wordwrap=true]" />
+        <signal_cue_instantly cue="md.Simple_Menu_API.Add_Row" />
+        <signal_cue_instantly cue="md.Simple_Menu_API.Make_CheckBox" param="table[$id='mwex_m4_trace',$col=1,$checked=@global.$mwexM4TraceCandidates == true,$onClick=TraceChanged,$width='Helper.standardButtonHeight',$height='Helper.standardButtonHeight',$mouseOverText={61552,4472}]" />
+        <signal_cue_instantly cue="md.Simple_Menu_API.Make_Text" param="table[$col=2,$text={61552,4471}]" />
       </actions>
     </cue>
     <cue name="DebugChanged" instantiate="true">
-      <conditions><event_cue_signalled/></conditions>
+      <conditions>
+        <event_cue_signalled />
+      </conditions>
       <actions>
-        <!-- Persist per save, independently of ship trade settings. Default: absent/false. -->
-        <set_value name="global.$mwexDebug" exact="event.param.$checked == 1"/>
-        <do_if value="global.$mwexDebug">
-          <debug_to_file directory="'MulesExtended'" name="'debug.txt'" append="true"
-            text="'[time=%s] Mules-Supply-Mod-OPUS beta.3 Debug enabled'.[player.age]"/>
+        <do_if value="@global.$mwexDebug and event.param.$checked != 1">
+          <signal_cue_instantly cue="md.MWEX_M4_Debug.Record" param="table[$ship=null,$attempt=null,$voyage=null,$file='lifecycle',$text='BOUNDARY reason=debug_disabled observation_ends_here=true']" />
         </do_if>
+        <set_value name="global.$mwexDebug" exact="event.param.$checked == 1" />
+        <do_if value="global.$mwexDebug">
+          <signal_cue_instantly cue="md.MWEX_M4_Debug.Start" param="'debug_enabled'" />
+        </do_if>
+      </actions>
+    </cue>
+    <cue name="TraceChanged" instantiate="true">
+      <conditions>
+        <event_cue_signalled />
+      </conditions>
+      <actions>
+        <set_value name="global.$mwexM4TraceCandidates" exact="event.param.$checked == 1" />
+        <signal_cue_instantly cue="md.MWEX_M4_Debug.Record" param="table[$ship=null,$attempt=null,$voyage=null,$file='lifecycle',$text='TRACE_MODE fullCandidates=%s'.[global.$mwexM4TraceCandidates]]" />
       </actions>
     </cue>
   </cues>

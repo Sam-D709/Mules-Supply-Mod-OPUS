@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<aiscript name="mule.fleet.observe" version="1">
+  <interrupts>
+    <library>
+      <actions name="MWEX_Log_emit">
+        <!-- All inputs are explicit. This library never waits, queries trades or changes economic state. -->
+        <do_if value="@global.$mwexDebug">
+          <do_if value="not global.$mwexM4Log?">
+            <set_value name="global.$mwexM4Log" exact="table[$session='%s/%s'.[player.age,this],$seq=0,$watches=table[]]" />
+            <do_for_each name="$mwlog_header" in="['lifecycle','search','orders','economy']">
+              <debug_to_file directory="'MulesExtended'" name="'m4-%s.txt'.[$mwlog_header]" append="true" text="'M4 t=%s session=%s seq=0 ship=null object=null pilot=null attempt=null voyage=null SESSION schema=2 build=beta.8 strategy=beta.7 stream=%s timeUnit=game_seconds quantityUnit=units volumeUnit=m3 priceUnit=Cr'.[player.age,global.$mwexM4Log.$session,$mwlog_header]" />
+            </do_for_each>
+          </do_if>
+          <set_value name="global.$mwexM4Log.$seq" operation="add" exact="1" />
+          <debug_to_file directory="'MulesExtended'" name="'m4-%s.txt'.[$mwlog_file]" append="true" text="'M4 t=%s session=%s seq=%s ship=%s object=%s pilot=%s attempt=%s voyage=%s %s'.[player.age,global.$mwexM4Log.$session,global.$mwexM4Log.$seq,if @$mwlog_ship.exists then $mwlog_ship.idcode else null,$mwlog_ship,if @$mwlog_ship.exists then @$mwlog_ship.pilot else null,$mwlog_attempt,$mwlog_voyage,$mwlog_text]" />
+        </do_if>
+      </actions>
+      <actions name="MWEX_Log_register">
+        <do_if value="@global.$mwexDebug and @$mwobserve_cfg.$ship.pilot.exists">
+          <set_value name="$mwobserve_ship" exact="$mwobserve_cfg.$ship" />
+          <do_if value="not global.$mwexM4Log? or @$mwobserve_ship.pilot.$mwexM4LogSession != @global.$mwexM4Log or @$mwobserve_ship.pilot.$mwexM4LogSignature != $mwobserve_cfg.$signature or @$mwobserve_ship.pilot.$mwexM4LogOrigin != $mwobserve_cfg.$origin">
+            <set_value name="$mwlog_ship" exact="$mwobserve_ship" />
+            <set_value name="$mwlog_attempt" exact="null" />
+            <set_value name="$mwlog_voyage" exact="null" />
+            <set_value name="$mwlog_file" exact="'lifecycle'" />
+            <set_value name="$mwlog_text" exact="'CONFIG home=%s origin=%s commander=%s bound=%s class=%s type=%s capacity=%s minLoad=%s maxLots=%s range=%s dedicated=%s preferOwned=%s allowAI=%s stockThreshold=%s buildstorage=%s resources=%s intermediates=%s tradewares=%s lockWares=%s wares=%s corridor=%s markup=%s signature=%s'.[$mwobserve_cfg.$home,$mwobserve_cfg.$origin,$mwobserve_cfg.$commander,$mwobserve_cfg.$bound,$mwobserve_ship.class,$mwobserve_ship.type,$mwobserve_ship.cargo.capacity.all,$mwobserve_cfg.$minCargoUsed,$mwobserve_cfg.$maxTrades,$mwobserve_cfg.$maxDist,$mwobserve_cfg.$dedicatedServe,$mwobserve_cfg.$allowPlayerSuppliers,$mwobserve_cfg.$allowAiSuppliers,$mwobserve_cfg.$playerStockThreshold,$mwobserve_cfg.$allowBuildstorage,$mwobserve_cfg.$allowResources,$mwobserve_cfg.$allowIntermediates,$mwobserve_cfg.$allowTradewares,$mwobserve_cfg.$lockWares,$mwobserve_cfg.$wares,$mwobserve_cfg.$corridorDepth,$mwobserve_cfg.$corridorMarkup,$mwobserve_cfg.$signature]" />
+            <include_interrupt_actions ref="MWEX_Log_emit" />
+            <set_value name="$mwobserve_ship.pilot.$mwexM4LogSignature" exact="$mwobserve_cfg.$signature" />
+            <set_value name="$mwobserve_ship.pilot.$mwexM4LogOrigin" exact="$mwobserve_cfg.$origin" />
+            <do_if value="@$mwobserve_ship.pilot.$mwexM4LogSession != @global.$mwexM4Log">
+              <set_value name="$mwobserve_ship.pilot.$mwexM4LogSession" exact="global.$mwexM4Log" />
+              <signal_objects object="player.entity" param="'mwex_m4_debug_watch'" param2="$mwobserve_ship" />
+            </do_if>
+          </do_if>
+        </do_if>
+      </actions>
+      <actions name="MWEX_Log_state">
+        <do_if value="@global.$mwexDebug and @$mwstate_cfg.$ship.pilot.exists">
+          <set_value name="$mwstate_ship" exact="$mwstate_cfg.$ship" />
+          <do_if value="@$mwstate_ship.pilot.$mwexM4State != $mwstate_value or @$mwstate_ship.pilot.$mwexM4StateReason != $mwstate_reason or player.age ge @$mwstate_ship.pilot.$mwexM4StateAt+60s">
+            <set_value name="$mwlog_ship" exact="$mwstate_ship" />
+            <set_value name="$mwlog_attempt" exact="@$mwstate_ship.pilot.$mwexM4Search.$attempt" />
+            <set_value name="$mwlog_voyage" exact="@$mwstate_ship.pilot.$mwexM4Voyage" />
+            <set_value name="$mwlog_file" exact="'lifecycle'" />
+            <set_value name="$mwlog_text" exact="'STATE state=%s reason=%s previous=%s previousSince=%s orders=%s cargo=%s sector=%s next=%s waitingSince=%s failures=%s misses=%s'.[$mwstate_value,$mwstate_reason,@$mwstate_ship.pilot.$mwexM4State,@$mwstate_ship.pilot.$mwexM4StateSince,$mwstate_ship.orders.count,$mwstate_ship.cargo.count,$mwstate_ship.sector,@$mwstate_ship.pilot.$mwexFleetAttempt.$next,@$mwstate_ship.pilot.$mwexFleetAttempt.$waitingSince,@$mwstate_ship.pilot.$mwexFleetAttempt.$failures,@$mwstate_ship.pilot.$mwexFleetAttempt.$misses]" />
+            <include_interrupt_actions ref="MWEX_Log_emit" />
+            <do_if value="@$mwstate_ship.pilot.$mwexM4State != $mwstate_value">
+              <set_value name="$mwstate_ship.pilot.$mwexM4StateSince" exact="player.age" />
+            </do_if>
+            <set_value name="$mwstate_ship.pilot.$mwexM4State" exact="$mwstate_value" />
+            <set_value name="$mwstate_ship.pilot.$mwexM4StateReason" exact="$mwstate_reason" />
+            <set_value name="$mwstate_ship.pilot.$mwexM4StateAt" exact="player.age" />
+          </do_if>
+        </do_if>
+      </actions>
+      <actions name="MWEX_Log_order">
+        <do_if value="@global.$mwexDebug and @$mwlog_order.exists">
+          <set_value name="$mwlog_ship" exact="$mwlog_order_cfg.$ship" />
+          <set_value name="$mwlog_attempt" exact="@$mwlog_order_diagnostic.$attempt" />
+          <set_value name="$mwlog_voyage" exact="@$mwlog_order_diagnostic.$voyage" />
+          <set_value name="$mwlog_file" exact="'orders'" />
+          <do_if value="not $mwlog_ship.pilot.$mwexM4LogOrders?">
+            <set_value name="$mwlog_ship.pilot.$mwexM4LogOrders" exact="[]" />
+          </do_if>
+          <set_value name="$mwlog_entry" exact="table[$order=$mwlog_order,$orderId='%s'.[$mwlog_order],$trade=@$mwlog_order.trade,$tradeId='%s'.[@$mwlog_order.trade],$offer=if $mwlog_side == 'buy' then $mwlog_order_leg.$source else $mwlog_order_leg.$need,$ware=$mwlog_order_leg.$ware,$planned=$mwlog_order_leg.$amount,$side=$mwlog_side,$attempt=$mwlog_attempt,$voyage=$mwlog_voyage,$created=player.age,$transferred=0,$terminal=false,$baseline=false]" />
+          <append_to_list name="$mwlog_ship.pilot.$mwexM4LogOrders" exact="$mwlog_entry" />
+          <set_value name="$mwlog_text" exact="'ORDER_CREATED side=%s order=%s trade=%s offer=%s ware=%s planned=%s queuedAmount=%s unitPrice=%s state=%s source=%s receiver=%s'.[$mwlog_side,$mwlog_entry.$orderId,$mwlog_entry.$tradeId,$mwlog_entry.$offer,$mwlog_entry.$ware,$mwlog_entry.$planned,@$mwlog_order.trade.amount,if @$mwlog_order.trade.exists then $mwlog_order.trade.unitprice/1Cr else null,$mwlog_order.state,$mwlog_order_leg.$source.owner,$mwlog_order_leg.$need.owner]" />
+          <include_interrupt_actions ref="MWEX_Log_emit" />
+        </do_if>
+      </actions>
+    </library>
+  </interrupts>
+  <attention min="unknown">
+    <actions>
+      <return />
+    </actions>
+  </attention>
+</aiscript>

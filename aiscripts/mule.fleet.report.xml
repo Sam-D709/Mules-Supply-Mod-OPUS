@@ -1,23 +1,58 @@
 <?xml version="1.0" encoding="utf-8"?>
-<aiscript name="mule.fleet.report" version="1">
-  <params><param name="cfg"/><param name="reason" default="null"/></params>
-  <attention min="unknown"><actions>
-    <set_value name="$ship" exact="$cfg.$ship"/>
-    <do_if value="not $ship.isoperational or not $ship.pilot.exists or $ship.defaultorder != $cfg.$origin"><return/></do_if>
-    <do_if value="$reason and $reason != 'ok' and $reason != 'ship_changed' and $reason != {61552,4300}">
-      <!-- This is the native per-ship Behaviour failure record, not just a global log interaction anchor. -->
-      <do_if value="$cfg.$origin.isrunning"><set_order_failed order="$cfg.$origin" text="{61552,4330}.[$ship.knownname,$ship.idcode,$cfg.$home.knownname,$reason]"/></do_if>
-      <do_if value="not $ship.pilot.$mwexFleetLastReason? or @$ship.pilot.$mwexFleetLastReason != $reason or player.age ge @$ship.pilot.$mwexFleetLastReasonAt+10min">
-        <do_if value="@global.$mwexDebug"><debug_to_file directory="'MulesExtended'" name="'debug.txt'" append="true" text="{61552,4330}.[$ship.knownname,$ship.idcode,$cfg.$home.knownname,$reason]"/></do_if>
-        <set_value name="$ship.pilot.$mwexFleetLastReason" exact="$reason"/>
-        <set_value name="$ship.pilot.$mwexFleetLastReasonAt" exact="player.age"/>
-      </do_if>
-    </do_if>
-    <do_else>
-      <do_if value="$cfg.$origin.isrunning"><clear_order_failure order="$cfg.$origin"/></do_if>
-      <remove_value name="$ship.pilot.$mwexFleetLastReason"/>
-      <remove_value name="$ship.pilot.$mwexFleetLastReasonAt"/>
-    </do_else>
-    <return/>
-  </actions></attention>
+<aiscript name="mule.fleet.report" version="2">
+  <params>
+    <param name="cfg" />
+    <param name="reason" default="null" />
+  </params>
+  <interrupts>
+    <library>
+      <actions name="MWEX_Fleet_report">
+        <!--Non-blocking. Inputs and outputs use a library-specific prefix; reset outputs on EVERY invocation.-->
+        <do_all exact="1">
+          <set_value name="$mwreport_ship" exact="$mwreport_cfg.$ship" />
+          <do_if value="not $mwreport_ship.isoperational or not $mwreport_ship.pilot.exists or $mwreport_ship.defaultorder != $mwreport_cfg.$origin">
+            <break />
+          </do_if>
+          <do_if value="$mwreport_reason and $mwreport_reason != 'ok' and $mwreport_reason != 'ship_changed' and $mwreport_reason != {61552,4300}">
+            <!-- This is the native per-ship Behaviour failure record, not just a global log interaction anchor. -->
+            <do_if value="$mwreport_cfg.$origin.isrunning">
+              <set_order_failed order="$mwreport_cfg.$origin" text="'%s：%s'.[$mwreport_ship.idcode,$mwreport_reason]" />
+            </do_if>
+            <do_if value="not $mwreport_ship.pilot.$mwexFleetLastReason? or @$mwreport_ship.pilot.$mwexFleetLastReason != $mwreport_reason or player.age ge @$mwreport_ship.pilot.$mwexFleetLastReasonAt+10min">
+              <do_if value="@global.$mwexDebug">
+                <do_if value="@global.$mwexDebug">
+                  <set_value name="$mwtrace_diagnostic" exact="table[$ship=$ship,$attempt=null,$relaxed=false]" />
+                  <set_value name="$mwtrace_text" exact="'ship=%s STATUS reason=%s'.[$mwreport_ship.idcode,$mwreport_reason]" />
+                  <set_value name="$mwtrace_file" exact="'lifecycle'" />
+                  <include_interrupt_actions ref="MWEX_Fleet_trace" />
+                </do_if>
+              </do_if>
+              <set_value name="$mwreport_ship.pilot.$mwexFleetLastReason" exact="$mwreport_reason" />
+              <set_value name="$mwreport_ship.pilot.$mwexFleetLastReasonAt" exact="player.age" />
+            </do_if>
+          </do_if>
+          <do_else>
+            <do_if value="$mwreport_cfg.$origin.isrunning">
+              <clear_order_failure order="$mwreport_cfg.$origin" />
+            </do_if>
+            <remove_value name="$mwreport_ship.pilot.$mwexFleetLastReason" />
+            <remove_value name="$mwreport_ship.pilot.$mwexFleetLastReasonAt" />
+          </do_else>
+          <break />
+        </do_all>
+      </actions>
+    </library>
+  </interrupts>
+  <patch sinceversion="2">
+    <return />
+  </patch>
+  <attention min="unknown">
+    <actions>
+      <!--Compatibility entry for saved calls and direct tools; live dispatch uses the action library.-->
+      <set_value name="$mwreport_cfg" exact="$cfg" />
+      <set_value name="$mwreport_reason" exact="$reason" />
+      <include_interrupt_actions ref="MWEX_Fleet_report" />
+      <return />
+    </actions>
+  </attention>
 </aiscript>

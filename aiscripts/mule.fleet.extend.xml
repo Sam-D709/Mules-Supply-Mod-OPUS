@@ -1,0 +1,182 @@
+<?xml version="1.0" encoding="utf-8"?>
+<aiscript name="mule.fleet.extend" version="3">
+  <params>
+    <param name="cfg" />
+    <param name="state" />
+    <param name="candidate" />
+    <param name="paths" />
+    <param name="distances" />
+    <param name="diagnostic" />
+  </params>
+  <interrupts>
+    <library>
+      <actions name="MWEX_Fleet_extend">
+        <!--Non-blocking. Inputs and outputs use a library-specific prefix; reset outputs on EVERY invocation.-->
+        <set_value name="$mwextend_out_state" exact="null" />
+        <set_value name="$mwextend_out_failure" exact="'scope_or_storage'" />
+        <do_all exact="1">
+          <set_value name="$mwextend_ship" exact="$mwextend_cfg.$ship" />
+          <set_value name="$mwextend_c" exact="$mwextend_candidate" />
+          <set_value name="$mwextend_ware" exact="$mwextend_c.$ware" />
+          <do_if value="$mwextend_state.$plan.count and ($mwextend_state.$receiver != $mwextend_c.$need.owner or $mwextend_state.$cargoTag != $mwextend_ware.transporttag)">
+            <set_value name="$mwextend_out_state" exact="null" />
+            <set_value name="$mwextend_out_failure" exact="'scope_or_storage'" />
+            <break />
+          </do_if>
+          <set_value name="$mwextend_failure" exact="'scope_or_storage'" />
+          <do_if value="not @$mwextend_c.$source.available or not @$mwextend_c.$need.available">
+            <set_value name="$mwextend_out_state" exact="null" />
+            <set_value name="$mwextend_out_failure" exact="'offer_unavailable'" />
+            <break />
+          </do_if>
+          <!-- A candidate may be old after other pilots trade during planning yields.
+         Re-read net quantity for every attempted extension, within the route budget. -->
+          <set_value name="$mwnet_offer" exact="$mwextend_c.$need" />
+          <include_interrupt_actions ref="MWEX_Fleet_net" />
+          <set_value name="$mwextend_needNet" exact="$mwnet_out_net" />
+          <set_value name="$mwnet_offer" exact="$mwextend_c.$source" />
+          <include_interrupt_actions ref="MWEX_Fleet_net" />
+          <set_value name="$mwextend_sourceNet" exact="$mwnet_out_net" />
+          <set_value name="$mwextend_needUsed" exact="if $mwextend_state.$usedNeed.{$mwextend_c.$need}? then $mwextend_state.$usedNeed.{$mwextend_c.$need} else 0" />
+          <set_value name="$mwextend_sourceUsed" exact="if $mwextend_state.$usedSource.{$mwextend_c.$source}? then $mwextend_state.$usedSource.{$mwextend_c.$source} else 0" />
+          <do_if value="$mwextend_sourceUsed gt 0">
+            <set_value name="$mwextend_out_state" exact="null" />
+            <set_value name="$mwextend_out_failure" exact="'scope_or_storage'" />
+            <break />
+          </do_if>
+          <set_value name="$mwextend_amount" exact="[$mwextend_c.$amount,$mwextend_needNet-$mwextend_needUsed,$mwextend_sourceNet-$mwextend_sourceUsed,(($mwextend_ship.cargo.free.{$mwextend_ware.transporttag}-$mwextend_state.$volume)/$mwextend_ware.volume)i,(($mwextend_c.$need.owner.cargo.free.{$mwextend_ware.transporttag}-$mwextend_state.$volume)/$mwextend_ware.volume)i].min" />
+          <do_if value="$mwextend_c.$paidprice gt 0Cr">
+            <set_value name="$mwextend_amount" exact="[$mwextend_amount,($mwextend_state.$budget/$mwextend_c.$paidprice)i].min" />
+          </do_if>
+          <set_value name="$mwextend_receiverBudget" exact="if $mwextend_state.$plan.count then $mwextend_state.$receiverBudget else $mwextend_c.$need.owner.money" />
+          <do_if value="not ($mwextend_c.$need.buyfree or $mwextend_c.$need.owner.owner == $mwextend_ship.owner) and $mwextend_c.$sellprice gt 0Cr">
+            <set_value name="$mwextend_amount" exact="[$mwextend_amount,($mwextend_receiverBudget/$mwextend_c.$sellprice)i].min" />
+          </do_if>
+          <do_if value="$mwextend_amount le 0 or $mwextend_amount lt $mwextend_c.$source.minamount or $mwextend_amount lt $mwextend_c.$need.minamount">
+            <set_value name="$mwextend_out_state" exact="null" />
+            <set_value name="$mwextend_out_failure" exact="'quantity_or_budget'" />
+            <break />
+          </do_if>
+          <set_value name="$mwextend_homeSector" exact="if $mwextend_cfg.$home.isclass.sector then $mwextend_cfg.$home else $mwextend_cfg.$home.sector" />
+          <set_value name="$mwextend_main" exact="if $mwextend_state.$plan.count then $mwextend_state.$plan.{1}.$source else $mwextend_c.$source" />
+          <do_if value="not $mwextend_paths.{$mwextend_main}?">
+            <get_global_path component="$mwextend_path" resultdistance="$mwextend_pathLength" multiple="true" useblacklist="blacklistgroup.civilian" refobject="$mwextend_ship" useknownpath="true" uselocalhighways="not $mwextend_ship.iscapitalship">
+              <start object="$mwextend_cfg.$home" />
+              <end object="$mwextend_main.owner" />
+            </get_global_path>
+            <set_value name="$mwextend_corridor" exact="[$mwextend_homeSector]" />
+            <do_for_each name="$mwextend_part" in="$mwextend_path">
+              <set_value name="$mwextend_sector" exact="if $mwextend_part.isclass.sector then $mwextend_part else $mwextend_part.sector" />
+              <do_if value="$mwextend_sector and not $mwextend_corridor.indexof.{$mwextend_sector}">
+                <append_to_list name="$mwextend_corridor" exact="$mwextend_sector" />
+              </do_if>
+            </do_for_each>
+            <do_if value="not $mwextend_corridor.indexof.{$mwextend_main.owner.sector}">
+              <append_to_list name="$mwextend_corridor" exact="$mwextend_main.owner.sector" />
+            </do_if>
+            <set_value name="$mwextend_paths.{$mwextend_main}" exact="table[$ok=$mwextend_pathLength ge 0,$sectors=$mwextend_corridor,$deviations=table[]]" />
+          </do_if>
+          <do_if value="not $mwextend_paths.{$mwextend_main}.$ok">
+            <set_value name="$mwextend_diagnostic.$route" operation="add" exact="1" />
+            <set_value name="$mwextend_out_state" exact="null" />
+            <set_value name="$mwextend_out_failure" exact="'main_route'" />
+            <break />
+          </do_if>
+          <set_value name="$mwextend_deviation" exact="0" />
+          <do_if value="$mwextend_state.$plan.count">
+            <do_if value="not $mwextend_paths.{$mwextend_main}.$deviations.{$mwextend_c.$source.owner.sector}?">
+              <set_value name="$mwextend_deviation" exact="2147483647" />
+              <do_for_each name="$mwextend_sector" in="$mwextend_paths.{$mwextend_main}.$sectors">
+                <set_value name="$mwextend_d" exact="$mwextend_sector.gatedistance.{$mwextend_c.$source.owner.sector}.{blacklistgroup.civilian}.{$mwextend_ship}" />
+                <do_if value="$mwextend_d ge 0">
+                  <set_value name="$mwextend_deviation" exact="[$mwextend_deviation,$mwextend_d].min" />
+                </do_if>
+              </do_for_each>
+              <set_value name="$mwextend_paths.{$mwextend_main}.$deviations.{$mwextend_c.$source.owner.sector}" exact="$mwextend_deviation" />
+            </do_if>
+            <set_value name="$mwextend_deviation" exact="$mwextend_paths.{$mwextend_main}.$deviations.{$mwextend_c.$source.owner.sector}" />
+            <do_if value="$mwextend_deviation gt $mwextend_cfg.$corridorDepth">
+              <set_value name="$mwextend_diagnostic.$range" operation="add" exact="1" />
+              <do_if value="$mwextend_deviation-$mwextend_cfg.$corridorDepth lt $mwextend_diagnostic.$minExtra">
+                <set_value name="$mwextend_diagnostic.$minExtra" exact="$mwextend_deviation-$mwextend_cfg.$corridorDepth" />
+                <set_value name="$mwextend_diagnostic.$rangeWare" exact="$mwextend_ware" />
+              </do_if>
+              <set_value name="$mwextend_out_state" exact="null" />
+              <set_value name="$mwextend_out_failure" exact="'corridor'" />
+              <break />
+            </do_if>
+          </do_if>
+          <set_value name="$mwextend_previous" exact="if $mwextend_state.$plan.count then $mwextend_state.$previous else $mwextend_ship.sector" />
+          <set_value name="$mwextend_from" exact="if $mwextend_previous.isclass.sector then $mwextend_previous else $mwextend_previous.sector" />
+          <set_value name="$mwextend_routeKey" exact="'$route/%s/%s'.[$mwextend_from,$mwextend_c.$source.owner.sector]" />
+          <do_if value="not $mwextend_distances.{$mwextend_routeKey}?">
+            <set_value name="$mwextend_distances.{$mwextend_routeKey}" exact="$mwextend_from.gatedistance.{$mwextend_c.$source.owner.sector}.{blacklistgroup.civilian}.{$mwextend_ship}" />
+          </do_if>
+          <set_value name="$mwextend_distance" exact="$mwextend_distances.{$mwextend_routeKey}" />
+          <set_value name="$mwextend_backKey" exact="'$route/%s/%s'.[$mwextend_c.$source.owner.sector,$mwextend_c.$need.owner.sector]" />
+          <do_if value="not $mwextend_distances.{$mwextend_backKey}?">
+            <set_value name="$mwextend_distances.{$mwextend_backKey}" exact="$mwextend_c.$source.owner.sector.gatedistance.{$mwextend_c.$need.owner.sector}.{blacklistgroup.civilian}.{$mwextend_ship}" />
+          </do_if>
+          <set_value name="$mwextend_back" exact="$mwextend_distances.{$mwextend_backKey}" />
+          <do_if value="$mwextend_distance lt 0 or $mwextend_back lt 0">
+            <set_value name="$mwextend_diagnostic.$route" operation="add" exact="1" />
+            <set_value name="$mwextend_out_state" exact="null" />
+            <set_value name="$mwextend_out_failure" exact="'route_unreachable'" />
+            <break />
+          </do_if>
+          <set_value name="$mwextend_next" exact="$mwextend_state.clone" />
+          <set_value name="$mwextend_next.$plan" exact="$mwextend_state.$plan.clone" />
+          <set_value name="$mwextend_next.$usedNeed" exact="$mwextend_state.$usedNeed.clone" />
+          <set_value name="$mwextend_next.$usedSource" exact="$mwextend_state.$usedSource.clone" />
+          <set_value name="$mwextend_leg" exact="table[$need=$mwextend_c.$need,$source=$mwextend_c.$source,$ware=$mwextend_ware,$amount=$mwextend_amount,$buyprice=$mwextend_c.$buyprice,$sellprice=$mwextend_c.$sellprice]" />
+          <append_to_list name="$mwextend_next.$plan" exact="$mwextend_leg" />
+          <set_value name="$mwextend_next.$volume" exact="$mwextend_state.$volume+$mwextend_amount*$mwextend_ware.volume" />
+          <set_value name="$mwextend_next.$capacity" exact="$mwextend_ship.cargo.{$mwextend_ware}.max*$mwextend_ware.volume" />
+          <set_value name="$mwextend_next.$receiver" exact="$mwextend_c.$need.owner" />
+          <set_value name="$mwextend_next.$cargoTag" exact="$mwextend_ware.transporttag" />
+          <set_value name="$mwextend_next.$previous" exact="$mwextend_c.$source.owner" />
+          <set_value name="$mwextend_next.$budget" exact="$mwextend_state.$budget-$mwextend_amount*$mwextend_c.$paidprice" />
+          <set_value name="$mwextend_next.$receiverBudget" exact="$mwextend_receiverBudget-(if $mwextend_c.$need.buyfree or $mwextend_c.$need.owner.owner == $mwextend_ship.owner then 0Cr else $mwextend_amount*$mwextend_c.$sellprice)" />
+          <set_value name="$mwextend_next.$usedNeed.{$mwextend_c.$need}" exact="$mwextend_needUsed+$mwextend_amount" />
+          <set_value name="$mwextend_next.$usedSource.{$mwextend_c.$source}" exact="$mwextend_sourceUsed+$mwextend_amount" />
+          <!-- Class-based time weights, not an engine ETA: gates, every pickup, and final unload. -->
+          <set_value name="$mwextend_gateTime" exact="if $mwextend_ship.iscapitalship then 180 else 90" />
+          <set_value name="$mwextend_dockTime" exact="if $mwextend_ship.iscapitalship then 120 else 45" />
+          <set_value name="$mwextend_next.$travel" exact="$mwextend_state.$travel+$mwextend_distance*$mwextend_gateTime+$mwextend_dockTime" />
+          <set_value name="$mwextend_next.$time" exact="$mwextend_next.$travel+$mwextend_back*$mwextend_gateTime+$mwextend_dockTime" />
+          <set_value name="$mwextend_next.$penalty" exact="$mwextend_state.$penalty+$mwextend_amount*$mwextend_c.$buyprice*(1+$mwextend_deviation*$mwextend_cfg.$corridorMarkup/100.0)" />
+          <set_value name="$mwextend_next.$ownedVolume" exact="$mwextend_state.$ownedVolume+(if $mwextend_c.$supplierRank == 0 then $mwextend_amount*$mwextend_ware.volume else 0)" />
+          <set_value name="$mwextend_next.$score" exact="$mwextend_next.$volume/$mwextend_next.$time" />
+          <set_value name="$mwextend_out_state" exact="$mwextend_next" />
+          <set_value name="$mwextend_out_failure" exact="'ok'" />
+          <break />
+        </do_all>
+      </actions>
+    </library>
+  </interrupts>
+  <patch sinceversion="2">
+    <return />
+  </patch>
+  <patch sinceversion="3">
+    <return>
+      <retval name="state" value="null" />
+      <retval name="failure" value="'scope_or_storage'" />
+    </return>
+  </patch>
+  <attention min="unknown">
+    <actions>
+      <!--Compatibility entry for saved calls and direct tools; live dispatch uses the action library.-->
+      <set_value name="$mwextend_cfg" exact="$cfg" />
+      <set_value name="$mwextend_state" exact="$state" />
+      <set_value name="$mwextend_candidate" exact="$candidate" />
+      <set_value name="$mwextend_paths" exact="$paths" />
+      <set_value name="$mwextend_distances" exact="$distances" />
+      <set_value name="$mwextend_diagnostic" exact="$diagnostic" />
+      <include_interrupt_actions ref="MWEX_Fleet_extend" />
+      <return>
+        <retval name="state" value="$mwextend_out_state" />
+        <retval name="failure" value="$mwextend_out_failure" />
+      </return>
+    </actions>
+  </attention>
+</aiscript>

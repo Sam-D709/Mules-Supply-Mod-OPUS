@@ -1,0 +1,41 @@
+<?xml version='1.0' encoding='utf-8'?>
+<aiscript name="mule.fleet.sources" version="1">
+  <interrupts>
+    <library>
+      <actions name="MWEX_Fleet_sources">
+        <set_value name="$mwsources_built" exact="false"/>
+        <do_if value="not $mwsources_hub.$coarse? or @$mwsources_hub.$coarseEpoch != global.$mwexFleetEpoch">
+          <set_value name="$mwsources_hub.$coarse" exact="table[]"/>
+          <set_value name="$mwsources_hub.$coarseEpoch" exact="global.$mwexFleetEpoch"/>
+        </do_if>
+        <set_value name="$mwsources_out" exact="@$mwsources_hub.$coarse.{$mwsources_ware}"/>
+        <do_if value="not $mwsources_out or player.age ge $mwsources_out.$until">
+          <set_value name="$mwsources_built" exact="true"/>
+          <set_value name="$mwsources_sizes" exact="table[]"/>
+          <set_value name="$mwsources_near" exact="table[]"/>
+          <set_value name="$mwsources_prices" exact="table[]"/>
+          <set_value name="$mwsources_sector" exact="if $mwsources_hub.$home.isclass.sector then $mwsources_hub.$home else $mwsources_hub.$home.sector"/>
+          <do_if value="$mwsources_hub.$sources.{$mwsources_ware}?">
+            <do_for_each name="$mwsources_location" valuename="$mwsources_offers" in="$mwsources_hub.$sources.{$mwsources_ware}">
+              <set_value name="$mwsources_distance" exact="$mwsources_sector.gatedistance.{$mwsources_location}+0"/>
+              <do_for_each valuename="$mwsources_offer" in="$mwsources_offers">
+                <do_if value="@$mwsources_offer.available and $mwsources_offer.amount gt 0 and $mwsources_distance ge 0">
+                  <set_value name="$mwsources_sizes.{$mwsources_offer}" exact="$mwsources_offer.amount"/>
+                  <set_value name="$mwsources_near.{$mwsources_offer}" exact="$mwsources_distance"/>
+                  <set_value name="$mwsources_prices.{$mwsources_offer}" exact="$mwsources_offer.unitprice+0Cr"/>
+                </do_if>
+              </do_for_each>
+            </do_for_each>
+          </do_if>
+          <set_value name="$mwsources_out" exact="table[$until=player.age+30s,$large=$mwsources_sizes.keys.sorted,$near=$mwsources_near.keys.sorted,$cheap=$mwsources_prices.keys.sorted]"/>
+          <set_value name="$mwsources_hub.$coarse.{$mwsources_ware}" exact="$mwsources_out"/>
+        </do_if>
+      </actions>
+    </library>
+  </interrupts>
+  <attention min="unknown">
+    <actions>
+      <return/>
+    </actions>
+  </attention>
+</aiscript>

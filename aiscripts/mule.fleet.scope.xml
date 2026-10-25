@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<aiscript name="mule.fleet.scope" version="2">
+  <params>
+    <param name="home" />
+    <param name="offer" />
+  </params>
+  <interrupts>
+    <library>
+      <actions name="MWEX_Fleet_scope">
+        <!--Non-blocking. Inputs and outputs use a library-specific prefix; reset outputs on EVERY invocation.-->
+        <set_value name="$mwscope_out_allowed" exact="false" />
+        <set_value name="$mwscope_allowed" exact="false" />
+        <do_if value="@$mwscope_offer.exists and @$mwscope_offer.owner.exists and @$mwscope_home.exists">
+          <set_value name="$mwscope_owner" exact="if $mwscope_offer.owner.isclass.buildstorage then $mwscope_offer.owner.base else $mwscope_offer.owner" />
+          <set_value name="$mwscope_allowed" exact="if $mwscope_home.isclass.sector or $mwscope_home.owner == faction.player then $mwscope_owner.owner == faction.player else $mwscope_owner == $mwscope_home" />
+        </do_if>
+        <set_value name="$mwscope_out_allowed" exact="$mwscope_allowed" />
+      </actions>
+    </library>
+  </interrupts>
+  <patch sinceversion="2">
+    <return>
+      <retval name="allowed" value="false" />
+    </return>
+  </patch>
+  <attention min="unknown">
+    <actions>
+      <!--Compatibility entry for saved calls and direct tools; live dispatch uses the action library.-->
+      <set_value name="$mwscope_home" exact="$home" />
+      <set_value name="$mwscope_offer" exact="$offer" />
+      <include_interrupt_actions ref="MWEX_Fleet_scope" />
+      <return>
+        <retval name="allowed" value="$mwscope_out_allowed" />
+      </return>
+    </actions>
+  </attention>
+</aiscript>

@@ -40,8 +40,25 @@ foreach ($name in @('order.assist.xml','lib.request.orders.xml')) {
         $selectors += [pscustomobject]@{file=$name;selector=$addition.sel;matches=$original.SelectNodes($addition.sel).Count}
     }
 }
-$report = [pscustomobject]@{schema_validation=$results;base_patch_selectors=$selectors}
+$actionDefinitions = @{}
+$actionReferences = @()
+foreach ($file in Get-ChildItem -LiteralPath (Join-Path $sourceRoot 'aiscripts') -Filter '*.xml') {
+    [xml]$document = Get-Content -LiteralPath $file.FullName -Raw -Encoding UTF8
+    foreach ($group in $document.SelectNodes('/aiscript/interrupts/library/actions')) {
+        if ($actionDefinitions.ContainsKey($group.name)) { throw ('Duplicate action library: ' + $group.name) }
+        $actionDefinitions[$group.name] = $file.Name
+    }
+    foreach ($reference in $document.SelectNodes('//include_interrupt_actions')) {
+        if ($reference.ref.StartsWith('MWEX_')) {
+            $actionReferences += [pscustomobject]@{file=$file.Name;reference=$reference.ref}
+        }
+    }
+}
+foreach ($reference in $actionReferences) {
+    if (-not $actionDefinitions.ContainsKey($reference.reference)) { throw ('Missing action library: ' + $reference.reference) }
+}
+$report = [pscustomobject]@{schema_validation=$results;base_patch_selectors=$selectors;action_libraries=$actionDefinitions;action_references=$actionReferences}
 $report | ConvertTo-Json -Depth 7 | Set-Content -LiteralPath (Join-Path $PSScriptRoot 'schema_checks.json') -Encoding UTF8
 if (@($results | Where-Object {$_.errors.Count -gt 0}).Count -gt 0) { throw 'Schema validation failed; see tools/schema_checks.json' }
 if (@($selectors | Where-Object {$_.matches -ne 1}).Count -gt 0) { throw 'Patch selector validation failed; see tools/schema_checks.json' }
-Write-Output ('Validated {0} XML files and {1} native patch selectors.' -f $results.Count,$selectors.Count)
+Write-Output ('Validated {0} XML files, {1} native patch selectors and {2} action libraries ({3} resolved references).' -f $results.Count,$selectors.Count,$actionDefinitions.Count,$actionReferences.Count)

@@ -1,4 +1,4 @@
-<?xml version='1.0' encoding='utf-8'?>
+<?xml version="1.0" encoding="utf-8"?>
 <language>
   <page id="61552" voice="no">
     <t id="1001">M1- Travel Mule</t>
@@ -91,7 +91,7 @@
     <t id="4103">Assign to the home station if it's the players.</t>
     <t id="4104">Max gate distance to buy.</t>
     <t id="4105">With a player station as home, supply only that station and its construction storage. With a sector as home, supply player stations in that sector. Disabling allows other player stations within range. Suppliers may be in other sectors within range. An explicitly selected NPC home follows its own NPC service rules.</t>
-    <t id="4106">When enabled, prefer eligible owned factories or warehouses for main and secondary lots; use NPC supply for unavailable or insufficient owned supply. When disabled, eligible owned and NPC sources compete under the same distance and price rules. The owned stock threshold and all range, path and trade checks apply in both modes. The NPC source switch controls NPC sources only.</t>
+    <t id="4106">Prefer eligible owned supply within feasible trips. A trip meeting minimum load takes precedence over an underfilled trip. Then compare the owned share of capacity and estimated delivered volume per time. Turning this off keeps owned sources eligible under the same ordinary ranking; their stock threshold still applies. NPC supply has its own switch.</t>
     <t id="4107">Allows buys from AI Faction Stations.</t>
     <t id="4108">Buy materials for delivery to the receiving station's construction storage, for building or expansion. This does not collect goods from construction storage.</t>
     <t id="4109">Supply wares the receiver consumes or needs for resupply but does not produce itself, such as microchips for an advanced electronics factory. This is a receiver-use category, not a restriction to ore or gas. The ship must still carry the ware.</t>
@@ -107,12 +107,12 @@
     <t id="4119">The source station</t>
     <t id="4120">Assign to the home station if it's the players.</t>
     <t id="4121">Maximum procurement lots per trip. The capacity dispatcher supports multiple pickups followed by deliveries.</t>
-    <t id="4122">Minimum total planned load per trip. Normal allocation runs from largest cargo capacity to smallest; remaining demand then runs from smallest to largest without this minimum. Maximum lots and all trade rules still apply.</t>
+    <t id="4122">Minimum combined planned load per trip. Every idle ship searches independently. After three consecutive completed searches rejected for insufficient load, its next search temporarily waives this minimum. Purchase limits and all other trade rules still apply. Success or configuration changes reset the counter.</t>
     <t id="4123">Work per candidate batch. Lower values yield more often; candidates are not randomly discarded.</t>
     <t id="4024">Secondary corridor radius (jumps)</t>
     <t id="4025">Price markup per off-route jump %</t>
     <t id="4124">Maximum jumps from the fixed home-to-primary-supplier route for secondary pickups. All suppliers must also remain inside the original home range. Zero means route sectors only.</t>
-    <t id="4125">Comparison price = actual price × (1 + off-route jumps × percent / 100). Only ranks competing suppliers of the same ware. Zero disables markup, not the corridor radius.</t>
+    <t id="4125">Actual price × (1 + off-route jumps × percent / 100) contributes to the cost tie-break between equally ranked trips. Delivered volume per estimated time takes precedence. This never changes payment. Zero disables markup, not corridor limits.</t>
     <t id="4200">M4 capacity procurement</t>
     <t id="4201">%s: no executable procurement for %s within %s home jumps. Last rejection: %s.</t>
     <t id="4205">%s: incomplete submission; queued orders are withdrawn where possible. Running orders remain. After all orders end, remaining cargo is liquidated at ware average price. See M4 Capacity Dispatch.</t>
@@ -127,7 +127,7 @@
     <t id="4305">Outside corridor: supplier=%s deviation=%s jumps allowed=%s.</t>
     <t id="4306">Insufficient quantity/minimum lot: supplier=%s ware=%s net demand=%s net supply=%s free volume=%s after native storage/funds clamp=%s supplier minimum=%s receiver minimum=%s remaining budget=%s Cr actual buy=%s Cr.</t>
     <t id="4307">No reachable transport route under this ship travel blacklist.</t>
-    <t id="4308">Trip load below threshold: volume=%s capacity=%s required=%s%% lots=%s maximum=%s. Normal pass defers to ascending relaxed allocation.</t>
+    <t id="4308">Trip load below threshold: volume=%s capacity=%s required=%s%% lots=%s maximum=%s. Three consecutive completed insufficient-load searches permit a relaxed next search.</t>
     <t id="4310">Offer/station invalid or ship not operational.</t>
     <t id="4311">Range/unreachable: station=%s legal jumps=%s maximum=%s; negative means no legal path.</t>
     <t id="4312">Native quote unavailable to this ship: station=%s ware=%s. Trade rules, activity blacklists, withdrawn quotes or reservations may apply; native query gives no finer reason.</t>
@@ -138,7 +138,7 @@
     <t id="4320">%s: liquidated %s, %s units at average %s Cr/unit; credited player %s Cr. No station delivery occurred.</t>
     <t id="4321">%s: commit revalidation failed; no orders created. See adjacent COMMIT_CHECK records.</t>
     <t id="4322">Revalidation failed: %s; ship=%s supplier=%s ware=%s planned=%s.</t>
-    <t id="4323">Actual price changed or modifier expired</t>
+    <t id="4323">Live price could not be determined</t>
     <t id="4324">Owned source no longer exceeds stock trigger</t>
     <t id="4325">Net demand/supply no longer covers reserved plan</t>
     <t id="4326">Cumulative procurement/receiver funds insufficient</t>
@@ -155,10 +155,10 @@
     <t id="4352">Tail allocation [minimum load waived]</t>
     <t id="4353">Commit result [actual orders]</t>
     <t id="4354">Ship: %s [%s]; home: %s. Settings: minimum load %s%%, maximum %s purchases, home range %s jumps, corridor deviation %s jumps, markup %s%% per jump, owned stock trigger %s%%.</t>
-    <t id="4355">Expected tail-allocation rule: temporarily waive minimum load for THIS evaluation. Normal allocation has visited this home's fleet from largest to smallest capacity; remaining demand is now evaluated from smallest to largest. Larger ships may participate when smaller ships are busy or cannot cover demand. Player settings are unchanged. Purchase count, price, route, docking and drone checks still apply.</t>
-    <t id="4356">Normal phase: evaluate this home's fleet by actual cargo capacity, largest first. Primary and secondary purchases must reach the configured combined minimum load; otherwise defer to other vessels.</t>
+    <t id="4355">Temporarily waive minimum load for THIS evaluation after three consecutive completed insufficient-load searches by this ship. Player settings are unchanged. Purchase count, price, route, docking and drone checks still apply.</t>
+    <t id="4356">Normal evaluation: this idle ship plans independently. Combined primary and secondary purchases must meet its configured minimum load. Other ships can search during its planning yields.</t>
     <t id="4357">Home capacity group [listed smallest first]: representative name %s; capacity %s m³; %s registered ships, %s operational ships with empty order queues. This describes fleet state, not eligibility for every trade.</t>
-    <t id="4358">Source/demand settings: prefer owned=%s; allow NPC=%s; home only=%s; build storage=%s; non-produced inputs=%s; self-produced inputs=%s; locked ware list=%s. Within a supplier tier the primary purchase compares legal home jumps, then actual price. Secondary purchases may cover other needed wares or more of the primary ware, but must share the receiver.</t>
+    <t id="4358">Source/demand settings: prefer owned=%s; allow NPC=%s; home only=%s; build storage=%s; non-produced inputs=%s; self-produced inputs=%s; locked ware list=%s. Compare bounded alternative primary suppliers and combined trip throughput. Secondary purchases may cover other wares or more of the same ware, sharing one receiver.</t>
     <t id="4360">Purchase %s search / ware %s / receiver %s: %s</t>
     <t id="4361">Demand excluded / ware %s / receiver %s: %s</t>
     <t id="4362">Supplier %s: %s</t>
@@ -169,7 +169,7 @@
     <t id="4367">Combination result: %s/%s purchases; volume %s / capacity %s m³; load %s%%, configured minimum %s%%.</t>
     <t id="4368">Normal evaluation passed: combined load meets the minimum. This is only a draft; see the subsequent commit result to confirm order creation.</t>
     <t id="4369">Tail evaluation passed: the expected rule waives minimum load for this evaluation, allowing small legal shipments. Purchase count still applies; invalid secondary lots are not added to fill the count. This is a draft; see the commit result for actual orders.</t>
-    <t id="4370">Normal evaluation rejected: combined load is below minimum. No orders created for this ship yet. Other capacity groups continue evaluation; remaining demand may enter ascending tail allocation. This is expected allocation behavior.</t>
+    <t id="4370">Normal evaluation rejected: combined load is below minimum; no orders created. After three consecutive completed insufficient-load searches this ship may waive minimum load on its next attempt. Other ships search independently.</t>
     <t id="4371">No executable purchase was assembled. Waiving minimum load does not bypass quotes, funds, routes, cargo type or docking checks.</t>
     <t id="4372">Procurement draft passed this phase. Commit revalidation is still required; this report does not mean actual orders exist.</t>
     <t id="4373">No procurement draft submitted. Last status: %s. See the full search below; the last status is not the rejection reason for every candidate.</t>
@@ -195,7 +195,7 @@
     <t id="4403">File: Documents/Egosoft/X4/[user ID]/logs/MulesExtended/debug.txt. X4 scripts cannot write directly into the mod installation directory.</t>
     <t id="4404">M4 summary · %s · %s</t>
     <t id="4405">Waiting: no purchase committed</t>
-    <t id="4406">This evaluation temporarily waived minimum load after normal descending-capacity assessment, using ascending-capacity tail allocation. The configured minimum is unchanged; maximum purchases and all trade checks still apply.</t>
+    <t id="4406">This evaluation temporarily waived minimum load after three consecutive completed insufficient-load searches by this ship. The configured minimum is unchanged; maximum purchases and all trade checks still apply.</t>
     <t id="4407">%s: draft %s purchases, %s / %s m³, load %s%%; supplier checks %s. Counts describe first rejection checks, may revisit a supplier, and do not imply all later checks passed.</t>
     <t id="4408">Price check rejected %s times, including %s during secondary search. Smallest actual purchase price minus receiver bid: %s Cr, ware %s. NPC purchases require a strictly positive spread; equality is rejected too. A cheaper bid alone does not guarantee all remaining conditions.</t>
     <t id="4409">Secondary corridor range rejected %s times; closest rejected source was still %s jumps over the configured limit, ware %s. Increasing the limit alone does not guarantee a valid trade.</t>
@@ -205,5 +205,49 @@
     <t id="4413">Combination stopped: planned cargo reached capacity.</t>
     <t id="4414">Combination stopped: reached the configured maximum purchases per trip.</t>
     <t id="4415">Combination stopped: no executable next purchase found. Maximum purchases is a limit, not a required count.</t>
+    <t id="4416">Planning budget exhausted; retry with rotating candidates. This does not count as a load failure.</t>
+    <t id="4420">Dispatched</t>
+    <t id="4421">Insufficient load</t>
+    <t id="4422">No feasible trip</t>
+    <t id="4423">Search incomplete</t>
+    <t id="4424">Commit failed</t>
+    <t id="4425">Dispatched: created %s purchases and their deliveries.</t>
+    <t id="4426">Reason: search budget reached; rotate candidates next time. Not a load failure.</t>
+    <t id="4427">Reason: best available draft is below the %s%% minimum load.</t>
+    <t id="4428">Reason: no executable demand/supply candidates passed filtering.</t>
+    <t id="4429">Reason: candidates could not form a feasible route.</t>
+    <t id="4430">Draft: %s lots, %s / %s m³, load %s%%; minimum %s%%.</t>
+    <t id="4431">Secondary lots: %s extensions tried, %s feasible additions across alternative drafts.</t>
+    <t id="4432">Secondary search skipped: purchase limit is one.</t>
+    <t id="4433">No secondary extension: primary lot fills cargo capacity.</t>
+    <t id="4434">Secondary search skipped: no primary candidate.</t>
+    <t id="4435">No secondary extension: route budget exhausted.</t>
+    <t id="4436">No secondary extension: no other candidate shares receiver/storage type with remaining quantity.</t>
+    <t id="4437">Candidate rejections: %s price checks; smallest spread shortfall %s, %s Cr.</t>
+    <t id="4438">Secondary corridor rejected %s extensions; closest %s still exceeds limit by %s jumps.</t>
+    <t id="4439">Unreachable route: %s checks.</t>
+    <t id="4440">Last candidate rejection: %s</t>
+    <t id="4441">Minimum load waived after consecutive load failures or the wait limit; other rules remain.</t>
+    <t id="4442">Consecutive load failures %s/3; the next attempt after 3 may waive minimum load.</t>
+    <t id="4443">Lot %s: %s × %s, %s → %s.</t>
+    <t id="4444">M4 · %s · %s</t>
+    <t id="4450">Commit failed: %s quote for %s is no longer available; select a new trip.</t>
+    <t id="4451">Commit failed: cannot read actual price for %s / %s.</t>
+    <t id="4452">Commit failed: %s / %s has insufficient quantity; planned %s, available %s.</t>
+    <t id="4453">Commit failed: purchase requires %s Cr, available %s Cr; receiver requires %s Cr, available %s Cr.</t>
+    <t id="4454">Commit failed: shared cargo space insufficient; planned %s m³, ship free %s, receiver free %s.</t>
+    <t id="4455">Commit failed: ship orders, assignment or settings changed.</t>
+    <t id="4456">Commit failed: %s stock of %s no longer exceeds %s%% supply threshold.</t>
+    <t id="4457">Commit failed: %s buy price %s Cr, delivery price %s Cr; spread is not positive.</t>
+    <t id="4458">Commit failed: native order creation incomplete; queued orders withdrawn where possible.</t>
+    <t id="4460">Capacity-band wait: main lots temporarily prefer suitable idle ships; cross-band fallback after 90 game seconds or 3 unsuccessful attempts.</t>
+    <t id="4461">Candidate upper bounds: demand %s m³ / eligible supply %s m³; cross-band candidates %s. Waiting %s game seconds, current minimum %s%%.</t>
+    <t id="4462">Some secondary lots cannot share this trip because receiver or cargo type differs.</t>
+    <t id="4463">Draft reached the purchase-lot limit; no additional pickup can use the remaining space.</t>
+    <t id="4464">Quantities changed before submission: draft resized or topped up from existing candidates, then verified again.</t>
+    <t id="4465">Even total candidate demand is below this ship's loading threshold.</t>
+    <t id="4466">Eligible supply in this candidate pool is below the loading threshold; unselected suppliers are not included.</t>
+    <t id="4471">M4: full candidate trace (large logs)</t>
+    <t id="4472">Off: keep reason counts, bounded samples and every task result. On: log every candidate. M4 only; requires Debug.</t>
   </page>
 </language>

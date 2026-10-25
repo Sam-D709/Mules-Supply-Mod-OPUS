@@ -1,23 +1,50 @@
 <?xml version="1.0" encoding="utf-8"?>
 <aiscript name="mule.fleet.recover" version="3">
-  <params><param name="cfg"/></params>
-  <attention min="unknown"><actions>
-    <set_value name="$ship" exact="$cfg.$ship"/>
-    <do_if value="$ship.orders.count or not $ship.cargo.count"><return/></do_if>
-    <!-- User-selected legacy liquidation: only idle cargo, never cargo covered by live orders. -->
-    <do_for_each name="$ware" in="$ship.cargo.list">
-      <set_value name="$amount" exact="$ship.cargo.{$ware}.count"/>
-      <do_if value="$amount le 0"><continue/></do_if>
-      <remove_cargo object="$ship" ware="$ware" exact="$amount"/>
-      <set_value name="$removed" exact="[$amount-$ship.cargo.{$ware}.count,0].max"/>
-      <do_if value="$removed gt 0">
-        <set_value name="$refund" exact="$removed*$ware.averageprice"/>
-        <reward_player money="$refund"/>
-        <write_to_logbook category="upkeep" object="$ship" title="{61552,4200}" interaction="showonmap" money="$refund" text="{61552,4320}.[$ship.knownname,$ware.name,$removed,$ware.averageprice/1Cr,$refund/1Cr]"/>
-        <do_if value="@global.$mwexDebug"><debug_to_file directory="'MulesExtended'" name="'debug.txt'" append="true" text="{61552,4320}.[$ship.idcode,$ware.name,$removed,$ware.averageprice/1Cr,$refund/1Cr]"/></do_if>
+  <params>
+    <param name="cfg" />
+  </params>
+  <attention min="unknown">
+    <actions>
+      <set_value name="$ship" exact="$cfg.$ship" />
+      <do_if value="$ship.orders.count or not $ship.cargo.count">
+        <return />
       </do_if>
-    </do_for_each>
-    <remove_value name="$ship.pilot.$mwexFleetVoyage"/>
-    <return/>
-  </actions></attention>
+      <!-- User-selected legacy liquidation: only idle cargo, never cargo covered by live orders. -->
+      <do_if value="@global.$mwexDebug">
+        <set_value name="$mwtrace_diagnostic" exact="table[$ship=$ship,$attempt=null,$relaxed=false,$voyage=@$ship.pilot.$mwexM4Voyage]" />
+        <set_value name="$mwtrace_file" exact="'economy'" />
+        <set_value name="$mwtrace_text" exact="'RECOVERY_BEGIN cargo=%s orders=%s reason=idle_cargo'.[$ship.cargo.count,$ship.orders.count]" />
+        <include_interrupt_actions ref="MWEX_Fleet_trace" />
+      </do_if>
+      <do_for_each name="$ware" in="$ship.cargo.list">
+        <set_value name="$amount" exact="$ship.cargo.{$ware}.count" />
+        <do_if value="$amount le 0">
+          <continue />
+        </do_if>
+        <remove_cargo object="$ship" ware="$ware" exact="$amount" />
+        <set_value name="$removed" exact="[$amount-$ship.cargo.{$ware}.count,0].max" />
+        <do_if value="$removed gt 0">
+          <set_value name="$refund" exact="$removed*$ware.averageprice" />
+          <reward_player money="$refund" />
+          <write_to_logbook category="upkeep" object="$ship" title="{61552,4200}" interaction="showonmap" money="$refund" text="{61552,4320}.[$ship.knownname,$ware.name,$removed,$ware.averageprice/1Cr,$refund/1Cr]" />
+          <do_if value="@global.$mwexDebug">
+            <do_if value="@global.$mwexDebug">
+              <set_value name="$mwtrace_diagnostic" exact="table[$ship=$ship,$attempt=null,$relaxed=false,$voyage=@$ship.pilot.$mwexM4Voyage]" />
+              <set_value name="$mwtrace_text" exact="'RECOVERY_REFUND ware=%s removed=%s averagePrice=%s refundCr=%s reason=idle_cargo_virtual_liquidation'.[$ware,$removed,$ware.averageprice/1Cr,$refund/1Cr]" />
+              <set_value name="$mwtrace_file" exact="'economy'" />
+              <include_interrupt_actions ref="MWEX_Fleet_trace" />
+            </do_if>
+          </do_if>
+        </do_if>
+      </do_for_each>
+      <do_if value="@global.$mwexDebug">
+        <set_value name="$mwtrace_diagnostic" exact="table[$ship=$ship,$attempt=null,$relaxed=false,$voyage=@$ship.pilot.$mwexM4Voyage]" />
+        <set_value name="$mwtrace_file" exact="'economy'" />
+        <set_value name="$mwtrace_text" exact="'RECOVERY_END cargo=%s orders=%s'.[$ship.cargo.count,$ship.orders.count]" />
+        <include_interrupt_actions ref="MWEX_Fleet_trace" />
+      </do_if>
+      <remove_value name="$ship.pilot.$mwexFleetVoyage" />
+      <return />
+    </actions>
+  </attention>
 </aiscript>

@@ -1,122 +1,236 @@
 <?xml version="1.0" encoding="utf-8"?>
-<aiscript name="mule.fleet.wave" version="11">
-  <params><param name="hub"/></params>
-  <patch sinceversion="11"><return/></patch>
-  <patch sinceversion="10"><return/></patch>
-  <patch sinceversion="9"><return/></patch>
-  <patch sinceversion="8"><return/></patch>
-  <patch sinceversion="7"><return/></patch>
-  <patch sinceversion="6"><return/></patch>
-  <patch sinceversion="5"><return/></patch>
-  <patch sinceversion="4"><return/></patch>
-  <attention min="unknown"><actions>
-    <set_value name="$successes" exact="0"/>
-    <set_value name="$hub.$prices" exact="table[]"/>
-    <set_value name="$hub.$failures" exact="table[]"/>
-    <set_value name="$negative" exact="table[]"/>
-    <set_value name="$negativeDiagnostic" exact="table[]"/>
-    <set_value name="$normalDiagnostics" exact="table[]"/>
-    <set_value name="$shipDiagnostics" exact="table[]"/>
-    <set_value name="$failedCommit" exact="table[]"/>
-    <set_value name="$shipFailures" exact="table[]"/>
-    <set_value name="$visits" exact="0"/>
-    <do_if value="$hub.$cacheDirty or player.age ge $hub.$cacheUntil or $hub.$cacheEpoch != global.$mwexFleetEpoch">
-      <run_script name="'mule.fleet.discover'"><param name="hub" value="$hub"/></run_script>
-    </do_if>
-    <set_value name="$descending" exact="$hub.$descending"/>
-    <set_value name="$ascending" exact="$hub.$ascending"/>
-    <!-- Each phase visits ALL available members. Busy small models do not block the next larger one. -->
-    <do_all exact="2" counter="$phase">
-      <set_value name="$relaxed" exact="$phase == 2"/>
-      <set_value name="$groupOrder" exact="if $relaxed then $ascending else $descending"/>
-      <do_for_each name="$groupKey" in="$groupOrder">
-        <do_if value="not $hub.$groups.{$groupKey}?"><continue/></do_if>
-        <do_for_each name="$ship" in="$hub.$groups.{$groupKey}">
-          <set_value name="$visits" operation="add" exact="1"/>
-          <do_if value="$visits ge 16">
-            <set_value name="global.$mwexFleetLock.$time" exact="player.age"/><wait exact="1ms"/>
-            <set_value name="$visits" exact="0"/>
-          </do_if>
-          <do_if value="not $ship.isoperational or not $ship.pilot.exists or not $hub.$members.{$ship}?"><continue/></do_if>
-          <do_if value="$failedCommit.{$ship}?"><continue/></do_if>
-          <set_value name="$cfg" exact="$hub.$members.{$ship}"/>
-          <do_if value="$cfg.$home != $hub.$home or ($ship.defaultorder.id == 'SupplyMule' and $ship.defaultorder.$home != $cfg.$home)"><continue/></do_if>
-          <do_if value="$ship.orders.count or $ship == player.occupiedship or ($ship.pilot.$mwexFleetCfg.$origin != $cfg.$origin or $ship.pilot.$mwexFleetCfg.$signature != $cfg.$signature or $ship.pilot.$mwexFleetCfg.$commander != $cfg.$commander or $ship.pilot.$mwexFleetCfg.$bound != $cfg.$bound)"><continue/></do_if>
-          <do_if value="$cfg.$bound and $ship.commander != $cfg.$commander"><continue/></do_if>
-          <do_if value="$ship.defaultorder != $cfg.$origin"><continue/></do_if>
-          <do_if value="$ship.cargo.count">
-            <run_script name="'mule.fleet.recover'"><param name="cfg" value="$cfg"/></run_script>
-            <do_if value="$ship.cargo.count"><continue/></do_if>
-          </do_if>
-          <!-- Conservative equivalence: explicit personal blacklists prevent reuse across ships. -->
-          <set_value name="$personal" exact="$ship.hasblacklist.{blacklisttype.sectortravel}.{blacklistgroup.civilian} or $ship.hasblacklist.{blacklisttype.sectoractivity}.{blacklistgroup.civilian} or $ship.hasblacklist.{blacklisttype.objectactivity}.{blacklistgroup.civilian}"/>
-          <set_value name="$failureKey" exact="'$failure/%s/%s/%s/%s/%s/%s/%s'.[$groupKey,$cfg.$signature,$ship.money,$ship.commander,($ship.units.{unitcategory.transport}.count gt 0),if $personal then $ship else '-',$relaxed]"/>
-          <do_if value="$negative.{$failureKey}?">
-            <set_value name="$shipFailures.{$ship}" exact="$negative.{$failureKey}"/>
-            <do_if value="@global.$mwexDebug"><debug_to_file directory="'MulesExtended'" name="'debug.txt'" append="true" text="'MODEL_SKIP ship=%s key=%s reason=%s'.[$ship.idcode,$failureKey,$negative.{$failureKey}]"/></do_if>
-            <set_value name="$diagnostic" exact="$negativeDiagnostic.{$failureKey}"/>
-            <set_value name="$shipDiagnostics.{$ship}" exact="$diagnostic"/>
-            <do_if value="not $relaxed"><set_value name="$normalDiagnostics.{$ship}" exact="$diagnostic"/></do_if>
-            <continue/>
-          </do_if>
-          <run_script name="'mule.fleet.plan'">
-            <param name="hub" value="$hub"/><param name="cfg" value="$cfg"/><param name="relaxed" value="$relaxed"/>
-            <save_retval name="plan" variable="$plan"/><save_retval name="failure" variable="$reason"/><save_retval name="diagnostic" variable="$diagnostic"/>
-          </run_script>
-          <set_value name="$shipDiagnostics.{$ship}" exact="$diagnostic"/>
-          <do_if value="not $relaxed"><set_value name="$normalDiagnostics.{$ship}" exact="$diagnostic"/></do_if>
-          <do_if value="$plan.count">
-            <run_script name="'mule.fleet.commit'"><param name="cfg" value="$cfg"/><param name="plan" value="$plan"/><save_retval name="ok" variable="$ok"/><save_retval name="failure" variable="$commitReason"/></run_script>
-            <run_script name="'mule.fleet.journal'">
-              <param name="cfg" value="$cfg"/><param name="diagnostic" value="$diagnostic"/><param name="normal" value="@$normalDiagnostics.{$ship}"/>
-              <param name="plan" value="$plan"/><param name="phase" value="'$commit'"/><param name="force" value="$ok"/>
-              <param name="outcome" value="if $ok then {61552,4375}.[if $relaxed then {61552,4352} else {61552,4351},$plan.count] else {61552,4387}.[$commitReason]"/>
-            </run_script>
-            <do_if value="$ok">
-              <set_value name="$successes" operation="add" exact="1"/>
-              <set_value name="$negative" exact="table[]"/>
-              <set_value name="$negativeDiagnostic" exact="table[]"/>
-              <remove_value name="$shipFailures.{$ship}"/>
-              <run_script name="'mule.fleet.report'"><param name="cfg" value="$cfg"/></run_script>
-              <do_for_each name="$leg" in="$plan">
-                <remove_value name="$hub.$warnings.{$leg.$need}"/>
-                <remove_value name="$hub.$failures.{$leg.$need}"/>
-              </do_for_each>
-            </do_if>
-            <do_else><set_value name="$failedCommit.{$ship}" exact="true"/><set_value name="$shipFailures.{$ship}" exact="$commitReason"/></do_else>
-          </do_if>
-          <do_elseif value="$reason != 'ship_changed'"><set_value name="$negative.{$failureKey}" exact="$reason"/><set_value name="$negativeDiagnostic.{$failureKey}" exact="$diagnostic"/><set_value name="$shipFailures.{$ship}" exact="$reason"/></do_elseif>
-        </do_for_each>
-      </do_for_each>
-    </do_all>
-    <!-- Record final results only: normal-phase load rejections may succeed in the relaxed phase. -->
-    <do_for_each name="$ship" valuename="$cfg" in="$hub.$members">
-      <do_if value="$cfg.$home != $hub.$home or ($ship.defaultorder.id == 'SupplyMule' and $ship.defaultorder.$home != $cfg.$home)"><continue/></do_if>
-      <do_if value="not $ship.isoperational or not $ship.pilot.exists or $ship.defaultorder != $cfg.$origin or ($ship.pilot.$mwexFleetCfg.$origin != $cfg.$origin or $ship.pilot.$mwexFleetCfg.$signature != $cfg.$signature or $ship.pilot.$mwexFleetCfg.$commander != $cfg.$commander or $ship.pilot.$mwexFleetCfg.$bound != $cfg.$bound) or ($cfg.$bound and $ship.commander != $cfg.$commander)"><continue/></do_if>
-      <do_if value="$ship.orders.count or $ship == player.occupiedship"><continue/></do_if>
-      <do_if value="$shipFailures.{$ship}? and not $failedCommit.{$ship}?"><run_script name="'mule.fleet.journal'">
-        <param name="cfg" value="$cfg"/><param name="diagnostic" value="@$shipDiagnostics.{$ship}"/><param name="normal" value="@$normalDiagnostics.{$ship}"/>
-        <param name="phase" value="'$idle'"/><param name="outcome" value="{61552,4405}+'\n'+$shipFailures.{$ship}"/>
-      </run_script></do_if>
-      <do_if value="$shipFailures.{$ship}?"><run_script name="'mule.fleet.report'"><param name="cfg" value="$cfg"/><param name="reason" value="$shipFailures.{$ship}"/></run_script></do_if>
-    </do_for_each>
-    <!-- Search is exhausted, not just one page. Notifications do not claim a precise cause beyond the last actual rejection. -->
-    <do_for_each name="$need" valuename="$reason" in="$hub.$failures">
-      <run_script name="'mule.fleet.net'"><param name="offer" value="$need"/><save_retval name="net" variable="$net"/></run_script>
-      <do_if value="$net le 0"><remove_value name="$hub.$warnings.{$need}"/><continue/></do_if>
-      <do_if value="not $hub.$warnings.{$need}? or player.age ge $hub.$warnings.{$need}+10min">
-        <set_value name="$maxRange" exact="0"/>
-        <do_for_each valuename="$cfg" in="$hub.$members"><set_value name="$maxRange" exact="[$maxRange,$cfg.$maxDist].max"/></do_for_each>
-        <signal_objects object="player.entity" param="'mwex_capacity_warning'" param2="table[$station=$need.owner,$ware=$need.ware,$range=$maxRange,$reason=$reason]"/>
-        <set_value name="$hub.$warnings.{$need}" exact="player.age"/>
+<aiscript name="mule.fleet.wave" version="16">
+  <params>
+    <param name="hub" />
+    <param name="cfg" default="null" />
+    <param name="debugTrigger" default="null" />
+    <param name="debugReturnToken" default="null" />
+  </params>
+  <patch sinceversion="15">
+    <return />
+  </patch>
+  <patch sinceversion="14">
+    <return />
+  </patch>
+  <patch sinceversion="13">
+    <return />
+  </patch>
+  <patch sinceversion="16">
+    <return />
+  </patch>
+  <attention min="unknown">
+    <actions>
+      <!-- Each pilot searches only for itself. Returning ships never wait for a fleet-wide sweep. -->
+      <do_if value="not $cfg">
+        <return />
       </do_if>
-    </do_for_each>
-    <do_if value="$successes">
-      <set_value name="$hub.$backoff" exact="2s"/>
+      <set_value name="$ship" exact="$cfg.$ship" />
+      <set_value name="$mwobserve_cfg" exact="$cfg" />
+      <include_interrupt_actions ref="MWEX_Log_register" />
+      <do_if value="not $ship.isoperational or not $ship.pilot.exists or $ship.orders.count or $ship == player.occupiedship or $cfg.$home != $hub.$home or $ship.defaultorder != $cfg.$origin or ($cfg.$origin.id == 'SupplyMule' and $cfg.$origin.$home != $cfg.$home) or ($cfg.$bound and $ship.commander != $cfg.$commander)">
+        <set_value name="$mwstate_cfg" exact="$cfg" />
+        <set_value name="$mwstate_value" exact="'skipped'" />
+        <set_value name="$mwstate_reason" exact="if not $ship.isoperational then 'ship_not_operational' else if not $ship.pilot.exists then 'pilot_missing' else if $ship.orders.count then 'existing_orders' else if $ship == player.occupiedship then 'player_controlled' else 'binding_or_config_changed'" />
+        <include_interrupt_actions ref="MWEX_Log_state" />
+        <return />
+      </do_if>
+      <set_value name="$attempt" exact="@$ship.pilot.$mwexFleetAttempt" />
+      <do_if value="not $attempt or $attempt.$signature != $cfg.$signature or $attempt.$origin != $cfg.$origin">
+        <do_if value="@global.$mwexDebug">
+          <set_value name="$mwtrace_diagnostic" exact="table[$ship=$ship,$attempt=null,$relaxed=false]" />
+          <set_value name="$mwtrace_text" exact="'WAIT_RESET reason=configuration_or_origin oldWaitingSince=%s oldFailures=%s oldMisses=%s'.[@$attempt.$waitingSince,@$attempt.$failures,@$attempt.$misses]" />
+          <set_value name="$mwtrace_file" exact="'lifecycle'" />
+          <include_interrupt_actions ref="MWEX_Fleet_trace" />
+        </do_if>
+        <set_value name="$attempt" exact="table[$signature=$cfg.$signature,$origin=$cfg.$origin,$failures=0,$misses=0,$waitingSince=player.age,$next=0s,$backoff=2s]" />
+        <set_value name="$ship.pilot.$mwexFleetAttempt" exact="$attempt" />
+        <remove_value name="$ship.pilot.$mwexFleetSearchWide" />
+        <remove_value name="$ship.pilot.$mwexFleetNeedOffset" />
+      </do_if>
+      <do_if value="player.age lt $attempt.$next">
+        <set_value name="$mwstate_cfg" exact="$cfg" />
+        <set_value name="$mwstate_value" exact="'backoff'" />
+        <set_value name="$mwstate_reason" exact="'next_search_not_due'" />
+        <include_interrupt_actions ref="MWEX_Log_state" />
+        <return />
+      </do_if>
+      <do_if value="$ship.cargo.count">
+        <set_value name="$mwstate_cfg" exact="$cfg" />
+        <set_value name="$mwstate_value" exact="'recovering'" />
+        <set_value name="$mwstate_reason" exact="'idle_cargo'" />
+        <include_interrupt_actions ref="MWEX_Log_state" />
+        <run_script name="'mule.fleet.recover'">
+          <param name="cfg" value="$cfg" />
+        </run_script>
+        <do_if value="$ship.cargo.count">
+          <return />
+        </do_if>
+      </do_if>
+      <do_if value="$hub.$cacheDirty or player.age ge $hub.$cacheUntil or $hub.$cacheEpoch != global.$mwexFleetEpoch">
+        <do_if value="not $hub.$building? or not @$hub.$building.$actor.exists or player.age gt $hub.$building.$time+60s">
+          <set_value name="$build" exact="table[$actor=this,$time=player.age]" />
+          <set_value name="$hub.$building" exact="$build" />
+          <set_value name="$mwstate_cfg" exact="$cfg" />
+          <set_value name="$mwstate_value" exact="'discovering'" />
+          <set_value name="$mwstate_reason" exact="'cache_refresh'" />
+          <include_interrupt_actions ref="MWEX_Log_state" />
+          <run_script name="'mule.fleet.discover'">
+            <param name="hub" value="$hub" />
+          </run_script>
+          <do_if value="@$hub.$building == $build">
+            <remove_value name="$hub.$building" />
+          </do_if>
+        </do_if>
+        <do_elseif value="not $hub.$needs.count">
+          <set_value name="$mwstate_cfg" exact="$cfg" />
+          <set_value name="$mwstate_value" exact="'waiting_index'" />
+          <set_value name="$mwstate_reason" exact="'another_builder_no_index'" />
+          <include_interrupt_actions ref="MWEX_Log_state" />
+          <set_value name="$attempt.$next" exact="player.age+1s" />
+          <return />
+        </do_elseif>
+      </do_if>
+      <do_if value="not $attempt.$waitingSince?">
+        <set_value name="$attempt.$waitingSince" exact="player.age" />
+      </do_if>
+      <do_elseif value="$attempt.$waitingSince == null">
+        <set_value name="$attempt.$waitingSince" exact="player.age" />
+      </do_elseif>
+      <set_value name="$waitAge" exact="[0s,player.age-$attempt.$waitingSince].max" />
+      <set_value name="$relaxed" exact="$attempt.$failures ge 3 or $waitAge ge 10min" />
+      <set_value name="$ship.pilot.$mwexFleetLastSearch" exact="player.age" />
+      <set_value name="$mwstate_cfg" exact="$cfg" />
+      <set_value name="$mwstate_value" exact="'searching'" />
+      <set_value name="$mwstate_reason" exact="if $debugTrigger? then $debugTrigger else 'normal'" />
+      <include_interrupt_actions ref="MWEX_Log_state" />
+      <do_if value="@global.$mwexDebug">
+        <set_value name="$mwtrace_diagnostic" exact="table[$ship=$ship,$attempt=null,$relaxed=$relaxed]" />
+        <set_value name="$mwtrace_text" exact="'WAVE_INPUT waitingSince=%s waitAge=%s failures=%s misses=%s backoff=%s next=%s trigger=%s returnToken=%s'.[$attempt.$waitingSince,$waitAge,$attempt.$failures,@$attempt.$misses,$attempt.$backoff,$attempt.$next,$debugTrigger,$debugReturnToken]" />
+        <set_value name="$mwtrace_file" exact="'lifecycle'" />
+        <include_interrupt_actions ref="MWEX_Fleet_trace" />
+      </do_if>
+      <run_script name="'mule.fleet.plan'">
+        <param name="hub" value="$hub" />
+        <param name="cfg" value="$cfg" />
+        <param name="relaxed" value="$relaxed" />
+        <param name="debugWait" value="$waitAge" />
+        <param name="debugWaitingSince" value="$attempt.$waitingSince" />
+        <param name="debugWave" value="this" />
+        <save_retval name="plan" variable="$plan" />
+        <save_retval name="failure" variable="$reason" />
+        <save_retval name="diagnostic" variable="$diagnostic" />
+      </run_script>
+      <do_if value="$reason == 'ship_changed'">
+        <do_if value="@global.$mwexDebug and $diagnostic">
+          <set_value name="$mwtrace_diagnostic" exact="$diagnostic" />
+          <set_value name="$mwtrace_text" exact="'RESULT status=ship_changed success=false'" />
+          <set_value name="$mwtrace_file" exact="'lifecycle'" />
+          <set_value name="$mwtrace_diagnostic.$logClosed" exact="true" />
+          <set_value name="$mwtrace_diagnostic.$phase" exact="'finished'" />
+          <include_interrupt_actions ref="MWEX_Fleet_trace" />
+        </do_if>
+        <return />
+      </do_if>
+      <set_value name="$ok" exact="false" />
+      <do_if value="$plan.count">
+        <set_value name="$diagnostic.$phase" exact="'commit'" />
+        <set_value name="$mwstate_cfg" exact="$cfg" />
+        <set_value name="$mwstate_value" exact="'committing'" />
+        <set_value name="$mwstate_reason" exact="'plan_ready'" />
+        <include_interrupt_actions ref="MWEX_Log_state" />
+        <run_script name="'mule.fleet.commit'">
+          <param name="cfg" value="$cfg" />
+          <param name="plan" value="$plan" />
+          <param name="diagnostic" value="$diagnostic" />
+          <param name="hub" value="$hub" />
+          <save_retval name="plan" variable="$plan" />
+          <save_retval name="status" variable="$commitStatus" />
+          <save_retval name="ok" variable="$ok" />
+          <save_retval name="failure" variable="$reason" />
+        </run_script>
+        <do_if value="$reason == 'commit_busy'">
+          <do_if value="@global.$mwexDebug">
+            <set_value name="$mwtrace_diagnostic" exact="$diagnostic" />
+            <set_value name="$mwtrace_text" exact="'RESULT status=commit_busy success=false'" />
+            <set_value name="$mwtrace_file" exact="'lifecycle'" />
+            <set_value name="$mwtrace_diagnostic.$logClosed" exact="true" />
+            <set_value name="$mwtrace_diagnostic.$phase" exact="'finished'" />
+            <include_interrupt_actions ref="MWEX_Fleet_trace" />
+          </do_if>
+          <set_value name="$attempt.$next" exact="player.age+1s" />
+          <return />
+        </do_if>
+        <set_value name="$diagnostic.$status" exact="if $ok then 'success' else $commitStatus" />
+        <set_value name="$diagnostic.$commitFailed" exact="not $ok" />
+        <set_value name="$diagnostic.$failure" exact="$reason" />
+        <set_value name="$mwjournal_cfg" exact="$cfg" />
+        <set_value name="$mwjournal_diagnostic" exact="$diagnostic" />
+        <set_value name="$mwjournal_plan" exact="$plan" />
+        <include_interrupt_actions ref="MWEX_Fleet_journal" />
+      </do_if>
+      <set_value name="$attempt.$lastStatus" exact="$diagnostic.$status" />
+      <do_if value="@global.$mwexDebug">
+        <set_value name="$mwtrace_diagnostic" exact="$diagnostic" />
+        <set_value name="$mwtrace_text" exact="'ATTEMPT_BEFORE_UPDATE status=%s failures=%s misses=%s waitingSince=%s next=%s budget=%s loadRejected=%s'.[$diagnostic.$status,$attempt.$failures,$attempt.$misses,$attempt.$waitingSince,$attempt.$next,$diagnostic.$budgetExhausted,$diagnostic.$loadRejected]" />
+        <set_value name="$mwtrace_file" exact="'lifecycle'" />
+        <include_interrupt_actions ref="MWEX_Fleet_trace" />
+      </do_if>
+      <do_if value="not $ok">
+        <set_value name="$attempt.$misses" exact="@$attempt.$misses+1" />
+        <do_if value="$diagnostic.$loadRejected and not $diagnostic.$budgetExhausted">
+          <set_value name="$attempt.$failures" exact="[$attempt.$failures+1,3].min" />
+        </do_if>
+        <do_elseif value="not $diagnostic.$budgetExhausted">
+          <set_value name="$attempt.$failures" exact="0" />
+        </do_elseif>
+        <set_value name="$ship.pilot.$mwexFleetSearchWide" exact="true" />
+        <set_value name="$ship.pilot.$mwexFleetSearchOffset" exact="@$ship.pilot.$mwexFleetSearchOffset+2" />
+        <set_value name="$attempt.$backoff" exact="[30s,$attempt.$backoff*2].min" />
+        <set_value name="$attempt.$next" exact="player.age+$attempt.$backoff" />
+        <do_if value="@global.$mwexDebug">
+          <set_value name="$mwtrace_diagnostic" exact="$diagnostic" />
+          <set_value name="$mwtrace_text" exact="'ATTEMPT_UPDATE failures=%s misses=%s waitingSince=%s backoff=%s next=%s needOffset=%s sourceOffset=%s'.[$attempt.$failures,$attempt.$misses,$attempt.$waitingSince,$attempt.$backoff,$attempt.$next,@$ship.pilot.$mwexFleetNeedOffset,@$ship.pilot.$mwexFleetSearchOffset]" />
+          <set_value name="$mwtrace_file" exact="'lifecycle'" />
+          <include_interrupt_actions ref="MWEX_Fleet_trace" />
+        </do_if>
+        <set_value name="$mwstate_cfg" exact="$cfg" />
+        <set_value name="$mwstate_value" exact="'backoff'" />
+        <set_value name="$mwstate_reason" exact="'search_unsuccessful'" />
+        <include_interrupt_actions ref="MWEX_Log_state" />
+        <do_if value="not $plan.count">
+          <set_value name="$mwjournal_cfg" exact="$cfg" />
+          <set_value name="$mwjournal_diagnostic" exact="$diagnostic" />
+          <set_value name="$mwjournal_plan" exact="[]" />
+          <include_interrupt_actions ref="MWEX_Fleet_journal" />
+        </do_if>
+        <set_value name="$mwreport_cfg" exact="$cfg" />
+        <set_value name="$mwreport_reason" exact="$reason" />
+        <include_interrupt_actions ref="MWEX_Fleet_report" />
+        <!-- Retain throttled home alerts without another whole-fleet or whole-failure-table sweep. -->
+        <set_value name="$need" exact="@$diagnostic.$lastNeed" />
+        <do_if value="$need and not $diagnostic.$loadRejected and not $diagnostic.$budgetExhausted and (not $hub.$warnings.{$need}? or player.age ge $hub.$warnings.{$need}+10min)">
+          <set_value name="$mwnet_offer" exact="$need" />
+          <include_interrupt_actions ref="MWEX_Fleet_net" />
+          <set_value name="$net" exact="$mwnet_out_net" />
+          <do_if value="$net gt 0">
+            <signal_objects object="player.entity" param="'mwex_capacity_warning'" param2="table[$station=$need.owner,$ware=$need.ware,$range=$cfg.$maxDist,$reason=$diagnostic.$lastFailure]" />
+            <set_value name="$hub.$warnings.{$need}" exact="player.age" />
+          </do_if>
+        </do_if>
+      </do_if>
+      <return />
+    </actions>
+  </attention>
+  <on_abort>
+    <do_if value="@global.$mwexDebug and $ship? and @$ship.pilot.$mwexM4Search.$wave == this and not @$ship.pilot.$mwexM4Search.$logClosed">
+      <do_if value="@global.$mwexDebug">
+        <set_value name="$mwtrace_diagnostic" exact="$ship.pilot.$mwexM4Search" />
+        <set_value name="$mwtrace_text" exact="'RESULT status=aborted success=false reason=script_interrupted stage=wave phase=%s cause=unknown'.[@$ship.pilot.$mwexM4Search.$phase]" />
+        <set_value name="$mwtrace_file" exact="'lifecycle'" />
+        <set_value name="$mwtrace_diagnostic.$logClosed" exact="true" />
+        <set_value name="$mwtrace_diagnostic.$phase" exact="'finished'" />
+        <include_interrupt_actions ref="MWEX_Fleet_trace" />
+      </do_if>
     </do_if>
-    <do_else><set_value name="$hub.$backoff" exact="[30s,$hub.$backoff*2].min"/></do_else>
-    <set_value name="$hub.$next" exact="player.age+$hub.$backoff"/>
-    <do_if value="@global.$mwexDebug"><debug_to_file directory="'MulesExtended'" name="'debug.txt'" append="true" text="'WAVE home=%s assigned=%s next=%s'.[$hub.$home,$successes,$hub.$next]"/></do_if>
-    <return/>
-  </actions></attention>
+  </on_abort>
 </aiscript>

@@ -1,183 +1,284 @@
 <?xml version="1.0" encoding="utf-8"?>
-<aiscript name="mule.fleet.run" version="8">
-  <params><param name="cfg"/><param name="once" default="false"/><param name="returnToken" default="null"/></params>
-  <patch sinceversion="8"><resume label="register"/></patch>
-  <patch sinceversion="7"><resume label="register"/></patch>
-  <patch sinceversion="6"><resume label="register"/></patch>
-  <patch sinceversion="2"><resume label="register"/></patch>
-  <patch sinceversion="3"><resume label="register"/></patch>
-  <patch sinceversion="5"><resume label="register"/></patch>
-  <patch sinceversion="4"><resume label="register"/></patch>
-  <attention min="unknown"><actions>
-    <label name="register"/>
-    <set_value name="$invokedAt" exact="player.age"/>
-    <set_value name="$ship" exact="$cfg.$ship"/>
-    <do_if value="$ship.defaultorder != $cfg.$origin"><return/></do_if>
-    <set_value name="$previousCfg" exact="@$ship.pilot.$mwexFleetCfg"/>
-    <!-- Direct order edits may leave the caller holding its old parameter snapshot. -->
-    <do_if value="$cfg.$origin.id == 'SupplyMule'">
-      <set_value name="$cfg" exact="$cfg.clone"/>
-      <set_value name="$cfg.$home" exact="$cfg.$origin.$home"/>
-    </do_if>
-    <set_value name="$home" exact="$cfg.$home"/>
-    <do_if value="not $home.exists or not $ship.isoperational"><wait exact="5s"/><return/></do_if>
-    <set_value name="$ship.pilot.$mwexFleetAssignmentCheck" exact="table[$time=player.age,$home=$home,$before=$ship.commander,$after=$ship.commander,$requested=@$ship.defaultorder.$assignHome,$defaultId=$ship.defaultorder.id,$sameOwner=$home.owner == $ship.owner,$sectorHome=$home.isclass.sector,$canHave=$ship.canhavecommander.{$home},$canTrade=$ship.canuseassignment.{assignment.trade}.{$home},$homeOperational=$home.isoperational,$homeTrader=if $home.isclass.sector then null else $home.tradenpc,$attempted=false]"/>
-    <!-- Assignment also runs after migration/parameter edits, where init may not repeat. -->
-    <set_value name="$ship.pilot.$mwexFleetAssignmentCheck.$reason" exact="'not-eligible'"/>
-    <do_if value="($ship.defaultorder.id == 'SupplyMule') and $ship.defaultorder.$assignHome and (not $home.isclass.sector) and ($home.owner == $ship.owner)">
-      <!-- Do not read absent blackboard values inside a combined OR expression. -->
-      <set_value name="$shouldBind" exact="false"/>
-      <set_value name="$ship.pilot.$mwexFleetAssignmentCheck.$reason" exact="'same-binding-detached'"/>
-      <do_if value="$ship.commander == $home">
-        <set_value name="$ship.pilot.$mwexFleetAssignmentCheck.$reason" exact="'already-assigned'"/>
-        <set_value name="$ship.pilot.$mwexFleetBoundOrigin" exact="$ship.defaultorder"/>
-        <set_value name="$ship.pilot.$mwexFleetBoundHome" exact="$home"/>
+<aiscript name="mule.fleet.run" version="12">
+  <params>
+    <param name="cfg" />
+    <param name="once" default="false" />
+    <param name="returnToken" default="null" />
+  </params>
+  <patch sinceversion="11">
+    <return />
+  </patch>
+  <patch sinceversion="10">
+    <return />
+  </patch>
+  <patch sinceversion="9">
+    <resume label="register" />
+  </patch>
+  <patch sinceversion="8">
+    <resume label="register" />
+  </patch>
+  <patch sinceversion="7">
+    <resume label="register" />
+  </patch>
+  <patch sinceversion="6">
+    <resume label="register" />
+  </patch>
+  <patch sinceversion="2">
+    <resume label="register" />
+  </patch>
+  <patch sinceversion="3">
+    <resume label="register" />
+  </patch>
+  <patch sinceversion="5">
+    <resume label="register" />
+  </patch>
+  <patch sinceversion="4">
+    <resume label="register" />
+  </patch>
+  <patch sinceversion="12">
+    <return />
+  </patch>
+  <attention min="unknown">
+    <actions>
+      <label name="register" />
+      <set_value name="$invokedAt" exact="player.age" />
+      <do_if value="$once and $returnToken != @$cfg.$ship.pilot.$mwexFleetReturnSerial">
+        <return />
       </do_if>
-      <do_elseif value="not $ship.pilot.$mwexFleetBoundOrigin?">
-        <set_value name="$shouldBind" exact="true"/>
-        <set_value name="$ship.pilot.$mwexFleetAssignmentCheck.$reason" exact="'first-binding'"/>
-      </do_elseif>
-      <do_elseif value="$ship.pilot.$mwexFleetBoundOrigin != $ship.defaultorder">
-        <set_value name="$shouldBind" exact="true"/>
-        <set_value name="$ship.pilot.$mwexFleetAssignmentCheck.$reason" exact="'changed-order'"/>
-      </do_elseif>
-      <do_elseif value="not $ship.pilot.$mwexFleetBoundHome?">
-        <set_value name="$shouldBind" exact="true"/>
-        <set_value name="$ship.pilot.$mwexFleetAssignmentCheck.$reason" exact="'missing-home-record'"/>
-      </do_elseif>
-      <do_elseif value="$ship.pilot.$mwexFleetBoundHome != $home">
-        <set_value name="$shouldBind" exact="true"/>
-        <set_value name="$ship.pilot.$mwexFleetAssignmentCheck.$reason" exact="'changed-home'"/>
-      </do_elseif>
-      <do_if value="$shouldBind">
-        <set_value name="$ship.pilot.$mwexFleetAssignmentCheck.$attempted" exact="true"/>
-        <set_object_commander object="$ship" commander="$home" assignment="assignment.trade"/>
-        <wait exact="1ms"/>
-        <set_value name="$ship.pilot.$mwexFleetAssignmentCheck.$after" exact="$ship.commander"/>
-        <do_if value="$ship.commander == $home">
-          <set_value name="$ship.pilot.$mwexFleetBoundOrigin" exact="$ship.defaultorder"/>
-          <set_value name="$ship.pilot.$mwexFleetBoundHome" exact="$home"/>
-          <remove_value name="$ship.pilot.$mwexFleetCfg"/>
+      <do_if value="$once">
+        <set_value name="$cfg.$ship.pilot.$mwexFleetReturnSearched" exact="player.age" />
+        <do_if value="@global.$mwexDebug">
+          <do_if value="@global.$mwexDebug">
+            <set_value name="$mwtrace_diagnostic" exact="table[$ship=$cfg.$ship,$attempt=null,$relaxed=false]" />
+            <set_value name="$mwtrace_text" exact="'RETURN_SEARCH ship=%s token=%s sincePoll=%s'.[$cfg.$ship.idcode,$returnToken,player.age-@$cfg.$ship.pilot.$mwexFleetReturnPolled]" />
+            <set_value name="$mwtrace_file" exact="'lifecycle'" />
+            <include_interrupt_actions ref="MWEX_Fleet_trace" />
+          </do_if>
         </do_if>
-        <do_else>
-          <set_value name="$warnAssignment" exact="true"/>
-          <do_if value="$ship.pilot.$mwexFleetAssignmentWarning?">
-            <set_value name="$warnAssignment" exact="$ship.pilot.$mwexFleetAssignmentWarning != $ship.defaultorder"/>
-          </do_if>
-          <do_if value="$warnAssignment">
-            <write_to_logbook category="general" title="{61552,4340}" text="{61552,4341}.[$ship.knownname,$ship.idcode,$home.knownname]"/>
-            <set_value name="$ship.pilot.$mwexFleetAssignmentWarning" exact="$ship.defaultorder"/>
-          </do_if>
-        </do_else>
       </do_if>
-    </do_if>
-    <do_if value="not global.$mwexFleetHubs?"><set_value name="global.$mwexFleetHubs" exact="table[]"/></do_if>
-    <do_if value="not global.$mwexFleetPending?"><set_value name="global.$mwexFleetPending" exact="[]"/></do_if>
-    <do_if value="not global.$mwexFleetEpoch?"><set_value name="global.$mwexFleetEpoch" exact="0"/></do_if>
-    <do_if value="not global.$mwexFleetHubs.{$home}?">
-      <set_value name="global.$mwexFleetHubs.{$home}" exact="table[$home=$home,$members=table[],$groups=table[],$capacities=table[],$ascending=[],$descending=[],$needs=[],$sources=table[],$warnings=table[],$cacheDirty=true,$cacheUntil=0s,$cacheEpoch=-1,$rosterDirty=true,$rosterUntil=0s,$backoff=2s,$next=player.age+2s]"/>
-      <signal_objects object="player.entity" param="'mwex_capacity_watch'" param2="global.$mwexFleetHubs.{$home}"/>
-    </do_if>
-    <set_value name="$hub" exact="global.$mwexFleetHubs.{$home}"/>
-    <run_script name="'mule.fleet.config'"><param name="cfg" value="$cfg"/><save_retval name="cfg" variable="$cfg"/></run_script>
-    <do_if value="$previousCfg and $previousCfg.$home != $home">
-      <set_value name="$previousHub" exact="@global.$mwexFleetHubs.{$previousCfg.$home}"/>
-      <do_if value="$previousHub">
-        <remove_value name="$previousHub.$members.{$ship}"/>
-        <set_value name="$previousHub.$rosterDirty" exact="true"/>
-        <set_value name="$previousHub.$cacheDirty" exact="true"/>
+      <set_value name="$ship" exact="$cfg.$ship" />
+      <do_if value="$ship.defaultorder != $cfg.$origin">
+        <return />
       </do_if>
-      <do_if value="@global.$mwexDebug"><debug_to_file directory="'MulesExtended'" name="'debug.txt'" append="true" text="'HOME_CHANGED ship=%s old=%s new=%s'.[$ship.idcode,$previousCfg.$home,$home]"/></do_if>
-    </do_if>
-    <do_if value="$cfg.$bound and $ship.commander != $cfg.$commander">
-      <remove_value name="$hub.$members.{$ship}"/>
-      <set_value name="$hub.$rosterDirty" exact="true"/>
-      <wait exact="5s"/>
-      <return/>
-    </do_if>
-    <set_value name="$memberCfg" exact="@$hub.$members.{$ship}"/>
-    <do_if value="not $memberCfg or $memberCfg.$origin != $cfg.$origin or $memberCfg.$signature != $cfg.$signature or $memberCfg.$commander != $cfg.$commander or $memberCfg.$bound != $cfg.$bound">
-      <set_value name="$hub.$members.{$ship}" exact="$cfg"/>
-      <set_value name="$hub.$rosterDirty" exact="true"/>
-      <set_value name="$hub.$cacheDirty" exact="true"/>
-      <set_value name="$hub.$next" exact="[player.age+2s,$hub.$next].min"/>
-      <signal_objects object="player.entity" param="'mwex_capacity_watch_ship'" param2="table[$ship=$ship,$hub=$hub]"/>
-    </do_if>
-    <label name="idle"/>
-    <do_if value="not $ship.isoperational or not $home.exists or $ship.defaultorder != $cfg.$origin"><return/></do_if>
-    <do_if value="$cfg.$origin.id == 'SupplyMule' and $cfg.$origin.$home != $home"><return/></do_if>
-    <do_if value="$ship.orders.count"><return/></do_if>
-    <do_if value="$cfg.$bound and $ship.commander != $cfg.$commander">
-      <remove_value name="$hub.$members.{$ship}"/>
-      <set_value name="$hub.$rosterDirty" exact="true"/>
-      <wait exact="5s"/>
-      <return/>
-    </do_if>
-    <!-- Return periodically to refresh edited direct/mimic parameters, without copying defaults each tick. -->
-    <do_if value="player.age gt $invokedAt+5s"><return/></do_if>
-    <do_if value="not global.$mwexFleetLock? or not @global.$mwexFleetLock.$actor.exists or player.age gt global.$mwexFleetLock.$time+30s">
-      <remove_value name="global.$mwexFleetLock"/>
-    </do_if>
-    <do_if value="not global.$mwexFleetLock? and (player.age ge $hub.$next or $hub.$rosterDirty)">
-      <!-- Global commit serialization also protects suppliers shared by DIFFERENT receiving hubs. -->
-      <set_value name="global.$mwexFleetLock" exact="table[$actor=this,$time=player.age]"/>
+      <set_value name="$previousCfg" exact="@$ship.pilot.$mwexFleetCfg" />
+      <!-- Direct order edits may leave the caller holding its old parameter snapshot. -->
+      <do_if value="$cfg.$origin.id == 'SupplyMule'">
+        <set_value name="$cfg" exact="$cfg.clone" />
+        <set_value name="$cfg.$home" exact="$cfg.$origin.$home" />
+      </do_if>
+      <set_value name="$home" exact="$cfg.$home" />
+      <do_if value="not $home.exists or not $ship.isoperational">
+        <wait exact="5s" />
+        <return />
+      </do_if>
+      <set_value name="$ship.pilot.$mwexFleetAssignmentCheck" exact="table[$time=player.age,$home=$home,$before=$ship.commander,$after=$ship.commander,$requested=@$ship.defaultorder.$assignHome,$defaultId=$ship.defaultorder.id,$sameOwner=$home.owner == $ship.owner,$sectorHome=$home.isclass.sector,$canHave=$ship.canhavecommander.{$home},$canTrade=$ship.canuseassignment.{assignment.trade}.{$home},$homeOperational=$home.isoperational,$homeTrader=if $home.isclass.sector then null else $home.tradenpc,$attempted=false]" />
+      <!-- Assignment also runs after migration/parameter edits, where init may not repeat. -->
+      <set_value name="$ship.pilot.$mwexFleetAssignmentCheck.$reason" exact="'not-eligible'" />
+      <do_if value="($ship.defaultorder.id == 'SupplyMule') and $ship.defaultorder.$assignHome and (not $home.isclass.sector) and ($home.owner == $ship.owner)">
+        <!-- Do not read absent blackboard values inside a combined OR expression. -->
+        <set_value name="$shouldBind" exact="false" />
+        <set_value name="$ship.pilot.$mwexFleetAssignmentCheck.$reason" exact="'same-binding-detached'" />
+        <do_if value="$ship.commander == $home">
+          <set_value name="$ship.pilot.$mwexFleetAssignmentCheck.$reason" exact="'already-assigned'" />
+          <set_value name="$ship.pilot.$mwexFleetBoundOrigin" exact="$ship.defaultorder" />
+          <set_value name="$ship.pilot.$mwexFleetBoundHome" exact="$home" />
+        </do_if>
+        <do_elseif value="not $ship.pilot.$mwexFleetBoundOrigin?">
+          <set_value name="$shouldBind" exact="true" />
+          <set_value name="$ship.pilot.$mwexFleetAssignmentCheck.$reason" exact="'first-binding'" />
+        </do_elseif>
+        <do_elseif value="$ship.pilot.$mwexFleetBoundOrigin != $ship.defaultorder">
+          <set_value name="$shouldBind" exact="true" />
+          <set_value name="$ship.pilot.$mwexFleetAssignmentCheck.$reason" exact="'changed-order'" />
+        </do_elseif>
+        <do_elseif value="not $ship.pilot.$mwexFleetBoundHome?">
+          <set_value name="$shouldBind" exact="true" />
+          <set_value name="$ship.pilot.$mwexFleetAssignmentCheck.$reason" exact="'missing-home-record'" />
+        </do_elseif>
+        <do_elseif value="$ship.pilot.$mwexFleetBoundHome != $home">
+          <set_value name="$shouldBind" exact="true" />
+          <set_value name="$ship.pilot.$mwexFleetAssignmentCheck.$reason" exact="'changed-home'" />
+        </do_elseif>
+        <do_if value="$shouldBind">
+          <set_value name="$ship.pilot.$mwexFleetAssignmentCheck.$attempted" exact="true" />
+          <set_object_commander object="$ship" commander="$home" assignment="assignment.trade" />
+          <wait exact="1ms" />
+          <set_value name="$ship.pilot.$mwexFleetAssignmentCheck.$after" exact="$ship.commander" />
+          <do_if value="$ship.commander == $home">
+            <set_value name="$ship.pilot.$mwexFleetBoundOrigin" exact="$ship.defaultorder" />
+            <set_value name="$ship.pilot.$mwexFleetBoundHome" exact="$home" />
+            <remove_value name="$ship.pilot.$mwexFleetCfg" />
+          </do_if>
+          <do_else>
+            <set_value name="$warnAssignment" exact="true" />
+            <do_if value="$ship.pilot.$mwexFleetAssignmentWarning?">
+              <set_value name="$warnAssignment" exact="$ship.pilot.$mwexFleetAssignmentWarning != $ship.defaultorder" />
+            </do_if>
+            <do_if value="$warnAssignment">
+              <write_to_logbook category="general" title="{61552,4340}" text="{61552,4341}.[$ship.knownname,$ship.idcode,$home.knownname]" />
+              <set_value name="$ship.pilot.$mwexFleetAssignmentWarning" exact="$ship.defaultorder" />
+            </do_if>
+          </do_else>
+        </do_if>
+      </do_if>
+      <do_if value="not global.$mwexFleetHubs?">
+        <set_value name="global.$mwexFleetHubs" exact="table[]" />
+      </do_if>
+      <do_if value="not global.$mwexFleetPending?">
+        <set_value name="global.$mwexFleetPending" exact="[]" />
+      </do_if>
+      <do_if value="not global.$mwexFleetEpoch?">
+        <set_value name="global.$mwexFleetEpoch" exact="0" />
+      </do_if>
+      <do_if value="not global.$mwexFleetHubs.{$home}?">
+        <set_value name="global.$mwexFleetHubs.{$home}" exact="table[$home=$home,$members=table[],$needs=[],$sources=table[],$warnings=table[],$cacheDirty=true,$cacheUntil=0s,$cacheEpoch=-1,$rosterDirty=true,$rosterUntil=0s]" />
+        <signal_objects object="player.entity" param="'mwex_capacity_watch'" param2="global.$mwexFleetHubs.{$home}" />
+      </do_if>
+      <set_value name="$hub" exact="global.$mwexFleetHubs.{$home}" />
+      <run_script name="'mule.fleet.config'">
+        <param name="cfg" value="$cfg" />
+        <save_retval name="cfg" variable="$cfg" />
+      </run_script>
+      <do_if value="$previousCfg and $previousCfg.$home != $home">
+        <set_value name="$previousHub" exact="@global.$mwexFleetHubs.{$previousCfg.$home}" />
+        <do_if value="$previousHub">
+          <remove_value name="$previousHub.$members.{$ship}" />
+          <set_value name="$previousHub.$rosterDirty" exact="true" />
+          <set_value name="$previousHub.$cacheDirty" exact="true" />
+        </do_if>
+        <do_if value="@global.$mwexDebug">
+          <do_if value="@global.$mwexDebug">
+            <set_value name="$mwtrace_diagnostic" exact="table[$ship=$ship,$attempt=null,$relaxed=false]" />
+            <set_value name="$mwtrace_text" exact="'HOME_CHANGED ship=%s old=%s new=%s'.[$ship.idcode,$previousCfg.$home,$home]" />
+            <set_value name="$mwtrace_file" exact="'lifecycle'" />
+            <include_interrupt_actions ref="MWEX_Fleet_trace" />
+          </do_if>
+        </do_if>
+      </do_if>
+      <do_if value="$cfg.$bound and $ship.commander != $cfg.$commander">
+        <remove_value name="$hub.$members.{$ship}" />
+        <set_value name="$hub.$rosterDirty" exact="true" />
+        <wait exact="5s" />
+        <set_value name="$mwstate_cfg" exact="$cfg" />
+        <set_value name="$mwstate_value" exact="'skipped'" />
+        <set_value name="$mwstate_reason" exact="'binding_or_config_changed'" />
+        <include_interrupt_actions ref="MWEX_Log_state" />
+        <return />
+      </do_if>
+      <set_value name="$memberCfg" exact="@$hub.$members.{$ship}" />
+      <do_if value="not $memberCfg or $memberCfg.$origin != $cfg.$origin or $memberCfg.$signature != $cfg.$signature or $memberCfg.$commander != $cfg.$commander or $memberCfg.$bound != $cfg.$bound">
+        <set_value name="$hub.$members.{$ship}" exact="$cfg" />
+        <set_value name="$hub.$rosterDirty" exact="true" />
+        <set_value name="$hub.$cacheDirty" exact="true" />
+        <signal_objects object="player.entity" param="'mwex_capacity_watch_ship'" param2="table[$ship=$ship,$hub=$hub]" />
+      </do_if>
+      <label name="idle" />
+      <do_if value="not $ship.isoperational or not $home.exists or $ship.defaultorder != $cfg.$origin">
+        <set_value name="$mwstate_cfg" exact="$cfg" />
+        <set_value name="$mwstate_value" exact="'skipped'" />
+        <set_value name="$mwstate_reason" exact="'binding_or_config_changed'" />
+        <include_interrupt_actions ref="MWEX_Log_state" />
+        <return />
+      </do_if>
+      <do_if value="$cfg.$origin.id == 'SupplyMule' and $cfg.$origin.$home != $home">
+        <set_value name="$mwstate_cfg" exact="$cfg" />
+        <set_value name="$mwstate_value" exact="'skipped'" />
+        <set_value name="$mwstate_reason" exact="'binding_or_config_changed'" />
+        <include_interrupt_actions ref="MWEX_Log_state" />
+        <return />
+      </do_if>
+      <do_if value="$ship.orders.count">
+        <set_value name="$mwstate_cfg" exact="$cfg" />
+        <set_value name="$mwstate_value" exact="'executing'" />
+        <set_value name="$mwstate_reason" exact="'existing_orders'" />
+        <include_interrupt_actions ref="MWEX_Log_state" />
+        <return />
+      </do_if>
+      <do_if value="$cfg.$bound and $ship.commander != $cfg.$commander">
+        <remove_value name="$hub.$members.{$ship}" />
+        <set_value name="$hub.$rosterDirty" exact="true" />
+        <wait exact="5s" />
+        <set_value name="$mwstate_cfg" exact="$cfg" />
+        <set_value name="$mwstate_value" exact="'skipped'" />
+        <set_value name="$mwstate_reason" exact="'binding_or_config_changed'" />
+        <include_interrupt_actions ref="MWEX_Log_state" />
+        <return />
+      </do_if>
+      <!-- Return periodically to refresh edited direct/mimic parameters, without copying defaults each tick. -->
+      <do_if value="player.age gt $invokedAt+5s">
+        <return />
+      </do_if>
       <do_if value="$hub.$rosterDirty or player.age ge $hub.$rosterUntil">
         <do_if value="not $home.isclass.sector">
           <do_for_each name="$candidate" in="$home.allsubordinates">
             <do_if value="$candidate.isoperational and $candidate.pilot.exists and $candidate.defaultorder.id == 'SupplyMule' and $candidate.defaultorder.$home == $home">
               <run_script name="'mule.fleet.config'">
-                <param name="cfg" value="table[$ship=$candidate,$origin=$candidate.defaultorder,$home=$candidate.defaultorder.$home,$maxDist=$candidate.defaultorder.$maxDist,$dedicatedServe=if $candidate.defaultorder.$dedicatedServe? then $candidate.defaultorder.$dedicatedServe else false,$allowPlayerSuppliers=if $candidate.defaultorder.$allowPlayerSuppliers? then $candidate.defaultorder.$allowPlayerSuppliers else true,$allowAiSuppliers=if $candidate.defaultorder.$allowAiSuppliers? then $candidate.defaultorder.$allowAiSuppliers else true,$allowBuildstorage=if $candidate.defaultorder.$allowBuildstorage? then $candidate.defaultorder.$allowBuildstorage else true,$allowResources=if $candidate.defaultorder.$allowResources? then $candidate.defaultorder.$allowResources else true,$allowIntermediates=if $candidate.defaultorder.$allowIntermediates? then $candidate.defaultorder.$allowIntermediates else true,$allowTradewares=if $candidate.defaultorder.$allowTradewares? then $candidate.defaultorder.$allowTradewares else true,$playerStockThreshold=if $candidate.defaultorder.$playerStockThreshold? then $candidate.defaultorder.$playerStockThreshold else 50,$lockWares=if $candidate.defaultorder.$lockWares? then $candidate.defaultorder.$lockWares else false,$maxTrades=if $candidate.defaultorder.$maxTrades? then $candidate.defaultorder.$maxTrades else 3,$minCargoUsed=if $candidate.defaultorder.$minCargoUsed? then $candidate.defaultorder.$minCargoUsed else 75,$corridorDepth=if $candidate.defaultorder.$corridorDepth? then $candidate.defaultorder.$corridorDepth else 2,$corridorMarkup=if $candidate.defaultorder.$corridorMarkup? then $candidate.defaultorder.$corridorMarkup else 5,$wares=if $candidate.defaultorder.$specialWareBasket? then $candidate.defaultorder.$specialWareBasket else []]"/>
-                <save_retval name="cfg" variable="$candidateCfg"/>
+                <param name="cfg" value="table[$ship=$candidate,$origin=$candidate.defaultorder,$home=$candidate.defaultorder.$home,$maxDist=$candidate.defaultorder.$maxDist,$dedicatedServe=if $candidate.defaultorder.$dedicatedServe? then $candidate.defaultorder.$dedicatedServe else false,$allowPlayerSuppliers=if $candidate.defaultorder.$allowPlayerSuppliers? then $candidate.defaultorder.$allowPlayerSuppliers else true,$allowAiSuppliers=if $candidate.defaultorder.$allowAiSuppliers? then $candidate.defaultorder.$allowAiSuppliers else true,$allowBuildstorage=if $candidate.defaultorder.$allowBuildstorage? then $candidate.defaultorder.$allowBuildstorage else true,$allowResources=if $candidate.defaultorder.$allowResources? then $candidate.defaultorder.$allowResources else true,$allowIntermediates=if $candidate.defaultorder.$allowIntermediates? then $candidate.defaultorder.$allowIntermediates else true,$allowTradewares=if $candidate.defaultorder.$allowTradewares? then $candidate.defaultorder.$allowTradewares else true,$playerStockThreshold=if $candidate.defaultorder.$playerStockThreshold? then $candidate.defaultorder.$playerStockThreshold else 50,$lockWares=if $candidate.defaultorder.$lockWares? then $candidate.defaultorder.$lockWares else false,$maxTrades=if $candidate.defaultorder.$maxTrades? then $candidate.defaultorder.$maxTrades else 3,$minCargoUsed=if $candidate.defaultorder.$minCargoUsed? then $candidate.defaultorder.$minCargoUsed else 75,$corridorDepth=if $candidate.defaultorder.$corridorDepth? then $candidate.defaultorder.$corridorDepth else 2,$corridorMarkup=if $candidate.defaultorder.$corridorMarkup? then $candidate.defaultorder.$corridorMarkup else 5,$wares=if $candidate.defaultorder.$specialWareBasket? then $candidate.defaultorder.$specialWareBasket else []]" />
+                <save_retval name="cfg" variable="$candidateCfg" />
               </run_script>
               <do_if value="not $hub.$members.{$candidate}?">
-                <signal_objects object="player.entity" param="'mwex_capacity_watch_ship'" param2="table[$ship=$candidate,$hub=$hub]"/>
+                <signal_objects object="player.entity" param="'mwex_capacity_watch_ship'" param2="table[$ship=$candidate,$hub=$hub]" />
               </do_if>
-              <set_value name="$hub.$members.{$candidate}" exact="$candidateCfg"/>
+              <set_value name="$hub.$members.{$candidate}" exact="$candidateCfg" />
             </do_if>
           </do_for_each>
         </do_if>
-        <set_value name="$newGroups" exact="table[]"/>
-        <set_value name="$newCapacities" exact="table[]"/>
-        <set_value name="$sortChanged" exact="false"/>
         <do_for_each name="$candidate" valuename="$candidateCfg" in="$hub.$members.clone">
           <do_if value="not $candidate.isoperational or not $candidate.pilot.exists or $candidate.defaultorder != $candidateCfg.$origin or ($candidate.pilot.$mwexFleetCfg.$origin != $candidateCfg.$origin or $candidate.pilot.$mwexFleetCfg.$signature != $candidateCfg.$signature or $candidate.pilot.$mwexFleetCfg.$commander != $candidateCfg.$commander or $candidate.pilot.$mwexFleetCfg.$bound != $candidateCfg.$bound) or $candidateCfg.$home != $home or ($candidate.defaultorder.id == 'SupplyMule' and $candidate.defaultorder.$home != $home) or ($candidateCfg.$bound and $candidate.commander != $candidateCfg.$commander)">
-            <remove_value name="$hub.$members.{$candidate}"/>
-            <continue/>
+            <remove_value name="$hub.$members.{$candidate}" />
+            <continue />
           </do_if>
-          <set_value name="$capacity" exact="$candidate.cargo.capacity.all"/>
-          <set_value name="$group" exact="'$model/%s/%s/%s/%s/%s/%s/%s/%s'.[$candidate.macro,$capacity,$candidate.waretransport,$candidate.cargo.capacity.container,$candidate.cargo.capacity.solid,$candidate.cargo.capacity.liquid,$candidate.cargo.capacity.condensate,$candidate.cargo.capacity.universal]"/>
-          <do_if value="not $newGroups.{$group}?">
-            <set_value name="$newGroups.{$group}" exact="[]"/>
-            <set_value name="$newCapacities.{$group}" exact="$capacity"/>
-            <do_if value="not $hub.$capacities.{$group}?"><set_value name="$sortChanged" exact="true"/></do_if>
-          </do_if>
-          <append_to_list name="$newGroups.{$group}" exact="$candidate"/>
         </do_for_each>
-        <do_if value="$newCapacities.keys.count != $hub.$capacities.keys.count"><set_value name="$sortChanged" exact="true"/></do_if>
-        <set_value name="$hub.$groups" exact="$newGroups"/>
-        <set_value name="$hub.$capacities" exact="$newCapacities"/>
-        <do_if value="$sortChanged">
-          <set_value name="$hub.$ascending" exact="$newCapacities.keys.sorted"/>
-          <set_value name="$hub.$descending" exact="[]"/>
-          <do_for_each name="$key" in="$hub.$ascending" reverse="true"><append_to_list name="$hub.$descending" exact="$key"/></do_for_each>
-          <do_if value="@global.$mwexDebug"><debug_to_file directory="'MulesExtended'" name="'debug.txt'" append="true" text="'SORT home=%s ascending=%s'.[$home,$hub.$ascending]"/></do_if>
+        <set_value name="$hub.$rosterDirty" exact="false" />
+        <set_value name="$hub.$rosterUntil" exact="player.age+30s" />
+        <set_value name="$hub.$cacheDirty" exact="true" />
+        <remove_value name="$hub.$groups" />
+        <remove_value name="$hub.$capacities" />
+        <remove_value name="$hub.$ascending" />
+        <remove_value name="$hub.$descending" />
+        <remove_value name="$hub.$next" />
+        <remove_value name="$hub.$backoff" />
+        <do_if value="@global.$mwexDebug">
+          <do_if value="@global.$mwexDebug">
+            <set_value name="$mwtrace_diagnostic" exact="table[$ship=$ship,$attempt=null,$relaxed=false]" />
+            <set_value name="$mwtrace_text" exact="'ROSTER home=%s ships=%s'.[$home,$hub.$members.keys.count]" />
+            <set_value name="$mwtrace_file" exact="'lifecycle'" />
+            <include_interrupt_actions ref="MWEX_Fleet_trace" />
+          </do_if>
         </do_if>
-        <set_value name="$hub.$rosterDirty" exact="false"/>
-        <set_value name="$hub.$rosterUntil" exact="player.age+30s"/>
-        <set_value name="$hub.$cacheDirty" exact="true"/>
-        <do_if value="@global.$mwexDebug"><debug_to_file directory="'MulesExtended'" name="'debug.txt'" append="true" text="'ROSTER home=%s ships=%s models=%s reordered=%s'.[$home,$hub.$members.keys.count,$newGroups.keys.count,$sortChanged]"/></do_if>
       </do_if>
-      <run_script name="'mule.fleet.wave'"><param name="hub" value="$hub"/></run_script>
-      <remove_value name="global.$mwexFleetLock"/>
-    </do_if>
-    <do_if value="$once">
-      <do_if value="$ship.orders.count"><signal_objects object="$ship" param="'mwex_capacity_return_stop'" param2="$returnToken" delay="1ms"/></do_if>
-      <return/>
-    </do_if>
-    <do_if value="$ship.orders.count"><return/></do_if>
-    <run_script name="'mule.fleet.home'"><param name="cfg" value="$cfg"/><param name="hub" value="$hub"/></run_script>
-    <do_if value="$ship.orders.count"><return/></do_if>
-    <wait min="2s" max="3s"/>
-    <resume label="idle"/>
-  </actions></attention>
+      <run_script name="'mule.fleet.wave'">
+        <param name="hub" value="$hub" />
+        <param name="cfg" value="$cfg" />
+        <param name="debugTrigger" value="if $once then 'return_poll' else 'normal'" />
+        <param name="debugReturnToken" value="$returnToken" />
+      </run_script>
+      <do_if value="$once">
+        <do_if value="$ship.orders.count">
+          <signal_objects object="$ship" param="'mwex_capacity_return_stop'" param2="$returnToken" delay="1ms" />
+        </do_if>
+        <return />
+      </do_if>
+      <do_if value="$ship.orders.count">
+        <set_value name="$mwstate_cfg" exact="$cfg" />
+        <set_value name="$mwstate_value" exact="'executing'" />
+        <set_value name="$mwstate_reason" exact="'existing_orders'" />
+        <include_interrupt_actions ref="MWEX_Log_state" />
+        <return />
+      </do_if>
+      <run_script name="'mule.fleet.home'">
+        <param name="cfg" value="$cfg" />
+        <param name="hub" value="$hub" />
+      </run_script>
+      <do_if value="$ship.orders.count">
+        <set_value name="$mwstate_cfg" exact="$cfg" />
+        <set_value name="$mwstate_value" exact="'executing'" />
+        <set_value name="$mwstate_reason" exact="'existing_orders'" />
+        <include_interrupt_actions ref="MWEX_Log_state" />
+        <return />
+      </do_if>
+      <wait min="2s" max="3s" />
+      <resume label="idle" />
+    </actions>
+  </attention>
 </aiscript>

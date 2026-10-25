@@ -1,38 +1,112 @@
 <?xml version="1.0" encoding="utf-8"?>
-<aiscript name="mule.fleet.price" version="1">
-  <params><param name="offer"/><param name="ship"/><param name="cache" default="table[]"/></params>
-  <attention min="unknown"><actions>
-    <do_if value="not @$offer.exists"><return><retval name="price" value="0Cr"/><retval name="ok" value="false"/></return></do_if>
-    <do_if value="not $cache.{$ship.owner}?"><set_value name="$cache.{$ship.owner}" exact="table[]"/></do_if>
-    <do_if value="$cache.{$ship.owner}.{$offer}?">
-      <set_value name="$entry" exact="$cache.{$ship.owner}.{$offer}"/>
-      <do_if value="$entry.$raw == $offer.unitprice"><return><retval name="price" value="$entry.$price"/><retval name="ok" value="true"/></return></do_if>
-    </do_if>
-    <set_value name="$price" exact="$offer.unitprice"/>
-    <do_if value="not $offer.isbuyoffer and $offer.buyfree.{$ship}"><set_value name="$price" exact="0Cr"/></do_if>
-    <set_value name="$modified" exact="($ship.owner == faction.player) and ($offer.owner.owner != $ship.owner) and (player.hasdiscount.{$offer.owner} or player.hasdiscount.{$offer.owner.owner} or player.hascommission.{$offer.owner} or player.hascommission.{$offer.owner.owner})"/>
-    <do_if value="$modified">
-      <!-- Native filters apply the reserving ship's modifiers. No trial orders or economic writes. -->
-      <!-- Search integer hundredths of a credit to avoid floating boundary drift. -->
-      <set_value name="$low" exact="0"/><set_value name="$high" exact="(([$offer.unitprice,$offer.ware.maxprice].max+$offer.ware.pricerange+1Cr)/1Cr*100)i"/>
-      <do_all exact="33" counter="$probeIndex">
-        <set_value name="$probe" exact="if $probeIndex == 1 then $high else (($low+$high)/2)i"/>
-        <set_value name="$probePrice" exact="$probe*1Cr/100"/>
-        <do_if value="$offer.isbuyoffer">
-          <find_buy_offer buyer="$offer.owner" wares="$offer.ware" tradepartner="$ship" result="$priced" multiple="true" excludeempty="false"><price max="$probePrice" tradepartner="$ship"/></find_buy_offer>
-        </do_if>
-        <do_else>
-          <find_sell_offer seller="$offer.owner" wares="$offer.ware" tradepartner="$ship" result="$priced" multiple="true" excludeempty="false"><price max="$probePrice" tradepartner="$ship"/></find_sell_offer>
-        </do_else>
-        <do_if value="$priced.indexof.{$offer}"><set_value name="$high" exact="$probe"/></do_if>
-        <do_elseif value="$probeIndex == 1"><return><retval name="price" value="0Cr"/><retval name="ok" value="false"/></return></do_elseif>
-        <do_else><set_value name="$low" exact="$probe+1"/></do_else>
-        <do_if value="$low ge $high"><break/></do_if>
-      </do_all>
-      <do_if value="$low lt $high"><return><retval name="price" value="0Cr"/><retval name="ok" value="false"/></return></do_if>
-      <set_value name="$price" exact="$high*1Cr/100"/>
-    </do_if>
-    <set_value name="$cache.{$ship.owner}.{$offer}" exact="table[$raw=$offer.unitprice,$price=$price]"/>
-    <return><retval name="price" value="$price"/><retval name="ok" value="true"/></return>
-  </actions></attention>
+<aiscript name="mule.fleet.price" version="2">
+  <params>
+    <param name="offer" />
+    <param name="ship" />
+    <param name="cache" default="table[]" />
+  </params>
+  <interrupts>
+    <library>
+      <actions name="MWEX_Fleet_price">
+        <!--Non-blocking. Inputs and outputs use a library-specific prefix; reset outputs on EVERY invocation.-->
+        <set_value name="$mwprice_out_price" exact="0Cr" />
+        <set_value name="$mwprice_out_ok" exact="false" />
+        <set_value name="$mwprice_done" exact="false" />
+        <do_all exact="1">
+          <do_if value="not @$mwprice_offer.exists">
+            <set_value name="$mwprice_out_price" exact="0Cr" />
+            <set_value name="$mwprice_out_ok" exact="false" />
+            <set_value name="$mwprice_done" exact="true" />
+            <break />
+          </do_if>
+          <do_if value="not $mwprice_cache.{$mwprice_ship.owner}?">
+            <set_value name="$mwprice_cache.{$mwprice_ship.owner}" exact="table[]" />
+          </do_if>
+          <do_if value="$mwprice_cache.{$mwprice_ship.owner}.{$mwprice_offer}?">
+            <set_value name="$mwprice_entry" exact="$mwprice_cache.{$mwprice_ship.owner}.{$mwprice_offer}" />
+            <do_if value="$mwprice_entry.$raw == $mwprice_offer.unitprice">
+              <set_value name="$mwprice_out_price" exact="$mwprice_entry.$price" />
+              <set_value name="$mwprice_out_ok" exact="true" />
+              <set_value name="$mwprice_done" exact="true" />
+              <break />
+            </do_if>
+          </do_if>
+          <set_value name="$mwprice_price" exact="$mwprice_offer.unitprice" />
+          <do_if value="not $mwprice_offer.isbuyoffer and $mwprice_offer.buyfree.{$mwprice_ship}">
+            <set_value name="$mwprice_price" exact="0Cr" />
+          </do_if>
+          <set_value name="$mwprice_modified" exact="($mwprice_ship.owner == faction.player) and ($mwprice_offer.owner.owner != $mwprice_ship.owner) and (player.hasdiscount.{$mwprice_offer.owner} or player.hasdiscount.{$mwprice_offer.owner.owner} or player.hascommission.{$mwprice_offer.owner} or player.hascommission.{$mwprice_offer.owner.owner})" />
+          <do_if value="$mwprice_modified">
+            <!-- Native filters apply the reserving ship's modifiers. No trial orders or economic writes. -->
+            <!-- Search integer hundredths of a credit to avoid floating boundary drift. -->
+            <set_value name="$mwprice_low" exact="0" />
+            <set_value name="$mwprice_high" exact="(([$mwprice_offer.unitprice,$mwprice_offer.ware.maxprice].max+$mwprice_offer.ware.pricerange+1Cr)/1Cr*100)i" />
+            <do_all exact="33" counter="$mwprice_probeIndex">
+              <set_value name="$mwprice_probe" exact="if $mwprice_probeIndex == 1 then $mwprice_high else (($mwprice_low+$mwprice_high)/2)i" />
+              <set_value name="$mwprice_probePrice" exact="$mwprice_probe*1Cr/100" />
+              <do_if value="$mwprice_offer.isbuyoffer">
+                <find_buy_offer buyer="$mwprice_offer.owner" wares="$mwprice_offer.ware" tradepartner="$mwprice_ship" result="$mwprice_priced" multiple="true" excludeempty="false">
+                  <price max="$mwprice_probePrice" tradepartner="$mwprice_ship" />
+                </find_buy_offer>
+              </do_if>
+              <do_else>
+                <find_sell_offer seller="$mwprice_offer.owner" wares="$mwprice_offer.ware" tradepartner="$mwprice_ship" result="$mwprice_priced" multiple="true" excludeempty="false">
+                  <price max="$mwprice_probePrice" tradepartner="$mwprice_ship" />
+                </find_sell_offer>
+              </do_else>
+              <do_if value="$mwprice_priced.indexof.{$mwprice_offer}">
+                <set_value name="$mwprice_high" exact="$mwprice_probe" />
+              </do_if>
+              <do_elseif value="$mwprice_probeIndex == 1">
+                <set_value name="$mwprice_out_price" exact="0Cr" />
+                <set_value name="$mwprice_out_ok" exact="false" />
+                <set_value name="$mwprice_done" exact="true" />
+                <break />
+              </do_elseif>
+              <do_else>
+                <set_value name="$mwprice_low" exact="$mwprice_probe+1" />
+              </do_else>
+              <do_if value="$mwprice_low ge $mwprice_high">
+                <break />
+              </do_if>
+            </do_all>
+            <do_if value="$mwprice_done">
+              <break />
+            </do_if>
+            <do_if value="$mwprice_low lt $mwprice_high">
+              <set_value name="$mwprice_out_price" exact="0Cr" />
+              <set_value name="$mwprice_out_ok" exact="false" />
+              <set_value name="$mwprice_done" exact="true" />
+              <break />
+            </do_if>
+            <set_value name="$mwprice_price" exact="$mwprice_high*1Cr/100" />
+          </do_if>
+          <set_value name="$mwprice_cache.{$mwprice_ship.owner}.{$mwprice_offer}" exact="table[$raw=$mwprice_offer.unitprice,$price=$mwprice_price]" />
+          <set_value name="$mwprice_out_price" exact="$mwprice_price" />
+          <set_value name="$mwprice_out_ok" exact="true" />
+          <set_value name="$mwprice_done" exact="true" />
+          <break />
+        </do_all>
+      </actions>
+    </library>
+  </interrupts>
+  <patch sinceversion="2">
+    <return>
+      <retval name="price" value="0Cr" />
+      <retval name="ok" value="false" />
+    </return>
+  </patch>
+  <attention min="unknown">
+    <actions>
+      <!--Compatibility entry for saved calls and direct tools; live dispatch uses the action library.-->
+      <set_value name="$mwprice_offer" exact="$offer" />
+      <set_value name="$mwprice_ship" exact="$ship" />
+      <set_value name="$mwprice_cache" exact="$cache" />
+      <include_interrupt_actions ref="MWEX_Fleet_price" />
+      <return>
+        <retval name="price" value="$mwprice_out_price" />
+        <retval name="ok" value="$mwprice_out_ok" />
+      </return>
+    </actions>
+  </attention>
 </aiscript>

@@ -1,14 +1,100 @@
 <?xml version="1.0" encoding="utf-8"?>
-<aiscript name="mule.fleet.summary" version="1">
-  <params><param name="diagnostic"/></params>
-  <attention min="unknown"><actions>
-    <set_value name="$d" exact="$diagnostic"/>
-    <set_value name="$text" exact="{61552,4407}.[if $d.$relaxed then {61552,4352} else {61552,4351},$d.$lots,$d.$volume,$d.$capacity,if $d.$capacity gt 0 then (($d.$volume*10000/$d.$capacity)i)/100.0 else 0,$d.$checks]"/>
-    <set_value name="$text" exact="$text+'\n'+(if $d.$stop == 1 then {61552,4413} else if $d.$stop == 2 then {61552,4414} else {61552,4415})"/>
-    <do_if value="$d.$price"><set_value name="$text" exact="$text+'\n'+{61552,4408}.[$d.$price,$d.$secondaryPrice,$d.$minGap,$d.$gapWare.name]"/></do_if>
-    <do_if value="$d.$range"><set_value name="$text" exact="$text+'\n'+{61552,4409}.[$d.$range,$d.$minExtra,$d.$rangeWare.name]"/></do_if>
-    <do_if value="$d.$route"><set_value name="$text" exact="$text+'\n'+{61552,4410}.[$d.$route]"/></do_if>
-    <do_if value="$d.$other"><set_value name="$text" exact="$text+'\n'+{61552,4411}.[$d.$other]"/></do_if>
-    <return><retval name="text" value="$text"/></return>
-  </actions></attention>
+<aiscript name="mule.fleet.summary" version="3">
+  <params>
+    <param name="diagnostic" />
+    <param name="cfg" />
+  </params>
+  <interrupts>
+    <library>
+      <actions name="MWEX_Fleet_summary">
+        <!--Non-blocking. Inputs and outputs use a library-specific prefix; reset outputs on EVERY invocation.-->
+        <set_value name="$mwsummary_out_text" exact="''" />
+        <set_value name="$mwsummary_d" exact="$mwsummary_diagnostic" />
+        <set_value name="$mwsummary_min" exact="if $mwsummary_d.$minLoad? then $mwsummary_d.$minLoad else $mwsummary_cfg.$minCargoUsed" />
+        <!-- Blocking stage first; candidate rejections never replace a commit failure. -->
+        <set_value name="$mwsummary_text" exact="if $mwsummary_d.$status == 'success' then {61552,4425}.[$mwsummary_d.$lots] else if $mwsummary_d.$commitFailed then $mwsummary_d.$failure else if $mwsummary_d.$status == 'budget' then {61552,4426} else if $mwsummary_d.$status == 'grade_wait' then {61552,4460} else if $mwsummary_d.$status == 'load' then {61552,4427}.[$mwsummary_min] else if $mwsummary_d.$pool == 0 then {61552,4428} else {61552,4429}" />
+        <do_if value="$mwsummary_d.$capacity gt 0">
+          <set_value name="$mwsummary_text" exact="$mwsummary_text+'\n'+{61552,4430}.[$mwsummary_d.$lots,$mwsummary_d.$volume,$mwsummary_d.$capacity,(($mwsummary_d.$volume*10000/$mwsummary_d.$capacity)i)/100.0,$mwsummary_min]" />
+        </do_if>
+        <do_if value="$mwsummary_d.$secondaryChecks gt 0">
+          <set_value name="$mwsummary_text" exact="$mwsummary_text+'\n'+{61552,4431}.[$mwsummary_d.$secondaryChecks i,$mwsummary_d.$secondaryAdded i]" />
+        </do_if>
+        <do_elseif value="$mwsummary_cfg.$maxTrades le 1">
+          <set_value name="$mwsummary_text" exact="$mwsummary_text+'\n'+{61552,4432}" />
+        </do_elseif>
+        <do_elseif value="$mwsummary_d.$stop == 1">
+          <set_value name="$mwsummary_text" exact="$mwsummary_text+'\n'+{61552,4433}" />
+        </do_elseif>
+        <do_elseif value="$mwsummary_d.$pool == 0">
+          <set_value name="$mwsummary_text" exact="$mwsummary_text+'\n'+{61552,4434}" />
+        </do_elseif>
+        <do_elseif value="$mwsummary_d.$budgetExhausted">
+          <set_value name="$mwsummary_text" exact="$mwsummary_text+'\n'+{61552,4435}" />
+        </do_elseif>
+        <do_else>
+          <set_value name="$mwsummary_text" exact="$mwsummary_text+'\n'+{61552,4436}" />
+        </do_else>
+        <do_if value="$mwsummary_d.$status != 'success' and not $mwsummary_d.$commitFailed">
+          <do_if value="$mwsummary_d.$price">
+            <set_value name="$mwsummary_text" exact="$mwsummary_text+'\n'+{61552,4437}.[$mwsummary_d.$price,$mwsummary_d.$gapWare.name,$mwsummary_d.$minGap]" />
+          </do_if>
+          <do_if value="$mwsummary_d.$range">
+            <set_value name="$mwsummary_text" exact="$mwsummary_text+'\n'+{61552,4438}.[$mwsummary_d.$range,$mwsummary_d.$rangeWare.name,$mwsummary_d.$minExtra]" />
+          </do_if>
+          <do_if value="$mwsummary_d.$route">
+            <set_value name="$mwsummary_text" exact="$mwsummary_text+'\n'+{61552,4439}.[$mwsummary_d.$route]" />
+          </do_if>
+          <do_if value="$mwsummary_d.$pool == 0 and $mwsummary_d.$lastFailure">
+            <set_value name="$mwsummary_text" exact="$mwsummary_text+'\n'+{61552,4440}.[$mwsummary_d.$lastFailure]" />
+          </do_if>
+        </do_if>
+        <do_if value="$mwsummary_d.$relaxed">
+          <set_value name="$mwsummary_text" exact="$mwsummary_text+'\n'+{61552,4441}" />
+        </do_if>
+        <do_elseif value="$mwsummary_d.$status == 'load'">
+          <set_value name="$mwsummary_text" exact="$mwsummary_text+'\n'+{61552,4442}.[(@$mwsummary_cfg.$ship.pilot.$mwexFleetAttempt.$failures)i]" />
+        </do_elseif>
+        <do_if value="$mwsummary_d.$status != 'success' and not $mwsummary_d.$commitFailed and $mwsummary_d.$demandVolume?">
+          <set_value name="$mwsummary_text" exact="$mwsummary_text+'\n'+{61552,4461}.[$mwsummary_d.$demandVolume,$mwsummary_d.$supplyVolume,$mwsummary_d.$gradeDeferred,$mwsummary_d.$waitAge i,$mwsummary_min]" />
+          <do_if value="$mwsummary_d.$receiverBlocked gt 0">
+            <set_value name="$mwsummary_text" exact="$mwsummary_text+'\n'+{61552,4462}" />
+          </do_if>
+          <do_if value="$mwsummary_d.$lotLimited">
+            <set_value name="$mwsummary_text" exact="$mwsummary_text+'\n'+{61552,4463}" />
+          </do_if>
+          <do_if value="$mwsummary_d.$capacity gt 0 and $mwsummary_d.$demandVolume*100 lt $mwsummary_d.$capacity*$mwsummary_min">
+            <set_value name="$mwsummary_text" exact="$mwsummary_text+'\n'+{61552,4465}" />
+          </do_if>
+          <do_elseif value="$mwsummary_d.$capacity gt 0 and $mwsummary_d.$supplyVolume*100 lt $mwsummary_d.$capacity*$mwsummary_min">
+            <set_value name="$mwsummary_text" exact="$mwsummary_text+'\n'+{61552,4466}" />
+          </do_elseif>
+        </do_if>
+        <do_if value="@$mwsummary_d.$repaired">
+          <set_value name="$mwsummary_text" exact="$mwsummary_text+'\n'+{61552,4464}" />
+        </do_if>
+        <set_value name="$mwsummary_out_text" exact="$mwsummary_text" />
+      </actions>
+    </library>
+  </interrupts>
+  <patch sinceversion="2">
+    <return>
+      <retval name="text" value="''" />
+    </return>
+  </patch>
+  <patch sinceversion="3">
+    <return>
+      <retval name="text" value="''" />
+    </return>
+  </patch>
+  <attention min="unknown">
+    <actions>
+      <!--Compatibility entry for saved calls and direct tools; live dispatch uses the action library.-->
+      <set_value name="$mwsummary_diagnostic" exact="$diagnostic" />
+      <set_value name="$mwsummary_cfg" exact="$cfg" />
+      <include_interrupt_actions ref="MWEX_Fleet_summary" />
+      <return>
+        <retval name="text" value="$mwsummary_out_text" />
+      </return>
+    </actions>
+  </attention>
 </aiscript>
