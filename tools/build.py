@@ -10,7 +10,8 @@ import zipfile
 ROOT=Path(__file__).resolve().parents[1]
 OUT=ROOT/'dist'
 RUNTIME=('aiscripts','md','libraries','t')
-INSTALL_FOLDER='mules_and_warehouses_extended'
+INSTALL_FOLDER='mules_supply_mod_opus'
+EXTENSION_ID='mules_supply_mod_opus'
 
 
 def verify_install(package, expected):
@@ -28,7 +29,9 @@ def verify_install(package, expected):
             assert [p.name for p in extensions.iterdir()]==[INSTALL_FOLDER]
             installed=extensions/INSTALL_FOLDER
             metadata=ET.parse(installed/'content.xml').getroot()
-            assert metadata.get('id')=='ws_2013772865'
+            assert metadata.get('id')==EXTENSION_ID
+            assert not metadata.get('id').startswith('ws_')
+            assert metadata.get('lastupdate') is None
             assert metadata.get('name')=='Mules-Supply-Mod-OPUS'
             assert (installed/'ext_01.cat').is_file() and (installed/'ext_01.dat').is_file()
             assert (installed/'README.md').is_file() and (installed/'README.en.md').is_file()
@@ -39,6 +42,8 @@ def verify_install(package, expected):
 def main():
     content=ET.parse(ROOT/'content.xml').getroot()
     assert content.get('name')=='Mules-Supply-Mod-OPUS'
+    assert content.get('id')==EXTENSION_ID
+    assert content.get('lastupdate') is None
     version=(ROOT/'VERSION').read_text(encoding='utf-8').strip()
     assert re.fullmatch(r'(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(?:alpha|beta|rc)\.[1-9]\d*)?',version), 'Invalid public VERSION'
     sources={p.relative_to(ROOT).as_posix():p.read_bytes()
@@ -78,6 +83,7 @@ def main():
     summary={'project':content.get('name'),'extension_version':content.get('version'),
              'public_version':version,'tag':'v'+version,
              'runtime_entries':len(sources),'package':package.name,'install_folder':INSTALL_FOLDER,
+             'extension_id':EXTENSION_ID,
              'extracted_install_verified':True,
              'sha256':{p.name:hashlib.sha256(p.read_bytes()).hexdigest()
                        for p in (OUT/'ext_01.cat',OUT/'ext_01.dat',package)}}

@@ -1,0 +1,150 @@
+<?xml version="1.0" encoding="utf-8"?>
+<aiscript name="mule.fleet.candidate" version="2">
+  <params>
+    <param name="cfg" />
+    <param name="need" />
+    <param name="source" />
+    <param name="cache" />
+    <param name="diagnostic" />
+  </params>
+  <interrupts>
+    <library>
+      <actions name="MWEX_Fleet_candidate">
+        <!--Non-blocking. Inputs and outputs use a library-specific prefix; reset outputs on EVERY invocation.-->
+        <set_value name="$mwcandidate_out_candidate" exact="null" />
+        <set_value name="$mwcandidate_out_code" exact="'source_unavailable'" />
+        <set_value name="$mwcandidate_out_failure" exact="{61552,4316}" />
+        <set_value name="$mwcandidate_done" exact="false" />
+        <do_all exact="1">
+          <set_value name="$mwcandidate_ship" exact="$mwcandidate_cfg.$ship" />
+          <set_value name="$mwcandidate_failure" exact="{61552,4316}" />
+          <do_if value="not @$mwcandidate_source.available or $mwcandidate_source.owner == $mwcandidate_need.owner">
+            <set_value name="$mwcandidate_out_candidate" exact="null" />
+            <set_value name="$mwcandidate_out_failure" exact="$mwcandidate_failure" />
+            <set_value name="$mwcandidate_out_code" exact="if not @$mwcandidate_source.available then 'source_unavailable' else 'same_station'" />
+            <set_value name="$mwcandidate_done" exact="true" />
+            <break />
+          </do_if>
+          <set_value name="$mwcandidate_selfOwned" exact="$mwcandidate_source.owner.owner == $mwcandidate_ship.owner" />
+          <do_if value="not $mwcandidate_selfOwned and not $mwcandidate_cfg.$allowAiSuppliers">
+            <set_value name="$mwcandidate_out_candidate" exact="null" />
+            <set_value name="$mwcandidate_out_failure" exact="{61552,4315}.[$mwcandidate_source.owner.knownname]" />
+            <set_value name="$mwcandidate_out_code" exact="'ai_disabled'" />
+            <set_value name="$mwcandidate_done" exact="true" />
+            <break />
+          </do_if>
+          <set_value name="$mwcandidate_ware" exact="$mwcandidate_need.ware" />
+          <do_if value="$mwcandidate_selfOwned and ($mwcandidate_source.owner.cargo.{$mwcandidate_ware}.target le 0 or $mwcandidate_source.owner.cargo.{$mwcandidate_ware}.count*100 le $mwcandidate_source.owner.cargo.{$mwcandidate_ware}.target*$mwcandidate_cfg.$playerStockThreshold)">
+            <set_value name="$mwcandidate_out_candidate" exact="null" />
+            <set_value name="$mwcandidate_out_failure" exact="{61552,4303}.[$mwcandidate_source.owner.knownname,$mwcandidate_ware.name,$mwcandidate_source.owner.cargo.{$mwcandidate_ware}.count,$mwcandidate_source.owner.cargo.{$mwcandidate_ware}.target,$mwcandidate_cfg.$playerStockThreshold]" />
+            <set_value name="$mwcandidate_out_code" exact="'owned_stock_threshold'" />
+            <set_value name="$mwcandidate_done" exact="true" />
+            <break />
+          </do_if>
+          <!-- Cache only within this vessel's attempt: no reuse across personal blacklists. -->
+          <do_for_each name="$mwcandidate_offer" in="[$mwcandidate_need,$mwcandidate_source]">
+            <do_if value="not $mwcandidate_cache.{$mwcandidate_offer}?">
+              <set_value name="$mwoffer_offer" exact="$mwcandidate_offer" />
+              <set_value name="$mwoffer_ship" exact="$mwcandidate_ship" />
+              <set_value name="$mwoffer_home" exact="$mwcandidate_cfg.$home" />
+              <set_value name="$mwoffer_maxDist" exact="$mwcandidate_cfg.$maxDist" />
+              <include_interrupt_actions ref="MWEX_Fleet_offer" />
+              <set_value name="$mwcandidate_valid" exact="$mwoffer_out_offer" />
+              <set_value name="$mwcandidate_failure" exact="$mwoffer_out_reason" />
+              <set_value name="$mwcandidate_distance" exact="$mwoffer_out_distance" />
+              <set_value name="$mwcandidate_cache.{$mwcandidate_offer}" exact="table[$valid=$mwcandidate_valid,$failure=$mwcandidate_failure,$distance=$mwcandidate_distance,$price=0Cr,$net=0,$code=$mwoffer_out_code,$netKnown=false,$priceKnown=false]" />
+              <do_if value="$mwcandidate_valid">
+                <set_value name="$mwprice_offer" exact="$mwcandidate_valid" />
+                <set_value name="$mwprice_ship" exact="$mwcandidate_ship" />
+                <set_value name="$mwprice_cache" exact="table[]" />
+                <include_interrupt_actions ref="MWEX_Fleet_price" />
+                <set_value name="$mwcandidate_price" exact="$mwprice_out_price" />
+                <set_value name="$mwcandidate_priced" exact="$mwprice_out_ok" />
+                <set_value name="$mwnet_offer" exact="$mwcandidate_valid" />
+                <include_interrupt_actions ref="MWEX_Fleet_net" />
+                <set_value name="$mwcandidate_net" exact="$mwnet_out_net" />
+                <set_value name="$mwcandidate_cache.{$mwcandidate_offer}.$price" exact="$mwcandidate_price" />
+                <set_value name="$mwcandidate_cache.{$mwcandidate_offer}.$net" exact="$mwcandidate_net" />
+                <set_value name="$mwcandidate_cache.{$mwcandidate_offer}.$netKnown" exact="true" />
+                <set_value name="$mwcandidate_cache.{$mwcandidate_offer}.$priceKnown" exact="$mwcandidate_priced" />
+                <do_if value="not $mwcandidate_priced">
+                  <set_value name="$mwcandidate_cache.{$mwcandidate_offer}.$valid" exact="null" />
+                  <set_value name="$mwcandidate_cache.{$mwcandidate_offer}.$failure" exact="{61552,4302}" />
+                  <set_value name="$mwcandidate_cache.{$mwcandidate_offer}.$code" exact="'price_unavailable'" />
+                </do_if>
+              </do_if>
+            </do_if>
+            <do_if value="not $mwcandidate_cache.{$mwcandidate_offer}.$valid">
+              <set_value name="$mwcandidate_out_candidate" exact="null" />
+              <set_value name="$mwcandidate_out_failure" exact="$mwcandidate_cache.{$mwcandidate_offer}.$failure" />
+              <set_value name="$mwcandidate_out_code" exact="$mwcandidate_cache.{$mwcandidate_offer}.$code" />
+              <set_value name="$mwcandidate_done" exact="true" />
+              <break />
+            </do_if>
+          </do_for_each>
+          <do_if value="$mwcandidate_done">
+            <break />
+          </do_if>
+          <set_value name="$mwcandidate_buy" exact="$mwcandidate_cache.{$mwcandidate_source}" />
+          <set_value name="$mwcandidate_sell" exact="$mwcandidate_cache.{$mwcandidate_need}" />
+          <set_value name="$mwcandidate_builder" exact="$mwcandidate_cfg.$allowBuildstorage and not $mwcandidate_cfg.$allowResources and not $mwcandidate_cfg.$allowIntermediates and $mwcandidate_need.owner.isclass.buildstorage and $mwcandidate_need.owner.owner == faction.player" />
+          <do_if value="not $mwcandidate_selfOwned and not $mwcandidate_builder and $mwcandidate_sell.$price le $mwcandidate_buy.$price">
+            <set_value name="$mwcandidate_diagnostic.$price" operation="add" exact="1" />
+            <do_if value="($mwcandidate_buy.$price-$mwcandidate_sell.$price)/1Cr lt $mwcandidate_diagnostic.$minGap">
+              <set_value name="$mwcandidate_diagnostic.$minGap" exact="($mwcandidate_buy.$price-$mwcandidate_sell.$price)/1Cr" />
+              <set_value name="$mwcandidate_diagnostic.$gapWare" exact="$mwcandidate_ware" />
+            </do_if>
+            <set_value name="$mwcandidate_out_candidate" exact="null" />
+            <set_value name="$mwcandidate_out_failure" exact="{61552,4304}.[$mwcandidate_ware.name,$mwcandidate_source.owner.knownname,$mwcandidate_buy.$price/1Cr,$mwcandidate_need.owner.knownname,$mwcandidate_sell.$price/1Cr,$mwcandidate_source.unitprice/1Cr]" />
+            <set_value name="$mwcandidate_out_code" exact="'spread'" />
+            <set_value name="$mwcandidate_done" exact="true" />
+            <break />
+          </do_if>
+          <set_value name="$mwcandidate_amount" exact="[$mwcandidate_buy.$net,$mwcandidate_sell.$net,$mwcandidate_ship.cargo.{$mwcandidate_ware}.free,($mwcandidate_need.owner.cargo.free.{$mwcandidate_ware.transporttag}/$mwcandidate_ware.volume)i].min" />
+          <clamp_trade_amount trade="$mwcandidate_buy.$valid" amount="$mwcandidate_amount" buyer="$mwcandidate_ship" seller="$mwcandidate_source.owner" result="$mwcandidate_amount" />
+          <clamp_trade_amount trade="$mwcandidate_sell.$valid" amount="$mwcandidate_amount" buyer="$mwcandidate_need.owner" result="$mwcandidate_amount" />
+          <set_value name="$mwcandidate_paidPrice" exact="if $mwcandidate_source.buyfree.{$mwcandidate_ship} then 0Cr else $mwcandidate_buy.$price" />
+          <do_if value="$mwcandidate_paidPrice gt 0Cr">
+            <set_value name="$mwcandidate_amount" exact="[$mwcandidate_amount,($mwcandidate_ship.money/$mwcandidate_paidPrice)i].min" />
+          </do_if>
+          <do_if value="not ($mwcandidate_need.buyfree or $mwcandidate_need.owner.owner == $mwcandidate_ship.owner) and $mwcandidate_sell.$price gt 0Cr">
+            <set_value name="$mwcandidate_amount" exact="[$mwcandidate_amount,($mwcandidate_need.owner.money/$mwcandidate_sell.$price)i].min" />
+          </do_if>
+          <do_if value="$mwcandidate_amount le 0 or $mwcandidate_amount lt $mwcandidate_source.minamount or $mwcandidate_amount lt $mwcandidate_need.minamount">
+            <set_value name="$mwcandidate_out_candidate" exact="null" />
+            <set_value name="$mwcandidate_out_failure" exact="{61552,4306}.[$mwcandidate_source.owner.knownname,$mwcandidate_ware.name,$mwcandidate_sell.$net,$mwcandidate_buy.$net,$mwcandidate_ship.cargo.free.all,$mwcandidate_amount,$mwcandidate_source.minamount,$mwcandidate_need.minamount,$mwcandidate_ship.money/1Cr,$mwcandidate_buy.$price/1Cr]" />
+            <set_value name="$mwcandidate_out_code" exact="'quantity_or_funds'" />
+            <set_value name="$mwcandidate_done" exact="true" />
+            <break />
+          </do_if>
+          <set_value name="$mwcandidate_out_candidate" exact="table[$need=$mwcandidate_need,$source=$mwcandidate_source,$ware=$mwcandidate_ware,$amount=$mwcandidate_amount,$buyprice=$mwcandidate_buy.$price,$sellprice=$mwcandidate_sell.$price,$paidprice=$mwcandidate_paidPrice,$needNet=$mwcandidate_sell.$net,$sourceNet=$mwcandidate_buy.$net,$distance=$mwcandidate_buy.$distance,$supplierRank=if $mwcandidate_cfg.$allowPlayerSuppliers and $mwcandidate_selfOwned then 0 else 1]" />
+          <set_value name="$mwcandidate_out_failure" exact="'ok'" />
+          <set_value name="$mwcandidate_out_code" exact="'ok'" />
+          <set_value name="$mwcandidate_done" exact="true" />
+          <break />
+        </do_all>
+      </actions>
+    </library>
+  </interrupts>
+  <patch sinceversion="2">
+    <return>
+      <retval name="candidate" value="null" />
+      <retval name="failure" value="{61552,4316}" />
+    </return>
+  </patch>
+  <attention min="unknown">
+    <actions>
+      <!--Compatibility entry for saved calls and direct tools; live dispatch uses the action library.-->
+      <set_value name="$mwcandidate_cfg" exact="$cfg" />
+      <set_value name="$mwcandidate_need" exact="$need" />
+      <set_value name="$mwcandidate_source" exact="$source" />
+      <set_value name="$mwcandidate_cache" exact="$cache" />
+      <set_value name="$mwcandidate_diagnostic" exact="$diagnostic" />
+      <include_interrupt_actions ref="MWEX_Fleet_candidate" />
+      <return>
+        <retval name="candidate" value="$mwcandidate_out_candidate" />
+        <retval name="failure" value="$mwcandidate_out_failure" />
+      </return>
+    </actions>
+  </attention>
+</aiscript>

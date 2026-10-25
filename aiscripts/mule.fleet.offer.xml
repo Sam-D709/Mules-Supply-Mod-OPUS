@@ -1,66 +1,121 @@
 <?xml version="1.0" encoding="utf-8"?>
-<aiscript name="mule.fleet.offer" version="3">
+<aiscript name="mule.fleet.offer" version="5">
   <params>
-    <param name="offer"/><param name="ship"/><param name="home"/><param name="maxDist"/>
+    <param name="offer" />
+    <param name="ship" />
+    <param name="home" />
+    <param name="maxDist" />
   </params>
-  <attention min="unknown"><actions>
-    <set_value name="$valid" exact="null"/>
-    <set_value name="$reason" exact="{61552,4310}"/>
-    <set_value name="$distance" exact="-1"/>
-    <do_if value="not @$offer.exists or not @$offer.owner.exists or not $ship.isoperational">
-      <return><retval name="offer" value="$valid"/><retval name="reason" value="$reason"/><retval name="distance" value="$distance"/></return>
-    </do_if>
-    <set_value name="$homeSector" exact="if $home.isclass.sector then $home else $home.sector"/>
-    <set_value name="$distance" exact="$homeSector.gatedistance.{$offer.owner.sector}.{blacklistgroup.civilian}.{$ship}"/>
-    <set_value name="$reason" exact="{61552,4311}.[$offer.owner.knownname,$distance,$maxDist]"/>
-    <do_if value="$distance lt 0 or $distance gt $maxDist">
-      <return><retval name="offer" value="$valid"/><retval name="reason" value="$reason"/><retval name="distance" value="$distance"/></return>
-    </do_if>
-    <!-- Native queries apply ALL activity/travel filters to the actual vessel, even with a shared unfiltered index. -->
-    <do_if value="$offer.isbuyoffer">
-      <find_buy_offer buyer="$offer.owner" wares="$offer.ware" tradepartner="$ship" result="$matches" multiple="true">
-        <match_buyer>
-          <match_use_blacklist group="blacklistgroup.civilian" type="blacklisttype.objectactivity" object="$ship"/>
-          <match_parent><match_parent>
-            <match_use_blacklist group="blacklistgroup.civilian" type="blacklisttype.sectortravel" object="$ship"/>
-            <match_use_blacklist group="blacklistgroup.civilian" type="blacklisttype.sectoractivity" object="$ship"/>
-          </match_parent></match_parent>
-        </match_buyer>
-      </find_buy_offer>
-    </do_if>
-    <do_else>
-      <find_sell_offer seller="$offer.owner" wares="$offer.ware" tradepartner="$ship" result="$matches" multiple="true">
-        <match_seller>
-          <match tradesknownto="faction.player"/>
-          <match_use_blacklist group="blacklistgroup.civilian" type="blacklisttype.objectactivity" object="$ship"/>
-          <match_parent><match_parent>
-            <match_use_blacklist group="blacklistgroup.civilian" type="blacklisttype.sectortravel" object="$ship"/>
-            <match_use_blacklist group="blacklistgroup.civilian" type="blacklisttype.sectoractivity" object="$ship"/>
-          </match_parent></match_parent>
-        </match_seller>
-      </find_sell_offer>
-    </do_else>
-    <set_value name="$reason" exact="{61552,4312}.[$offer.owner.knownname,$offer.ware.name]"/>
-    <do_for_each name="$match" in="$matches">
-      <do_if value="$match.available and $match.cantradewith.{$ship}">
-        <set_value name="$valid" exact="$match"/>
-        <break/>
-      </do_if>
-    </do_for_each>
-    <do_if value="$valid">
-      <!-- free=false: occupied berths are a queue, not permanent incompatibility. -->
-      <find_closest_dockingbay name="$bay" object="$valid.owner" ship="$ship" free="false" requiretrading="true"/>
-      <do_if value="not $bay">
-        <set_value name="$valid" exact="null"/>
-        <set_value name="$reason" exact="{61552,4313}.[$offer.owner.knownname]"/>
-      </do_if>
-      <do_elseif value="$ship.iscapitalship and not $ship.units.{unitcategory.transport}.count and not $valid.owner.units.{unitcategory.transport}.count">
-        <set_value name="$valid" exact="null"/>
-        <set_value name="$reason" exact="{61552,4314}.[$offer.owner.knownname]"/>
-      </do_elseif>
-      <do_else><set_value name="$reason" exact="'ok'"/></do_else>
-    </do_if>
-    <do_if value="not $valid"><do_if value="@global.$mwexDebug"><debug_to_file directory="'MulesExtended'" name="'debug.txt'" append="true" text="'REJECT ship=%s station=%s ware=%s reason=%s'.[$ship.idcode,$offer.owner.knownname,$offer.ware.name,$reason]"/></do_if></do_if>
-    <return><retval name="offer" value="$valid"/><retval name="reason" value="$reason"/><retval name="distance" value="$distance"/></return>
-  </actions></attention>
+  <interrupts>
+    <library>
+      <actions name="MWEX_Fleet_offer">
+        <!--Non-blocking. Inputs and outputs use a library-specific prefix; reset outputs on EVERY invocation.-->
+        <set_value name="$mwoffer_out_offer" exact="null" />
+        <set_value name="$mwoffer_out_code" exact="'offer_or_ship_missing'" />
+        <set_value name="$mwoffer_out_reason" exact="{61552,4310}" />
+        <set_value name="$mwoffer_out_distance" exact="-1" />
+        <do_all exact="1">
+          <set_value name="$mwoffer_valid" exact="null" />
+          <set_value name="$mwoffer_reason" exact="{61552,4310}" />
+          <set_value name="$mwoffer_distance" exact="-1" />
+          <do_if value="not @$mwoffer_offer.exists or not @$mwoffer_offer.owner.exists or not $mwoffer_ship.isoperational">
+            <set_value name="$mwoffer_out_offer" exact="$mwoffer_valid" />
+            <set_value name="$mwoffer_out_reason" exact="$mwoffer_reason" />
+            <set_value name="$mwoffer_out_distance" exact="$mwoffer_distance" />
+            <break />
+          </do_if>
+          <set_value name="$mwoffer_homeSector" exact="if $mwoffer_home.isclass.sector then $mwoffer_home else $mwoffer_home.sector" />
+          <set_value name="$mwoffer_distance" exact="$mwoffer_homeSector.gatedistance.{$mwoffer_offer.owner.sector}.{blacklistgroup.civilian}.{$mwoffer_ship}" />
+          <set_value name="$mwoffer_reason" exact="{61552,4311}.[$mwoffer_offer.owner.knownname,$mwoffer_distance,$mwoffer_maxDist]" />
+          <set_value name="$mwoffer_out_code" exact="if $mwoffer_distance lt 0 then 'unreachable' else 'outside_range'" />
+          <do_if value="$mwoffer_distance lt 0 or $mwoffer_distance gt $mwoffer_maxDist">
+            <set_value name="$mwoffer_out_offer" exact="$mwoffer_valid" />
+            <set_value name="$mwoffer_out_reason" exact="$mwoffer_reason" />
+            <set_value name="$mwoffer_out_distance" exact="$mwoffer_distance" />
+            <break />
+          </do_if>
+          <!-- Native queries apply ALL activity/travel filters to the actual vessel, even with a shared unfiltered index. -->
+          <do_if value="$mwoffer_offer.isbuyoffer">
+            <find_buy_offer buyer="$mwoffer_offer.owner" wares="$mwoffer_offer.ware" tradepartner="$mwoffer_ship" result="$mwoffer_matches" multiple="true">
+              <match_buyer>
+                <match_use_blacklist group="blacklistgroup.civilian" type="blacklisttype.objectactivity" object="$mwoffer_ship" />
+                <match_parent>
+                  <match_parent>
+                    <match_use_blacklist group="blacklistgroup.civilian" type="blacklisttype.sectortravel" object="$mwoffer_ship" />
+                    <match_use_blacklist group="blacklistgroup.civilian" type="blacklisttype.sectoractivity" object="$mwoffer_ship" />
+                  </match_parent>
+                </match_parent>
+              </match_buyer>
+            </find_buy_offer>
+          </do_if>
+          <do_else>
+            <find_sell_offer seller="$mwoffer_offer.owner" wares="$mwoffer_offer.ware" tradepartner="$mwoffer_ship" result="$mwoffer_matches" multiple="true">
+              <match_seller>
+                <match tradesknownto="faction.player" />
+                <match_use_blacklist group="blacklistgroup.civilian" type="blacklisttype.objectactivity" object="$mwoffer_ship" />
+                <match_parent>
+                  <match_parent>
+                    <match_use_blacklist group="blacklistgroup.civilian" type="blacklisttype.sectortravel" object="$mwoffer_ship" />
+                    <match_use_blacklist group="blacklistgroup.civilian" type="blacklisttype.sectoractivity" object="$mwoffer_ship" />
+                  </match_parent>
+                </match_parent>
+              </match_seller>
+            </find_sell_offer>
+          </do_else>
+          <set_value name="$mwoffer_reason" exact="{61552,4312}.[$mwoffer_offer.owner.knownname,$mwoffer_offer.ware.name]" />
+          <set_value name="$mwoffer_out_code" exact="'native_offer_unusable'" />
+          <do_for_each name="$mwoffer_match" in="$mwoffer_matches">
+            <do_if value="$mwoffer_match == $mwoffer_offer and $mwoffer_match.available and $mwoffer_match.cantradewith.{$mwoffer_ship}">
+              <set_value name="$mwoffer_valid" exact="$mwoffer_match" />
+              <break />
+            </do_if>
+          </do_for_each>
+          <do_if value="$mwoffer_valid">
+            <!-- free=false: occupied berths are a queue, not permanent incompatibility. -->
+            <find_closest_dockingbay name="$mwoffer_bay" object="$mwoffer_valid.owner" ship="$mwoffer_ship" free="false" requiretrading="true" />
+            <do_if value="not $mwoffer_bay">
+              <set_value name="$mwoffer_valid" exact="null" />
+              <set_value name="$mwoffer_reason" exact="{61552,4313}.[$mwoffer_offer.owner.knownname]" />
+              <set_value name="$mwoffer_out_code" exact="'no_compatible_dock'" />
+            </do_if>
+            <do_elseif value="$mwoffer_ship.iscapitalship and not $mwoffer_ship.units.{unitcategory.transport}.count and not $mwoffer_valid.owner.units.{unitcategory.transport}.count">
+              <set_value name="$mwoffer_valid" exact="null" />
+              <set_value name="$mwoffer_reason" exact="{61552,4314}.[$mwoffer_offer.owner.knownname]" />
+              <set_value name="$mwoffer_out_code" exact="'cargo_drones_missing'" />
+            </do_elseif>
+            <do_else>
+              <set_value name="$mwoffer_reason" exact="'ok'" />
+              <set_value name="$mwoffer_out_code" exact="'ok'" />
+            </do_else>
+          </do_if>
+          <set_value name="$mwoffer_out_offer" exact="$mwoffer_valid" />
+          <set_value name="$mwoffer_out_reason" exact="$mwoffer_reason" />
+          <set_value name="$mwoffer_out_distance" exact="$mwoffer_distance" />
+          <break />
+        </do_all>
+      </actions>
+    </library>
+  </interrupts>
+  <patch sinceversion="5">
+    <return>
+      <retval name="offer" value="null" />
+      <retval name="reason" value="{61552,4310}" />
+      <retval name="distance" value="-1" />
+    </return>
+  </patch>
+  <attention min="unknown">
+    <actions>
+      <!--Compatibility entry for saved calls and direct tools; live dispatch uses the action library.-->
+      <set_value name="$mwoffer_offer" exact="$offer" />
+      <set_value name="$mwoffer_ship" exact="$ship" />
+      <set_value name="$mwoffer_home" exact="$home" />
+      <set_value name="$mwoffer_maxDist" exact="$maxDist" />
+      <include_interrupt_actions ref="MWEX_Fleet_offer" />
+      <return>
+        <retval name="offer" value="$mwoffer_out_offer" />
+        <retval name="reason" value="$mwoffer_out_reason" />
+        <retval name="distance" value="$mwoffer_out_distance" />
+      </return>
+    </actions>
+  </attention>
 </aiscript>

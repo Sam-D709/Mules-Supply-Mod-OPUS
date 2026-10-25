@@ -1,64 +1,135 @@
 <?xml version="1.0" encoding="utf-8"?>
-<aiscript name="mule.fleet.home" version="4">
-  <params><param name="cfg"/><param name="hub"/></params>
+<aiscript name="mule.fleet.home" version="6">
+  <params>
+    <param name="cfg" />
+    <param name="hub" />
+  </params>
   <interrupts>
     <handler>
       <conditions>
-        <event_object_signalled object="$cfg.$ship" param="'mwex_capacity_return_refresh'"/>
-        <check_value value="event.param2 == $returnToken"/>
+        <event_object_signalled object="$cfg.$ship" param="'mwex_capacity_return_refresh'" />
+        <check_value value="event.param2 == $returnToken" />
       </conditions>
       <actions>
+        <do_if value="@global.$mwexDebug">
+          <set_value name="$mwtrace_diagnostic" exact="table[$ship=$ship,$attempt=null,$relaxed=false]" />
+          <set_value name="$mwtrace_text" exact="'RETURN_SIGNAL token=%s activeAttempt=%s activePhase=%s activeActorAlive=%s orders=%s'.[$returnToken,@$ship.pilot.$mwexM4Search.$attempt,@$ship.pilot.$mwexM4Search.$phase,@$ship.pilot.$mwexM4Search.$actor.exists,$ship.orders.count]" />
+          <set_value name="$mwtrace_file" exact="'lifecycle'" />
+          <include_interrupt_actions ref="MWEX_Fleet_trace" />
+        </do_if>
         <!-- A poll must not destroy the current path or restart travel-drive charging. -->
-        <do_if value="$ship.orders.count or $ship == player.occupiedship or $ship.defaultorder != $cfg.$origin or ($cfg.$origin.id == 'SupplyMule' and $cfg.$origin.$home != $home) or ($cfg.$bound and $ship.commander != $cfg.$commander) or ($home.isclass.sector and $ship.sector == $home)"><abort_called_scripts resume="finish"/></do_if>
-        <signal_objects object="$ship" param="'mwex_capacity_return_refresh'" param2="$returnToken" delay="30s"/>
-        <run_interrupt_script name="'mule.fleet.run'" abortscripts="false">
-          <param name="cfg" value="$cfg"/><param name="once" value="true"/><param name="returnToken" value="$returnToken"/>
+        <do_if value="$ship.orders.count or $ship == player.occupiedship or $ship.defaultorder != $cfg.$origin or ($cfg.$origin.id == 'SupplyMule' and $cfg.$origin.$home != $home) or ($cfg.$bound and $ship.commander != $cfg.$commander) or ($home.isclass.sector and $ship.sector == $home)">
+          <abort_called_scripts resume="finish" />
+        </do_if>
+        <set_value name="$ship.pilot.$mwexFleetReturnPolled" exact="player.age" />
+        <do_if value="@global.$mwexDebug">
+          <do_if value="@global.$mwexDebug">
+            <set_value name="$mwtrace_diagnostic" exact="table[$ship=$ship,$attempt=null,$relaxed=false]" />
+            <set_value name="$mwtrace_text" exact="'RETURN_POLL ship=%s token=%s lastSearchAgo=%s'.[$ship.idcode,$returnToken,player.age-(if $ship.pilot.$mwexFleetLastSearch? then $ship.pilot.$mwexFleetLastSearch else $returnStarted)]" />
+            <set_value name="$mwtrace_file" exact="'lifecycle'" />
+            <include_interrupt_actions ref="MWEX_Fleet_trace" />
+          </do_if>
+        </do_if>
+        <signal_objects object="$ship" param="'mwex_capacity_return_refresh'" param2="$returnToken" delay="30s" />
+        <run_interrupt_script name="'mule.fleet.poll'" abortscripts="false">
+          <param name="cfg" value="$cfg" />
+          <param name="once" value="true" />
+          <param name="returnToken" value="$returnToken" />
         </run_interrupt_script>
       </actions>
     </handler>
     <handler>
-      <conditions><event_object_signalled object="$cfg.$ship" param="'mwex_capacity_return_stop'"/><check_value value="event.param2 == $returnToken"/></conditions>
-      <actions><abort_called_scripts resume="finish"/></actions>
+      <conditions>
+        <event_object_signalled object="$cfg.$ship" param="'mwex_capacity_return_stop'" />
+        <check_value value="event.param2 == $returnToken" />
+      </conditions>
+      <actions>
+        <abort_called_scripts resume="finish" />
+      </actions>
     </handler>
   </interrupts>
   <init>
-    <set_value name="$cfg.$ship.pilot.$mwexFleetReturnSerial" exact="(if $cfg.$ship.pilot.$mwexFleetReturnSerial? then $cfg.$ship.pilot.$mwexFleetReturnSerial else 0)+1"/>
-    <set_value name="$returnToken" exact="$cfg.$ship.pilot.$mwexFleetReturnSerial"/>
+    <set_value name="$cfg.$ship.pilot.$mwexFleetReturnSerial" exact="(if $cfg.$ship.pilot.$mwexFleetReturnSerial? then $cfg.$ship.pilot.$mwexFleetReturnSerial else 0)+1" />
+    <set_value name="$returnToken" exact="$cfg.$ship.pilot.$mwexFleetReturnSerial" />
   </init>
-  <patch sinceversion="2"><resume label="finish"/></patch>
-  <patch sinceversion="3"><resume label="finish"/></patch>
-  <patch sinceversion="4"><resume label="finish"/></patch>
-  <attention min="unknown"><actions>
-    <set_value name="$ship" exact="$cfg.$ship"/>
-    <set_value name="$home" exact="$cfg.$home"/>
-    <do_if value="$cfg.$origin.id == 'SupplyMule' and $cfg.$origin.$home != $home"><return/></do_if>
-    <do_if value="not $home.exists or not $ship.isoperational or $ship == player.occupiedship or $ship.orders.count or $ship.defaultorder != $cfg.$origin or ($ship.pilot.$mwexFleetCfg.$origin != $cfg.$origin or $ship.pilot.$mwexFleetCfg.$signature != $cfg.$signature or $ship.pilot.$mwexFleetCfg.$commander != $cfg.$commander or $ship.pilot.$mwexFleetCfg.$bound != $cfg.$bound) or ($cfg.$bound and $ship.commander != $cfg.$commander)"><return/></do_if>
-    <set_value name="$sector" exact="if $home.isclass.sector then $home else $home.sector"/>
-    <!-- Return to the station's zone, without occupying trade berths; sector homes stop on sector entry. -->
-    <do_if value="($home.isclass.sector and $ship.sector == $sector) or (not $home.isclass.sector and $ship.zone == $home.zone)"><return/></do_if>
-    <set_value name="$distance" exact="$ship.sector.gatedistance.{$sector}.{blacklistgroup.civilian}.{$ship}"/>
-    <do_if value="$distance lt 0">
-      <run_script name="'mule.fleet.report'"><param name="cfg" value="$cfg"/><param name="reason" value="{61552,4331}.[$home.knownname]"/></run_script>
-      <return/>
-    </do_if>
-    <set_value name="$destination" exact="$home"/>
-    <do_if value="$home.isclass.sector">
-      <!-- move.generic's endintargetsector shortcut also succeeds if destination.sector is null. -->
-      <find_zone name="$destination" space="$home" normalzone="true" knownto="faction.player"/>
-      <do_if value="not $destination"><find_zone name="$destination" space="$home" normalzone="true"/></do_if>
-      <do_if value="not $destination"><set_value name="$destination" exact="$home"/></do_if>
-    </do_if>
-    <do_if value="@global.$mwexDebug"><debug_to_file directory="'MulesExtended'" name="'debug.txt'" append="true" text="'RETURN_HOME ship=%s home=%s'.[$ship.idcode,$home]"/></do_if>
-    <signal_objects object="$ship" param="'mwex_capacity_return_refresh'" param2="$returnToken" delay="30s"/>
-    <!-- Only called after the dispatch lock is released. No queued Wait/Dock order can block future procurement. -->
-    <run_script name="'move.generic'">
-      <param name="destination" value="$destination"/>
-      <param name="endintargetzone" value="true"/>
-      <param name="endintargetsector" value="$home.isclass.sector and not $destination.isclass.sector"/>
-      <param name="noboost" value="false"/>
-      <param name="strictblacklist" value="true"/>
-    </run_script>
-    <label name="finish"/>
-    <return/>
-  </actions></attention>
+  <patch sinceversion="2">
+    <resume label="finish" />
+  </patch>
+  <patch sinceversion="3">
+    <resume label="finish" />
+  </patch>
+  <patch sinceversion="5">
+    <resume label="finish" />
+  </patch>
+  <patch sinceversion="4">
+    <resume label="finish" />
+  </patch>
+  <patch sinceversion="6">
+    <return />
+  </patch>
+  <attention min="unknown">
+    <actions>
+      <set_value name="$returnStarted" exact="player.age" />
+      <set_value name="$ship" exact="$cfg.$ship" />
+      <set_value name="$home" exact="$cfg.$home" />
+      <do_if value="$cfg.$origin.id == 'SupplyMule' and $cfg.$origin.$home != $home">
+        <return />
+      </do_if>
+      <do_if value="not $home.exists or not $ship.isoperational or $ship == player.occupiedship or $ship.orders.count or $ship.defaultorder != $cfg.$origin or ($ship.pilot.$mwexFleetCfg.$origin != $cfg.$origin or $ship.pilot.$mwexFleetCfg.$signature != $cfg.$signature or $ship.pilot.$mwexFleetCfg.$commander != $cfg.$commander or $ship.pilot.$mwexFleetCfg.$bound != $cfg.$bound) or ($cfg.$bound and $ship.commander != $cfg.$commander)">
+        <return />
+      </do_if>
+      <set_value name="$sector" exact="if $home.isclass.sector then $home else $home.sector" />
+      <!-- Return to the station's zone, without occupying trade berths; sector homes stop on sector entry. -->
+      <do_if value="($home.isclass.sector and $ship.sector == $sector) or (not $home.isclass.sector and $ship.zone == $home.zone)">
+        <return />
+      </do_if>
+      <set_value name="$distance" exact="$ship.sector.gatedistance.{$sector}.{blacklistgroup.civilian}.{$ship}" />
+      <do_if value="$distance lt 0">
+        <set_value name="$mwreport_cfg" exact="$cfg" />
+        <set_value name="$mwreport_reason" exact="{61552,4331}.[$home.knownname]" />
+        <include_interrupt_actions ref="MWEX_Fleet_report" />
+        <return />
+      </do_if>
+      <set_value name="$destination" exact="$home" />
+      <do_if value="$home.isclass.sector">
+        <!-- move.generic's endintargetsector shortcut also succeeds if destination.sector is null. -->
+        <find_zone name="$destination" space="$home" normalzone="true" knownto="faction.player" />
+        <do_if value="not $destination">
+          <find_zone name="$destination" space="$home" normalzone="true" />
+        </do_if>
+        <do_if value="not $destination">
+          <set_value name="$destination" exact="$home" />
+        </do_if>
+      </do_if>
+      <do_if value="@global.$mwexDebug">
+        <do_if value="@global.$mwexDebug">
+          <set_value name="$mwtrace_diagnostic" exact="table[$ship=$ship,$attempt=null,$relaxed=false]" />
+          <set_value name="$mwtrace_text" exact="'RETURN_HOME ship=%s home=%s token=%s'.[$ship.idcode,$home,$returnToken]" />
+          <set_value name="$mwtrace_file" exact="'lifecycle'" />
+          <include_interrupt_actions ref="MWEX_Fleet_trace" />
+        </do_if>
+      </do_if>
+      <signal_objects object="$ship" param="'mwex_capacity_return_refresh'" param2="$returnToken" delay="30s" />
+      <!-- Only called after the dispatch lock is released. No queued Wait/Dock order can block future procurement. -->
+      <set_value name="$mwstate_cfg" exact="$cfg" />
+      <set_value name="$mwstate_value" exact="'returning'" />
+      <set_value name="$mwstate_reason" exact="'no_dispatch'" />
+      <include_interrupt_actions ref="MWEX_Log_state" />
+      <run_script name="'move.generic'">
+        <param name="destination" value="$destination" />
+        <param name="endintargetzone" value="true" />
+        <param name="endintargetsector" value="$home.isclass.sector and not $destination.isclass.sector" />
+        <param name="noboost" value="false" />
+        <param name="strictblacklist" value="true" />
+      </run_script>
+      <label name="finish" />
+      <do_if value="@global.$mwexDebug">
+        <set_value name="$mwtrace_diagnostic" exact="table[$ship=$ship,$attempt=null,$relaxed=false]" />
+        <set_value name="$mwtrace_text" exact="'RETURN_END token=%s sector=%s zone=%s orders=%s homeExists=%s reason=move_returned_or_interrupted'.[$returnToken,$ship.sector,$ship.zone,$ship.orders.count,@$home.exists]" />
+        <set_value name="$mwtrace_file" exact="'lifecycle'" />
+        <include_interrupt_actions ref="MWEX_Fleet_trace" />
+      </do_if>
+      <return />
+    </actions>
+  </attention>
 </aiscript>

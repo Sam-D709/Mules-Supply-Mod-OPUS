@@ -1,21 +1,21 @@
 # Mules-Supply-Mod-OPUS
 
-**Public pre-release: [v0.1.0-beta.3](https://github.com/Sam-D709/Mules-Supply-Mod-OPUS/releases/tag/v0.1.0-beta.3), internal version 665.** [Release notes](docs/releases/v0.1.0-beta.3.md). Ship logs now contain compact dispatch results and throttled idle summaries. Detailed disk logging is optional and off by default; procurement rules remain those of beta.1.
+**Current test package: v0.1.0-beta.9 / internal 671, independent installation identity hotfix.** Trading rules remain those of beta.7; M1-M3 runtime files are unchanged. See [release notes](docs/releases/v0.1.0-beta.9.md) and [logging guide](docs/M4_DEBUG.zh-CN.md).
+
+**Historical beta.7 test build, internal version 669.** [Build notes](docs/releases/v0.1.0-beta.7.md). Adds flexible capacity bands, fixes return-poll interrupt priority, repairs shrinking drafts within a budget, relaxes loading by game wait time and shares coarse supplier ordering. See [save10→11 findings and fixes](docs/BETA6_FIXES.zh-CN.md) and the [Debug guide](docs/SHIP_LOG.zh-CN.md). Native pressure testing identified remaining wait-age and logging issues; beta.9 retains those limitations while isolating the installation identity.
 
 [简体中文](README.md) | **English**
 
-A supply-focused mod for **X4: Foundations**, based on **Mules, Supply and Warehouses Extended 6.60**. It mainly rewrites **M4 — Supply Mule**: allocate ships by actual cargo capacity, combine procurement lots, and complete small remaining demands. M1, M2 and M3 remain available.
+A supply-focused mod for **X4: Foundations**, based on **Mules, Supply and Warehouses Extended 6.60**. It mainly rewrites **M4 — Supply Mule**: let idle ships plan independently using actual deliverable volume and estimated trip time, combine procurement lots, and complete small remaining demands. M1, M2 and M3 remain available.
 
 Existing gameplay feedback is from **X4 8.00 Hotfix 4 (legacy) with Star Wars Interworlds**. Unmodded 8.00 and 9.00 have not been gameplay-tested. The latest player-supplier preference and localization changes still need native-game verification.
 
 ## Download and install
 
-Download **`Mules-Supply-Mod-OPUS-v0.1.0-beta.3.zip`** from [Releases](https://github.com/Sam-D709/Mules-Supply-Mod-OPUS/releases/tag/v0.1.0-beta.3). Choose the named mod ZIP under **Assets**, rather than GitHub's automatically generated **Source code** archives. GitHub Packages is not used for this mod.
+Download the precompiled **v0.1.0-beta.9 / internal 671** package from [Releases](https://github.com/Sam-D709/Mules-Supply-Mod-OPUS/releases/tag/v0.1.0-beta.9), or build `dist/Mules-Supply-Mod-OPUS-v0.1.0-beta.9.zip` using `python tools/build.py`.
 
-This is a public beta, with X4 internal version **665**. The public version is stored in `VERSION`; maintainers can follow the [versioning and publishing guide (Chinese)](docs/VERSIONING.zh-CN.md).
-
-1. Exit X4 and back up your saves. When upgrading, move the old `mules_and_warehouses_extended` folder outside `extensions` before installing the replacement.
-2. Extract the downloaded ZIP. It contains one folder: **`mules_and_warehouses_extended`**.
+1. Exit X4 and back up your saves. When upgrading, move the old `mules_supply_mod_opus` folder outside `extensions` before installing the replacement.
+2. Extract the downloaded ZIP. It contains one folder: **`mules_supply_mod_opus`**.
 3. Drag that entire folder into your X4 **`extensions`** directory. No build tools, source compilation or language configuration are required.
 4. Launch X4 and confirm **Mules-Supply-Mod-OPUS** is enabled in Extensions. Configure M4 on your ships.
 
@@ -24,7 +24,7 @@ The result must look like this:
 ```text
 X4 Foundations/
 └── extensions/
-    └── mules_and_warehouses_extended/
+    └── mules_supply_mod_opus/
         ├── content.xml
         ├── ext_01.cat
         ├── ext_01.dat
@@ -32,9 +32,9 @@ X4 Foundations/
         └── README.en.md
 ```
 
-For example: `E:\SteamLibrary\steamapps\common\X4 Foundations\extensions\mules_and_warehouses_extended\content.xml`.
+For example: `E:\SteamLibrary\steamapps\common\X4 Foundations\extensions\mules_supply_mod_opus\content.xml`.
 
-This replaces the original Mules mod and retains extension ID `ws_2013772865` for saved-order compatibility. **Do not enable both versions.** Do not nest the extracted folder inside another mod folder. Steam Workshop updates may overwrite the original mod directory. The ZIP includes Chinese and English resources; X4 selects them using its game language. The explicit English `l044` resource is generated from the default English text during packaging.
+This build uses the independent local extension ID `mules_supply_mod_opus` and the matching folder. When upgrading from beta.8 or earlier, move the old `extensions/mules_and_warehouses_extended` folder outside `extensions` first. Install into the new folder; never copy this build into the Workshop original's folder. Unsubscribe from or disable the original Mules mod: both versions still define the same scripts and ship behaviors and must not be enabled together. Back up existing saves and check that this extension is enabled after migration; reselect the M4 behavior if necessary. Do not nest the extracted folder inside another mod folder. The ZIP includes Chinese and English resources; X4 selects them using its game language. The explicit English `l044` resource is generated from the default English text during packaging.
 
 Existing settings may be preserved: change old ships from one procurement lot to three if desired. The retired Player Buy Mod percentage is not converted into the new stock threshold, which defaults to 50%.
 
@@ -58,7 +58,7 @@ Defaults below apply to newly configured behaviors.
 | Original 6.60 setting | This mod | Reason |
 |---|---|---|
 | Max Trades: fixed at 1 | **Maximum Procurement Lots Per Trip**: 1–10, default 3 | Combine pickups without letting one ship monopolize every tiny demand. One supplier, one ware and one receiver count as a lot; delivery is not counted again. |
-| Fill Cargo Hold %: 25–95%, default 75% | **Minimum Total Trip Load %**: 0–95%, default 75% | Apply the threshold to the combined trip. A secondary lot may be small; remaining demand can use relaxed tail allocation. |
+| Fill Cargo Hold %: 25–95%, default 75% | **Minimum Total Trip Load %**: 0–95%, default 75% | Apply the threshold to the combined trip. A secondary lot may be small; three completed insufficient-load failures allow a relaxed next search. |
 | Collect from Player | **Prefer Player-Owned Suppliers**: enabled by default | Prefer eligible owned supply when on. When off, owned supply remains eligible and competes with NPC supply normally. |
 | Player Buy Mod: 0–100% price multiplier | **Player Supplier Stock Threshold %**: 0–100%, default 50% | Keep low-stock sales factories out of internal supply while letting stocked factories support logistics. This is an eligibility trigger, not a retained reserve. |
 | % of trades to eval | Removed from the visible menu | Shared discovery and batched processing handle search work; players do not need to tune a candidate percentage. |
@@ -68,67 +68,45 @@ Defaults below apply to newly configured behaviors.
 | Allow Trade Wares | Removed from the visible menu | Supply trade inventory from valid buy offers. The inherited special filter for final products still applies. |
 | Serve Source Only | **Supply Home Station/Sector Only**: disabled by default | Restrict recipients to the home station and its build storage, or player stations in the home sector. Suppliers may still be elsewhere within range. |
 | No equivalent | **Secondary corridor radius (jumps)**: 0–10, default 2 | Limit secondary suppliers to sectors near the fixed home-to-primary-supplier route, also respecting the home range. |
-| No equivalent | **Price markup per off-route jump %**: 0–50%, default 5% | Represent detour cost when comparing suppliers of the same secondary ware, without changing actual payment. |
+| No equivalent | **Price markup per off-route jump %**: 0–50%, default 5% | Cost tie-break between otherwise equal trip rankings; throughput takes precedence. No change to payment. |
 | Home Station/Sector; Assign Ship To Station; Max Jumps From Home | Retained | Set the service anchor and range. Station assignment requires a specific eligible player station. |
 | Collect from AI Factions; Lock Ware List; Wares | Retained | Independently control NPC sources and which wares may be procured. |
 
 With a player-sector home and home-only service enabled, M4 supplies player stations in that sector, not NPC recipients. NPC stations can still be suppliers. An explicitly selected NPC station home follows the inherited NPC service rules.
 
-## Allocation and examples
+## Planning and supplier selection
 
-Ships sharing a home share demand and supplier information. Capacity groups consider ship model, actual capacity and cargo transport capabilities; XL/L/M/S labels do not determine allocation order.
+Every idle M4 plans its own trip using a shared home demand/supplier index. Cargo capacity affects feasibility and load percentage; ship capacity no longer determines a fleet-wide turn order. A ship takes the quantities it successfully commits.
 
-**Normal allocation runs from largest capacity to smallest.** Each ship combines up to its lot limit and checks the total trip load. **Tail allocation then runs from smallest to largest and waives only the minimum load.** A busy small ship does not prevent an idle larger ship from taking remaining demand. Other trade requirements and the lot limit remain in force.
+Use net sell-offer availability, not physical factory inventory. Clamp against remaining demand, supplier availability, native reservations, mod holds not yet visible natively, cargo space, budgets and minimum lot sizes. Volume is quantity multiplied by the native ware volume.
 
-Assume two 16,000 m³ A ships, five 5,000 m³ B ships, a 90% load threshold, a three-lot limit, and 1 m³ per unit. All examples require valid sources, prices, routes, docking, funds and drones.
+For each ware, shortlist high-volume, nearby and low-price suppliers, plus owned and rotating candidates. Validate actual ship eligibility and prices only for this shortlist. Failed searches widen and rotate it. Compare alternative primary pickups and bounded combinations, instead of fixing every trip to the nearest tiny source.
 
-| Demand | Allocation example |
+Rank trips by minimum-load feasibility, then owned volume as a fraction of cargo capacity when preference is enabled, then **deliverable cubic metres / estimated trip time**. Actual cost with corridor markup breaks otherwise equal rankings. Time includes travel from the current ship sector through pickups to delivery. S/M use relative weights of 90 per gate and 45 per loading/unloading stop; L/XL use 180 and 120. These are heuristics, not native ETA: local flight, congestion, speed and real dock queues are not modeled.
+
+| Situation | Expected choice |
 |---|---|
-| 9,000 energy cells | A cannot meet its 14,400 m³ threshold. One B takes 5,000; another takes the remaining 4,000 during relaxed tail allocation. |
-| 9,000 energy cells and 6,000 BoFu | A may combine both eligible pickups: 15,000 m³, or 93.75%. It buys both before returning to deliver. Secondary sources must fit the configured corridor. |
-| 9,000 energy cells and 5,000 BoFu | The two lots total 87.5%, below 90%. A needs a third suitable lot or allocation proceeds to other ships/tail handling. |
-| One unit each of four different wares | During tail allocation, a B can take up to three lots; another takes the fourth. If all B ships are busy, an idle A can handle the remainder. |
-| 9,000 energy cells split across two factories, plus 5,500 BoFu | A may combine 6,000 cells, 5,500 BoFu and 3,000 cells as three lots: 14,500 m³, or 90.625%. |
-| 2,000 cells remain and all B ships are busy | An idle A can take the tail lot without waiting for B to return. If every ship is busy, demand waits for capacity. |
+| Nearest source has a tiny amount; a farther one can fill the ship | Compare alternative anchors; the tiny source does not automatically win |
+| Nearby source fills 80%; distant source fills 100%; minimum 75% | Both are feasible; estimated trip throughput decides |
+| Two compatible wares each fill 40% | Combine them if receiver, storage and corridor rules allow |
+| One ware is spread across factories | Separate pickups are separate lots under the configured limit |
 
-One trip serves a single receiver and uses one compatible cargo transport type. Demand volume is compared within service-scope and ware-use priority buckets; this is not a global optimization across every receiver and ware.
+Trips share one receiver and compatible storage type. Scope and ware-use priority tiers remain; secondary lots can cross allowed ware-use categories. Each alternative primary defines its own fixed home-to-primary corridor. Secondary pickups respect both corridor and home limits.
 
-## Owned supply, distance and secondary pickups
+Search is bounded at 192 candidate pair checks and 128 route extensions per attempt. Each state considers up to six extensions and retains three states. Failed/exhausted searches rotate suppliers and demand windows. This is not a global optimal-route solver. Maximum purchases is a limit, not a required count.
 
-**Owned stock eligibility applies with preference both on and off:**
+After three consecutive completed searches fail for insufficient combined load, the fourth temporarily waives minimum load. Other trade failures interrupt this count; exhausted search budgets do not increment it. Success or configuration changes reset it. All other eligibility, funds, quantity and route rules still apply.
 
-```text
-current stock × 100 > allocated storage for this ware × threshold percentage
-```
+Eligible owned suppliers must strictly exceed their per-ware allocated-storage stock threshold, enabled or disabled preference alike. The default is 50%; it is an entry trigger, not a retained reserve after loading. With preference off, owned sources still participate normally. The NPC switch remains independent.
 
-Equality is not sufficient; zero allocation is skipped. With 10,000 units allocated, 8,000 stocked and a 60% threshold, a valid shipment may take 7,000 units and leave 1,000. The threshold does not require keeping 60% after shipment.
-
-- **Preference on:** for each ware, choose an executable eligible owned supplier before NPC suppliers, even if the owned supplier is farther away within range. If owned supply is unavailable or insufficient, NPC lots may cover the remainder within the lot limit.
-- **Preference off:** eligible owned and NPC suppliers use the same ranking rules. Owned supply is not disabled. Owned stock below the threshold is still excluded.
-- The NPC switch controls actual NPC sources only. Turning preference off does not change ownership, free internal transfers, or the owned-transfer profit-spread exception.
-
-Within one priority tier, the **primary supplier** is chosen by legal jumps from home, then actual purchase price including available discounts. For example, an owned supplier two jumps away beats an NPC one jump away with preference on; preference off favors the nearer NPC.
-
-After choosing the primary supplier, the home-to-primary route stays fixed. **Secondary suppliers** must remain within both the home range and the corridor radius. Within the same priority tier, suppliers of the same ware compete using:
-
-```text
-comparison price = actual unit price × (1 + off-route jumps × markup / 100)
-```
-
-At 5% per jump, an on-route price of 103 beats a one-jump-off-route price of 100, whose comparison price is 105. Actual payment remains 100 if that off-route source is selected. A sole valid source is not rejected simply because the comparison markup increases its score. Zero markup does not disable distance limits. The route combination is greedy, not a global shortest-route solver.
-
-## Known limitation and next stage
-
-This release changes logging, not procurement decisions. The first demand with an executable supplier anchors the main ware and route. If the combined trip fails its load threshold, the planner **does not retry the whole draft with another main ware or another main supplier**. A nearby factory offering small newly produced quantities can therefore repeatedly anchor an unsuitable large-ship draft, or cause a low-load tail trip, even when another main ware could form a fuller trip.
-
-The next stage will evaluate bounded retries across main wares and suppliers, with a per-round work budget to balance distance preference and cargo utilization. **This remains unresolved in beta.3.** Empty offers and fully reserved quantities are still skipped; this is not unconditional procurement from an empty factory.
+Shared discovery filters unrelated NPC demand before per-ship planning. Newly discovered quotes are inserted incrementally, with a 30-game-second fallback refresh; events during a snapshot trigger another refresh. A global token protects only final net checks and order creation, with no yields inside. Commit reads live prices and proceeds if they still satisfy affordability and spread rules, rather than rejecting any price change.
 
 ## Cancellations, diagnostics and idle ships
 
 - Canceling a trade releases its demand for later reassignment without counting native reservations twice.
 - Changing the home sector moves the ship to the new home's dispatch group and search area. An idle ship with no suitable trade returns to the new home. Already queued trades remain intact.
 - Check an individual ship's **Information → Behavior** failure message for rejection reasons. This is a behavior diagnostic, not financial transaction history. It reports the last actual rejection, not an exhaustive explanation of all suppliers.
-- **Information → Logbook** records one compact report per actual dispatch: settings, normal/tail mode, selected purchases, total load and aggregate rejections. Idle/failure reports have a 10-minute cooldown that price/stock fluctuations cannot reset. Counts and the smallest price/range shortfall use existing checks, without extra searches; they are first-failure observations, not unique supplier counts or proof that all later checks would pass. Native ship log entries also appear in the general logbook.
+- **Information → Logbook** leads with the final result and specific failure, followed by combined load, actual secondary-search attempts and selected purchases. Failures of the same class, configuration and home have a 10-game-minute cooldown; a different class is reported immediately, and success is always recorded. Counts use existing checks and describe attempts, not unique suppliers. Native ship log entries also appear in the general logbook.
 - For detailed diagnostics, start X4 with **`-scriptlogfiles`**, then enable **Extension Options → Mules-Supply-Mod-OPUS → Debug: detailed disk logging**. The menu uses the public SirNukes Mod Support APIs interface alongside kuertee UI Extensions; Mod Support APIs is needed for the menu, while normal procurement works without it. The switch is off by default and saved per savegame. Detailed candidates go only to **Documents/Egosoft/X4/[user ID]/logs/MulesExtended/debug.txt**. X4 scripts cannot write directly into the mod installation folder. Debug can reduce performance; disable it after reproducing the issue. Upgrading preserves old log entries and queued trades, and removes only obsolete full-report caches.
 - Each idle M4 with no active or queued orders returns near its home station or into its home sector, unless the player is flying it. Other busy M4 ships do not delay its return. Returning ships do not need to occupy a trade berth.
 - Return flight continues across 30-second dispatch checks; a check with no new job does not restart the route or travel-drive charging. Disabling home-only service still allows other player receivers within the current home's range.
@@ -137,11 +115,10 @@ The next stage will evaluate bounded retries across main wares and suppliers, wi
 
 ## Verification and source
 
-**127 script checks, 2 release-package checks, 28 XML schema validations and 3 native patch-selector checks passed.** English diagnostic execution and text-format argument parity are covered by local checks. The retired M4 search loop and its two unused helper scripts have been removed.
+Actual XML adapter regressions cover supplier quantities, route tradeoffs, mixed categories, three failed load attempts, interleaved planning, commit collisions, dynamic discovery and bounded search. Package tests extract and verify runtime bytes. See the [test record](docs/TESTING.zh-CN.md).
 
-The install ZIP is extracted into an isolated test `extensions` directory and checked for correct nesting, metadata, CAT/DAT content, language files and both READMEs. A `SHA256SUMS.txt` release asset verifies the download.
+These checks cannot establish native save migration, flight, event timing or FPS. Beta.7 needs 30 minutes with SETA and one hour without SETA in the native game. Existing feedback from older builds is not validation of this build.
 
-Local XML checks and schema checks cannot establish native-game language rendering, flight, save compatibility or FPS. Existing feedback covers capacity ordering, multiple lots, tiny demands, reassignment after cancellation and the latest return fix; the complete configuration/save matrix still requires gameplay testing. No large-fleet FPS benchmark is available.
 
 ```powershell
 python tests/checks.py
@@ -149,6 +126,12 @@ python tests/test_package.py
 python tools/build.py
 ```
 
-The local build generates `dist/Mules-Supply-Mod-OPUS-v0.1.0-beta.3.zip`; this is the beta.3 public download. Advanced implementation notes and the testing matrix are currently in Chinese: [design](docs/DESIGN.zh-CN.md), [testing](docs/TESTING.zh-CN.md), [changes](docs/CHANGELOG.zh-CN.md).
+The local build generates `dist/Mules-Supply-Mod-OPUS-v0.1.0-beta.7.zip`; this is a local test package. Advanced implementation notes and the testing matrix are currently in Chinese: [design](docs/DESIGN.zh-CN.md), [testing](docs/TESTING.zh-CN.md), [changes](docs/CHANGELOG.zh-CN.md).
 
 Derived from [Mules and Warehouses Extended](https://github.com/Misunderstood-Wookiee/Mules-and-Warehouses-Extended), retaining **CC BY 4.0** and upstream attribution. See [LICENCE.md](LICENCE.md) and [ATTRIBUTION.md](ATTRIBUTION.md). This is an independently maintained derivative, not an official upstream or Egosoft release.
+
+## Current feedback fixes
+
+Candidate discovery and route expansion have independent work limits. Existing candidates still form multi-lot routes after discovery reaches its limit. Net supply and demand refresh before ranking and during each bounded extension; commit-time checks still guard later changes. Compact ship logs lead with the final failure, count actual secondary extensions and avoid duplicate idle reports. Debug records game time, ship and attempt so interleaved searches can be reconstructed; every attempt result is written even during the player-log cooldown.
+
+Beta.7 prefers main lots suited to real cargo capacity bands; secondary lots can cross bands. Cross-band main fallback starts after 90 game seconds or three unsuccessful attempts. Loading caps drop to 50% after two game minutes, 25% after five, and zero after ten; three completed load failures can waive the minimum earlier. Quantity repair adds at most two lots from at most twelve existing candidates and still passes final validation. Return polling uses priority 1, below attacked response priority 10. Debug BEGIN identifies `build=beta.7`; native pressure testing is pending.

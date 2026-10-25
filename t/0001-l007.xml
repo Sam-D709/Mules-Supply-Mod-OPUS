@@ -125,5 +125,16 @@
 		<t id="4121">Максимальное количество торговых сделок за цикл.</t>
 		<t id="4122">Минимальный процент заполнения трюма корабля товаром для торговли.</t>
 		<t id="4123">Если работа Мулов-поставщиков заметно замедляет игру, можно уменьшить процент проверяемых торговых сделок.</t>
-	</page>
+	  <t id="4416">Planning budget exhausted; retry with rotating candidates. This does not count as a load failure.</t>
+    <t id="4460">Frachtraumgruppe: Hauptaufträge bevorzugen passende freie Schiffe; Freigabe nach 90 Spielsekunden oder 3 erfolglosen Versuchen.</t>
+    <t id="4461">Obergrenzen im Kandidatenpool: Bedarf %s m³ / geeignetes Angebot %s m³; andere Gruppen %s. Wartezeit %s Spielsekunden, Mindestbeladung %s%%.</t>
+    <t id="4462">Einige Zusatzaufträge haben andere Empfänger oder Frachttypen und passen nicht in diese Fahrt.</t>
+    <t id="4463">Die maximale Zahl der Einkaufsaufträge ist erreicht; freier Raum kann nicht weiter belegt werden.</t>
+    <t id="4464">Mengen vor Auftragserteilung geändert: Entwurf verkleinert oder mit vorhandenen Kandidaten ergänzt und erneut geprüft.</t>
+    <t id="4465">Auch die gesamte Nachfrage im Kandidatenpool liegt unter der Mindestbeladung.</t>
+    <t id="4466">Das geeignete Angebot im Kandidatenpool liegt unter der Mindestbeladung; nicht ausgewählte Anbieter sind nicht enthalten.</t>
+
+    <t id="4471">M4: vollstaendige Kandidatenprotokolle</t>
+    <t id="4472">Aus: Zaehler, Beispiele und alle Ergebnisse. Ein: alle Kandidaten. Nur M4; Debug erforderlich.</t>
+</page>
 </language>

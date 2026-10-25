@@ -1,253 +1,268 @@
-<?xml version="1.0" encoding="utf-8" ?>
-<aiscript name="supplymule" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://x4dynlib.access.ly\libraries\aiscripts.xsd" version="15">
-    <!-- Setup context menu order-->
-    <order id="SupplyMule" name="{61552,4001}" description="{61552,4101}" category="trade" infinite="true">
-        <params>
-            <!-- menu option: Home (Define Home)-->
-            <param name="home" type="object" default="this.ship.sector" text="{61552,4002}" comment="{61552,4102}">
-                <input_param name="class" value="[class.ship, class.station, class.sector]" />
-                <patch sinceversion="2" value="if $sourceStation then $sourceStation else this.ship.sector"/>
-            </param>
-            <!-- menu option: Assign Ship to Station (Are we assigning this ship to a station if player owned.)-->
-            <param name="assignHome" type="bool" default="false" text="{61552,4003}" comment="{61552,4103}">
-                <patch sinceversion="2" value="$assignSrc"/>
-            </param>
-            <!-- menu option: Max Distance (Maximum Jumpes to buy/sell, in case of ai service only buy)-->
-            <param name="maxDist" required="false" default="this.ship.pilot.skill.piloting * 2" type="number" text="{61552,4004}" comment="{61552,4104}">
-                <input_param name="startvalue" value="this.ship.pilot.skill.piloting * 2" />
-                <input_param name="min" value="0" />
-                <input_param name="max" value="this.ship.pilot.skill.piloting * 2" />
-                <input_param name="step" value="1" />
-            </param>
-            <!-- menu option: Serve Source Only (will only serve the source station if used)-->
-            <param name="dedicatedServe" type="bool" default="false" text="{61552,4005}" comment="{61552,4105}" />
-            <!-- Keep allowPlayerSuppliers for saved orders; it now prefers eligible owned sources. -->
-            <param name="allowPlayerSuppliers" type="bool" default="true" text="{61552,4006}" comment="{61552,4106}">
-                <patch sinceversion="2" value="true"/>
-            </param>
-            <param name="allowAiSuppliers"     type="bool" default="true" text="{61552,4007}"     comment="{61552,4107}">
-                <patch sinceversion="2" value="not $tradeWithOwn"/>
-            </param>
-
-            <!-- menu option: include buildstorage, resources, intermediates, and tradewares as possible options to supply -->
-            <param name="allowBuildstorage"  type="bool" default="true" text="{61552,4008}"  comment="{61552,4108}">
-                <patch sinceversion="2" value="not $producer"/>
-            </param>
-            <param name="allowResources"     type="bool" default="true" text="{61552,4009}"     comment="{61552,4109}">
-                <patch sinceversion="2" value="not $builder"/>
-            </param>
-            <param name="allowIntermediates" type="bool" default="true" text="{61552,4010}" comment="{61552,4110}">
-                <patch sinceversion="2" value="not $builder"/>
-            </param>
-            <!-- Retained only to load old orders and mimic parameters. Trade stock follows buy offers. -->
-            <param name="allowTradewares" type="internal" default="true"/>
-
-            <!-- lock wares to player selection -->
-            <param name="lockWares"            type="bool" default="false" text="{61552,4012}" comment="{61552,4112}" />
-
-            <!-- menu option: WareBasket List-->
-            <param name="specialWareBasket"    type="list" default="[]"    text="{61552,4013}"       comment="{61552,4113}">
-                <input_param name="type"     value="'ware'" />
-                <input_param name="cancarry" value="this.ship" />
-            </param>
-
-            <!-- menu option: Max Trades (Maximum trades per buy run)-->
-            <param name="maxTrades" required="false" default="3" type="number" text="{61552,4014}" comment="{61552,4114}">
-                <input_param name="startvalue" value="3" />
-                <input_param name="min" value="1" />
-                <input_param name="max" value="10" />
-                <input_param name="step" value="1" />
-                <patch sinceversion="2" value="$maxtrades"/>
-            </param>
-
-            <param name="minCargoUsed" default="75" type="number" text="{61552,4022}" comment="{61552,4122}">
-                <input_param name="startvalue" value="75" />
-                <input_param name="min" value="0" />
-                <input_param name="max" value="95" />
-                <input_param name="step" value="5" />
-                <patch sinceversion="4" value="75"/>
-            </param>
-
-            <!-- menu option: Profit Override Percentage (Used when buying/selling at own warehouses mostly) -->
-            <param name="playerBuyMod" type="internal" default="100"/>
-            <param name="playerStockThreshold" default="50" type="number" text="{61552,4026}" comment="{61552,4126}">
-                <input_param name="startvalue" value="50"/><input_param name="min" value="0"/><input_param name="max" value="100"/><input_param name="step" value="5"/>
-            </param>
-
-            <param name="searchDepth" type="internal" default="100"/>
-
-            <param name="corridorDepth" default="2" type="number" text="{61552,4024}" comment="{61552,4124}">
-                <input_param name="startvalue" value="2"/><input_param name="min" value="0"/><input_param name="max" value="10"/><input_param name="step" value="1"/>
-                <patch sinceversion="7" value="2"/>
-            </param>
-            <param name="corridorMarkup" default="5" type="number" text="{61552,4025}" comment="{61552,4125}">
-                <input_param name="startvalue" value="5"/><input_param name="min" value="0"/><input_param name="max" value="50"/><input_param name="step" value="1"/>
-                <patch sinceversion="7" value="5"/>
-            </param>
-
-            <!-- Internal parameter used to restart the script on version update if required -->
-            <param name="restartScript" type="internal" default="false"/>
-            <!-- Old deprecated parameters, see patch version 2 below -->
-            <param name="tradeWithOwn"  type="internal" default="null" text="{61552,4016}" comment="{61552,4116}" />
-            <param name="builder"       type="internal" default="null" text="{61552,4017}"    comment="{61552,4117}" />
-            <param name="producer"      type="internal" default="null" text="{61552,4018}"   comment="{61552,4118}" />
-            <param name="sourceStation" type="internal" default="null" text="{61552,4019}"   comment="{61552,4119}"/>
-            <param name="assignSrc"     type="internal" default="false" text="{61552,4020}" comment="{61552,4120}" />
-            <param name="maxtrades"     type="internal" required="false" default="5" text="{61552,4021}" comment="{61552,4121}"/>
-        </params>
-        <requires>
-            <match shiptype="shiptype.lasertower" negate="true" />
-            <!-- no idea wtf this is for-->
-        </requires>
-    </order>
-
-
-    <interrupts>
-        <handler ref="SectorChangeHandler" />
-        <handler ref="AttackHandler" />
-        <handler ref="MissileLockHandler" />
-        <handler ref="ScannedHandler" />
-        <handler ref="InspectedHandler" />
-        <handler ref="FoundAbandonedHandler" />
-        <handler ref="ResupplyHandler" />
-        <handler ref="JobRemoveRequestHandler" />
-        <handler ref="TargetInvalidHandler" />
-    </interrupts>
-
-    <init>
-        <!-- debug settings -->
-        <set_value name="$debugchance" exact="100" />
-        <set_value name="$debugFileName" exact="'SupplyMule - ' + this.ship.idcode"/>
-        <set_value name="$debugDirName" exact="'MulesExtended'"/>
-
-        <!-- init section for mule script -->
-        <set_value name="$logbookEntryTitle" exact="'SupplyMule: '+this.ship.knownname +' ( '+this.ship.idcode+' )'"/>
-        <set_order_syncpoint_reached order="this.ship.order" />
-        <set_command_action commandaction="commandaction.searchingtrades" />
-        <!-- Station binding is handled once in mule.fleet.run, including reloads and parameter edits. -->
-    </init>
-
-    <patch sinceversion="15"><resume label="start"/></patch>
-    <patch sinceversion="14"><resume label="start"/></patch>
-    <patch sinceversion="13"><resume label="start"/></patch>
-    <patch sinceversion="12"><resume label="start"/></patch>
-    <patch sinceversion="11"><resume label="start"/></patch>
-    <patch sinceversion="10">
-        <resume label="start"/>
-    </patch>
-    <patch sinceversion="9">
-        <resume label="start"/>
-    </patch>
-    <patch sinceversion="8">
-        <resume label="start"/>
-    </patch>
-    <patch sinceversion="7">
-        <debug_text text="'MWEX capacity dispatcher v1: restarting M4 search only'" filter="savegame"/>
-        <resume label="start"/>
-    </patch>
-    <patch sinceversion="5">
-        <!-- This will reissue any standing supply mule orders -->
-        <!-- it should mitigate any problems with blocking actions beeing updated inbetween savegames -->
-        <debug_text text="'PATCH: Restarting supply mule script on load for version safety on mule %s'.[this.ship.idcode]" filter="savegame"/>
-        <edit_order_param order="this.assignedcontrolled.order" param="'restartScript'" value="true"/>
-    </patch>
-    <patch sinceversion="3">
-        <!-- force maxTrades to 1 since it doesn't work, and will reduce efficiency at non-1 values -->
-        <debug_text text="'PATCH: Setting maxTrades=1 for supply mule %s'.[this.ship.idcode]" filter="savegame"/>
-        <edit_order_param order="this.assignedcontrolled.order" param="'maxTrades'" value="1"/>
-    </patch>
-
-    <attention min="unknown">
-        <actions>
-            <label name="start" />
-            <!-- Read edited direct-order home before copying settings or building a dispatch snapshot. -->
-            <do_if value="this.ship.defaultorder.id == 'SupplyMule'"><set_value name="$home" exact="this.ship.defaultorder.$home"/></do_if>
-            <do_if value="@global.$mwexDebug"><debug_to_file chance="$debugchance" name="'debug.txt'" directory="'MulesExtended'" text="'ScriptStart'" append="true"/></do_if>
-            <do_if value="@global.$mwexDebug"><debug_to_file chance="$debugchance" name="'debug.txt'" directory="'MulesExtended'" text="'Ship: %s (%s) - %s'.[this.ship.knownname, this.ship.idcode, this.ship]" append="true"/></do_if>
-            <do_if value="@global.$mwexDebug"><debug_to_file chance="$debugchance" name="'debug.txt'" directory="'MulesExtended'" text="'AssignedControlled: %s (%s) - %s'.[this.assignedcontrolled.knownname, this.assignedcontrolled.idcode, this.assignedcontrolled]"  append="true"/></do_if>
-            <do_if value="@global.$mwexDebug"><debug_to_file chance="$debugchance" name="'debug.txt'" directory="'MulesExtended'" text="'Entity (this): %s'.[this]" append="true"/></do_if>
-
-            <!-- Dump Mule Settings -->
-            <do_if value="@global.$mwexDebug"><debug_to_file chance="$debugchance" name="'debug.txt'" directory="'MulesExtended'" text="'Supply Mule Settings:'" append="true"/></do_if>
-            <do_if value="@global.$mwexDebug"><debug_to_file chance="$debugchance" name="'debug.txt'" directory="'MulesExtended'" text="'    Home: %s (%s)'.[$home.knownname,@$home.idcode]" append="true"/></do_if>
-            <do_if value="@global.$mwexDebug"><debug_to_file chance="$debugchance" name="'debug.txt'" directory="'MulesExtended'" text="'    assignHome: %s'.[$assignHome]" append="true"/></do_if>
-            <do_if value="@global.$mwexDebug"><debug_to_file chance="$debugchance" name="'debug.txt'" directory="'MulesExtended'" text="'    maxDist: %s'.[$maxDist]" append="true"/></do_if>
-            <do_if value="@global.$mwexDebug"><debug_to_file chance="$debugchance" name="'debug.txt'" directory="'MulesExtended'" text="'    dedicatedServe: %s'.[$dedicatedServe]" append="true"/></do_if>
-            <do_if value="@global.$mwexDebug"><debug_to_file chance="$debugchance" name="'debug.txt'" directory="'MulesExtended'" text="'    preferPlayerSuppliers: %s (owned stock threshold applies in both modes)'.[$allowPlayerSuppliers]" append="true"/></do_if>
-            <do_if value="@global.$mwexDebug"><debug_to_file chance="$debugchance" name="'debug.txt'" directory="'MulesExtended'" text="'    allowAiSuppliers: %s'.[$allowAiSuppliers]" append="true"/></do_if>
-            <do_if value="@global.$mwexDebug"><debug_to_file chance="$debugchance" name="'debug.txt'" directory="'MulesExtended'" text="'    allowBuildstorage: %s'.[$allowBuildstorage]" append="true"/></do_if>
-            <do_if value="@global.$mwexDebug"><debug_to_file chance="$debugchance" name="'debug.txt'" directory="'MulesExtended'" text="'    allowResources: %s'.[$allowResources]" append="true"/></do_if>
-            <do_if value="@global.$mwexDebug"><debug_to_file chance="$debugchance" name="'debug.txt'" directory="'MulesExtended'" text="'    allowIntermediates: %s'.[$allowIntermediates]" append="true"/></do_if>
-            <do_if value="@global.$mwexDebug"><debug_to_file chance="$debugchance" name="'debug.txt'" directory="'MulesExtended'" text="'    allowTradewares: %s'.[$allowTradewares]" append="true"/></do_if>
-            <do_if value="@global.$mwexDebug"><debug_to_file chance="$debugchance" name="'debug.txt'" directory="'MulesExtended'" text="'    lockWares: %s'.[$lockWares]" append="true"/></do_if>
-            <do_if value="@global.$mwexDebug"><debug_to_file chance="$debugchance" name="'debug.txt'" directory="'MulesExtended'" text="'    specialWareBasket: %s'.[$specialWareBasket]" append="true"/></do_if>
-            <do_if value="@global.$mwexDebug"><debug_to_file chance="$debugchance" name="'debug.txt'" directory="'MulesExtended'" text="'    maxTrades: %s'.[$maxTrades]" append="true"/></do_if>
-            <do_if value="@global.$mwexDebug"><debug_to_file chance="$debugchance" name="'debug.txt'" directory="'MulesExtended'" text="'    minCargoUsed: %s'.[$minCargoUsed]" append="true"/></do_if>
-            <do_if value="@global.$mwexDebug"><debug_to_file chance="$debugchance" name="'debug.txt'" directory="'MulesExtended'" text="'    playerStockThreshold: %s; fixed candidate batch: 20'.[$playerStockThreshold]" append="true"/></do_if>
-
-            <do_if value="$assignHome and $home.isclass.sector">
-                <do_if value="@this.ship.pilot.$mwexFleetSectorWarning != this.ship.defaultorder">
-                    <write_to_logbook category="general" title="{61552,4342}" text="{61552,4343}.[this.ship.knownname,this.ship.idcode]"/>
-                    <set_value name="this.ship.pilot.$mwexFleetSectorWarning" exact="this.ship.defaultorder"/>
-                </do_if>
-                <do_if value="@global.$mwexDebug"><debug_to_file chance="$debugchance" name="'debug.txt'" directory="'MulesExtended'" text="'Invalid Config: assignHome (No Station or Ship configured)'" append="true"/></do_if>
-                <set_value name="$assignHome" exact="false" />
+<?xml version="1.0" encoding="utf-8"?>
+<aiscript xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="supplymule" xsi:noNamespaceSchemaLocation="http://x4dynlib.access.ly\libraries\aiscripts.xsd" version="15">
+  <!-- Setup context menu order-->
+  <order id="SupplyMule" name="{61552,4001}" description="{61552,4101}" category="trade" infinite="true">
+    <params>
+      <!-- menu option: Home (Define Home)-->
+      <param name="home" type="object" default="this.ship.sector" text="{61552,4002}" comment="{61552,4102}">
+        <input_param name="class" value="[class.ship, class.station, class.sector]" />
+        <patch sinceversion="2" value="if $sourceStation then $sourceStation else this.ship.sector" />
+      </param>
+      <!-- menu option: Assign Ship to Station (Are we assigning this ship to a station if player owned.)-->
+      <param name="assignHome" type="bool" default="false" text="{61552,4003}" comment="{61552,4103}">
+        <patch sinceversion="2" value="$assignSrc" />
+      </param>
+      <!-- menu option: Max Distance (Maximum Jumpes to buy/sell, in case of ai service only buy)-->
+      <param name="maxDist" required="false" default="this.ship.pilot.skill.piloting * 2" type="number" text="{61552,4004}" comment="{61552,4104}">
+        <input_param name="startvalue" value="this.ship.pilot.skill.piloting * 2" />
+        <input_param name="min" value="0" />
+        <input_param name="max" value="this.ship.pilot.skill.piloting * 2" />
+        <input_param name="step" value="1" />
+      </param>
+      <!-- menu option: Serve Source Only (will only serve the source station if used)-->
+      <param name="dedicatedServe" type="bool" default="false" text="{61552,4005}" comment="{61552,4105}" />
+      <!-- Keep allowPlayerSuppliers for saved orders; it now prefers eligible owned sources. -->
+      <param name="allowPlayerSuppliers" type="bool" default="true" text="{61552,4006}" comment="{61552,4106}">
+        <patch sinceversion="2" value="true" />
+      </param>
+      <param name="allowAiSuppliers" type="bool" default="true" text="{61552,4007}" comment="{61552,4107}">
+        <patch sinceversion="2" value="not $tradeWithOwn" />
+      </param>
+      <!-- menu option: include buildstorage, resources, intermediates, and tradewares as possible options to supply -->
+      <param name="allowBuildstorage" type="bool" default="true" text="{61552,4008}" comment="{61552,4108}">
+        <patch sinceversion="2" value="not $producer" />
+      </param>
+      <param name="allowResources" type="bool" default="true" text="{61552,4009}" comment="{61552,4109}">
+        <patch sinceversion="2" value="not $builder" />
+      </param>
+      <param name="allowIntermediates" type="bool" default="true" text="{61552,4010}" comment="{61552,4110}">
+        <patch sinceversion="2" value="not $builder" />
+      </param>
+      <!-- Retained only to load old orders and mimic parameters. Trade stock follows buy offers. -->
+      <param name="allowTradewares" type="internal" default="true" />
+      <!-- lock wares to player selection -->
+      <param name="lockWares" type="bool" default="false" text="{61552,4012}" comment="{61552,4112}" />
+      <!-- menu option: WareBasket List-->
+      <param name="specialWareBasket" type="list" default="[]" text="{61552,4013}" comment="{61552,4113}">
+        <input_param name="type" value="'ware'" />
+        <input_param name="cancarry" value="this.ship" />
+      </param>
+      <!-- menu option: Max Trades (Maximum trades per buy run)-->
+      <param name="maxTrades" required="false" default="3" type="number" text="{61552,4014}" comment="{61552,4114}">
+        <input_param name="startvalue" value="3" />
+        <input_param name="min" value="1" />
+        <input_param name="max" value="10" />
+        <input_param name="step" value="1" />
+        <patch sinceversion="2" value="$maxtrades" />
+      </param>
+      <param name="minCargoUsed" default="75" type="number" text="{61552,4022}" comment="{61552,4122}">
+        <input_param name="startvalue" value="75" />
+        <input_param name="min" value="0" />
+        <input_param name="max" value="95" />
+        <input_param name="step" value="5" />
+        <patch sinceversion="4" value="75" />
+      </param>
+      <!-- menu option: Profit Override Percentage (Used when buying/selling at own warehouses mostly) -->
+      <param name="playerBuyMod" type="internal" default="100" />
+      <param name="playerStockThreshold" default="50" type="number" text="{61552,4026}" comment="{61552,4126}">
+        <input_param name="startvalue" value="50" />
+        <input_param name="min" value="0" />
+        <input_param name="max" value="100" />
+        <input_param name="step" value="5" />
+      </param>
+      <param name="searchDepth" type="internal" default="100" />
+      <param name="corridorDepth" default="2" type="number" text="{61552,4024}" comment="{61552,4124}">
+        <input_param name="startvalue" value="2" />
+        <input_param name="min" value="0" />
+        <input_param name="max" value="10" />
+        <input_param name="step" value="1" />
+        <patch sinceversion="7" value="2" />
+      </param>
+      <param name="corridorMarkup" default="5" type="number" text="{61552,4025}" comment="{61552,4125}">
+        <input_param name="startvalue" value="5" />
+        <input_param name="min" value="0" />
+        <input_param name="max" value="50" />
+        <input_param name="step" value="1" />
+        <patch sinceversion="7" value="5" />
+      </param>
+      <!-- Internal parameter used to restart the script on version update if required -->
+      <param name="restartScript" type="internal" default="false" />
+      <!-- Old deprecated parameters, see patch version 2 below -->
+      <param name="tradeWithOwn" type="internal" default="null" text="{61552,4016}" comment="{61552,4116}" />
+      <param name="builder" type="internal" default="null" text="{61552,4017}" comment="{61552,4117}" />
+      <param name="producer" type="internal" default="null" text="{61552,4018}" comment="{61552,4118}" />
+      <param name="sourceStation" type="internal" default="null" text="{61552,4019}" comment="{61552,4119}" />
+      <param name="assignSrc" type="internal" default="false" text="{61552,4020}" comment="{61552,4120}" />
+      <param name="maxtrades" type="internal" required="false" default="5" text="{61552,4021}" comment="{61552,4121}" />
+    </params>
+    <requires>
+      <match shiptype="shiptype.lasertower" negate="true" />
+      <!-- no idea wtf this is for-->
+    </requires>
+  </order>
+  <interrupts>
+    <handler ref="SectorChangeHandler" />
+    <handler ref="AttackHandler" />
+    <handler ref="MissileLockHandler" />
+    <handler ref="ScannedHandler" />
+    <handler ref="InspectedHandler" />
+    <handler ref="FoundAbandonedHandler" />
+    <handler ref="ResupplyHandler" />
+    <handler ref="JobRemoveRequestHandler" />
+    <handler ref="TargetInvalidHandler" />
+  </interrupts>
+  <init>
+    <set_order_syncpoint_reached order="this.ship.order" />
+    <set_command_action commandaction="commandaction.searchingtrades" />
+    <!-- Station binding is handled once in mule.fleet.run, including reloads and parameter edits. -->
+  </init>
+  <patch sinceversion="15">
+    <resume label="start" />
+  </patch>
+  <patch sinceversion="14">
+    <resume label="start" />
+  </patch>
+  <patch sinceversion="13">
+    <resume label="start" />
+  </patch>
+  <patch sinceversion="12">
+    <resume label="start" />
+  </patch>
+  <patch sinceversion="11">
+    <resume label="start" />
+  </patch>
+  <patch sinceversion="10">
+    <resume label="start" />
+  </patch>
+  <patch sinceversion="9">
+    <resume label="start" />
+  </patch>
+  <patch sinceversion="8">
+    <resume label="start" />
+  </patch>
+  <patch sinceversion="7">
+    <debug_text text="'MWEX capacity dispatcher v1: restarting M4 search only'" filter="savegame" />
+    <resume label="start" />
+  </patch>
+  <patch sinceversion="5">
+    <!-- This will reissue any standing supply mule orders -->
+    <!-- it should mitigate any problems with blocking actions beeing updated inbetween savegames -->
+    <debug_text text="'PATCH: Restarting supply mule script on load for version safety on mule %s'.[this.ship.idcode]" filter="savegame" />
+    <edit_order_param order="this.assignedcontrolled.order" param="'restartScript'" value="true" />
+  </patch>
+  <patch sinceversion="3">
+    <!-- force maxTrades to 1 since it doesn't work, and will reduce efficiency at non-1 values -->
+    <debug_text text="'PATCH: Setting maxTrades=1 for supply mule %s'.[this.ship.idcode]" filter="savegame" />
+    <edit_order_param order="this.assignedcontrolled.order" param="'maxTrades'" value="1" />
+  </patch>
+  <attention min="unknown">
+    <actions>
+      <label name="start" />
+      <!-- Read edited direct-order home before copying settings or building a dispatch snapshot. -->
+      <do_if value="this.ship.defaultorder.id == 'SupplyMule'">
+        <set_value name="$home" exact="this.ship.defaultorder.$home" />
+      </do_if>
+      <do_if value="$assignHome and $home.isclass.sector">
+        <do_if value="@this.ship.pilot.$mwexFleetSectorWarning != this.ship.defaultorder">
+          <write_to_logbook category="general" title="{61552,4342}" text="{61552,4343}.[this.ship.knownname,this.ship.idcode]" />
+          <set_value name="this.ship.pilot.$mwexFleetSectorWarning" exact="this.ship.defaultorder" />
+        </do_if>
+        <do_if value="@global.$mwexDebug">
+          <do_if value="@global.$mwexDebug">
+            <set_value name="$mwtrace_diagnostic" exact="table[$ship=this.ship,$attempt=null,$relaxed=false]" />
+            <set_value name="$mwtrace_file" exact="'lifecycle'" />
+            <set_value name="$mwtrace_text" exact="'SETTINGS detail=%s'.['ship=%s CONFIG_REJECT reason=station_assignment_requires_station'.[this.ship.idcode]]" />
+            <set_value name="$mwtrace_file" exact="'lifecycle'" />
+            <include_interrupt_actions ref="MWEX_Fleet_trace" />
+          </do_if>
+        </do_if>
+        <set_value name="$assignHome" exact="false" />
+      </do_if>
+      <!--here we want to copy settings to subordinates-->
+      <set_value name="$subordinateShipCopyType" exact="[shiptype.courier, shiptype.transporter, shiptype.freighter, shiptype.miner, shiptype.largeminer, this.ship.type]" />
+      <set_value name="$copySignature" exact="'%s/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s/v16'.[$home,$maxDist,$dedicatedServe,$allowPlayerSuppliers,$allowAiSuppliers,$allowBuildstorage,$allowResources,$allowIntermediates,$allowTradewares,$lockWares,$maxTrades,$minCargoUsed,$playerStockThreshold,100,$corridorDepth,$corridorMarkup,if $lockWares then $specialWareBasket else []]" />
+      <do_for_each name="$subordinate" in="this.ship.subordinates">
+        <do_if value="@$subordinate.pilot.$mwexFleetCopySignature == $copySignature and @$subordinate.pilot.$mwexFleetCopiedFrom == this.ship and @$subordinate.pilot.$mwexFleetCopiedOrder == $subordinate.defaultorder">
+          <continue />
+        </do_if>
+        <do_if value="@global.$mwexDebug">
+          <do_if value="@global.$mwexDebug">
+            <set_value name="$mwtrace_diagnostic" exact="table[$ship=this.ship,$attempt=null,$relaxed=false]" />
+            <set_value name="$mwtrace_file" exact="'lifecycle'" />
+            <set_value name="$mwtrace_text" exact="'SETTINGS detail=%s'.['ship=%s COPY_SETTINGS subordinate=%s'.[this.ship.idcode,$subordinate.idcode]]" />
+            <set_value name="$mwtrace_file" exact="'lifecycle'" />
+            <include_interrupt_actions ref="MWEX_Fleet_trace" />
+          </do_if>
+        </do_if>
+        <do_if value="not $subordinateShipCopyType.indexof.{$subordinate.type}">
+          <do_if value="@global.$mwexDebug">
+            <do_if value="@global.$mwexDebug">
+              <set_value name="$mwtrace_diagnostic" exact="table[$ship=this.ship,$attempt=null,$relaxed=false]" />
+              <set_value name="$mwtrace_file" exact="'lifecycle'" />
+              <set_value name="$mwtrace_text" exact="'SETTINGS detail=%s'.['    not copying settings, because of wrong shiptype: %s'.[$subordinate.type]]" />
+              <set_value name="$mwtrace_file" exact="'lifecycle'" />
+              <include_interrupt_actions ref="MWEX_Fleet_trace" />
             </do_if>
-
-            <!--here we want to copy settings to subordinates-->
-            <set_value name="$subordinateShipCopyType" exact="[shiptype.courier, shiptype.transporter, shiptype.freighter, shiptype.miner, shiptype.largeminer, this.ship.type]"/>
-            <set_value name="$copySignature" exact="'%s/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s/v16'.[$home,$maxDist,$dedicatedServe,$allowPlayerSuppliers,$allowAiSuppliers,$allowBuildstorage,$allowResources,$allowIntermediates,$allowTradewares,$lockWares,$maxTrades,$minCargoUsed,$playerStockThreshold,100,$corridorDepth,$corridorMarkup,if $lockWares then $specialWareBasket else []]"/>
-            <do_for_each name="$subordinate" in="this.ship.subordinates">
-                <do_if value="@$subordinate.pilot.$mwexFleetCopySignature == $copySignature and @$subordinate.pilot.$mwexFleetCopiedFrom == this.ship and @$subordinate.pilot.$mwexFleetCopiedOrder == $subordinate.defaultorder"><continue/></do_if>
-
-                <do_if value="@global.$mwexDebug"><debug_to_file chance="$debugchance" name="'debug.txt'" directory="'MulesExtended'" text="'Subordinates %s'.[$subordinate.knownname]" append="true"/></do_if>
-                <do_if value="not $subordinateShipCopyType.indexof.{$subordinate.type}">
-                    <do_if value="@global.$mwexDebug"><debug_to_file chance="$debugchance" name="'debug.txt'" directory="'MulesExtended'" text="'    not copying settings, because of wrong shiptype: %s'.[$subordinate.type]" append="true"/></do_if>
-                    <continue />
-                </do_if>
-                <do_if value="global.$v1024cf_mod_loaded?" comment="Checking that this value exists; true if Civilian Fleets is loaded.">
-                    <!-- Civilian Fleets loaded. -->
-                    <!-- Check also, where Civ-Fleet is loaded but the user is not using the Civ-Fleet Supply Mules fleet -->
-                    <do_if value="$subordinate.assignment == assignment.trade" comment="Checking if the Mule is being handled by Civ-Fleets, that is the characteristic property.">
-                        <!-- Skip the handling on this side, stay in the fleet, and let Civilian Fleets handle the order sync. -->
-                        <do_if value="@global.$mwexDebug"><debug_to_file chance="$debugchance" name="'debug.txt'" directory="'MulesExtended'" text="'    is handled by Civilian Fleets; skipping'" output="false"  append="true"/></do_if>
-                        <continue />
-                    </do_if>
-                </do_if>
-                <do_if value="@global.$mwexDebug"><debug_to_file chance="$debugchance" name="'debug.txt'" directory="'MulesExtended'" text="'    copying default behavior'" append="true"/></do_if>
-<!--				<remove_object_commander object="$subordinate" />-->
-                <create_order object="$subordinate" default="true" id="'SupplyMule'">
-                    <!-- Note: we changed the default orders, therefore civilian fleets needs an update -->
-                    <param name="home" value="$home" />
-                    <param name="maxDist" value="[$subordinate.pilot.skill.piloting * 2, $maxDist].min" />
-                    <param name="assignHome" value="false" />
-                    <param name="dedicatedServe" value="$dedicatedServe" />
-                    <param name="allowPlayerSuppliers" value="$allowPlayerSuppliers" />
-                    <param name="allowAiSuppliers" value="$allowAiSuppliers" />
-                    <param name="allowBuildstorage" value="$allowBuildstorage" />
-                    <param name="allowResources" value="$allowResources" />
-                    <param name="allowIntermediates" value="$allowIntermediates" />
-                    <param name="lockWares" value="$lockWares" />
-                    <param name="specialWareBasket" value="$specialWareBasket" />
-                    <param name="maxTrades" value="$maxTrades" />
-                    <param name="minCargoUsed" value="$minCargoUsed" />
-                    <param name="playerStockThreshold" value="$playerStockThreshold"/>
-                    <param name="corridorDepth" value="$corridorDepth"/>
-                    <param name="corridorMarkup" value="$corridorMarkup"/>
-                </create_order>
-                <set_value name="$subordinate.pilot.$mwexFleetCopySignature" exact="$copySignature"/>
-                <set_value name="$subordinate.pilot.$mwexFleetCopiedFrom" exact="this.ship"/>
-                <set_value name="$subordinate.pilot.$mwexFleetCopiedOrder" exact="$subordinate.defaultorder"/>
-                <wait min="50ms" max="150ms" />
-            </do_for_each>
-
-            <set_value name="this.ship.pilot.$mwexFleetCopySignature" exact="$copySignature"/>
-            <!-- Shared capacity dispatcher is the sole M4 search implementation. -->
-            <run_script name="'mule.fleet.run'">
-                <param name="cfg" value="table[$ship=this.ship,$origin=this.ship.defaultorder,$home=$home,$maxDist=$maxDist,$dedicatedServe=$dedicatedServe,$allowPlayerSuppliers=$allowPlayerSuppliers,$allowAiSuppliers=$allowAiSuppliers,$allowBuildstorage=$allowBuildstorage,$allowResources=$allowResources,$allowIntermediates=$allowIntermediates,$allowTradewares=$allowTradewares,$lockWares=$lockWares,$maxTrades=$maxTrades,$minCargoUsed=$minCargoUsed,$playerStockThreshold=$playerStockThreshold,$corridorDepth=$corridorDepth,$corridorMarkup=$corridorMarkup,$wares=$specialWareBasket]"/>
-            </run_script>
-            <return/>
-
-        </actions>
-    </attention>
+          </do_if>
+          <continue />
+        </do_if>
+        <do_if value="global.$v1024cf_mod_loaded?" comment="Checking that this value exists; true if Civilian Fleets is loaded.">
+          <!-- Civilian Fleets loaded. -->
+          <!-- Check also, where Civ-Fleet is loaded but the user is not using the Civ-Fleet Supply Mules fleet -->
+          <do_if value="$subordinate.assignment == assignment.trade" comment="Checking if the Mule is being handled by Civ-Fleets, that is the characteristic property.">
+            <!-- Skip the handling on this side, stay in the fleet, and let Civilian Fleets handle the order sync. -->
+            <do_if value="@global.$mwexDebug">
+              <do_if value="@global.$mwexDebug">
+                <set_value name="$mwtrace_diagnostic" exact="table[$ship=this.ship,$attempt=null,$relaxed=false]" />
+                <set_value name="$mwtrace_file" exact="'lifecycle'" />
+                <set_value name="$mwtrace_text" exact="'SETTINGS detail=%s'.['    is handled by Civilian Fleets; skipping']" />
+                <set_value name="$mwtrace_file" exact="'lifecycle'" />
+                <include_interrupt_actions ref="MWEX_Fleet_trace" />
+              </do_if>
+            </do_if>
+            <continue />
+          </do_if>
+        </do_if>
+        <do_if value="@global.$mwexDebug">
+          <do_if value="@global.$mwexDebug">
+            <set_value name="$mwtrace_diagnostic" exact="table[$ship=this.ship,$attempt=null,$relaxed=false]" />
+            <set_value name="$mwtrace_file" exact="'lifecycle'" />
+            <set_value name="$mwtrace_text" exact="'SETTINGS detail=%s'.['    copying default behavior']" />
+            <set_value name="$mwtrace_file" exact="'lifecycle'" />
+            <include_interrupt_actions ref="MWEX_Fleet_trace" />
+          </do_if>
+        </do_if>
+        <!--				<remove_object_commander object="$subordinate" />-->
+        <create_order object="$subordinate" default="true" id="'SupplyMule'">
+          <!-- Note: we changed the default orders, therefore civilian fleets needs an update -->
+          <param name="home" value="$home" />
+          <param name="maxDist" value="[$subordinate.pilot.skill.piloting * 2, $maxDist].min" />
+          <param name="assignHome" value="false" />
+          <param name="dedicatedServe" value="$dedicatedServe" />
+          <param name="allowPlayerSuppliers" value="$allowPlayerSuppliers" />
+          <param name="allowAiSuppliers" value="$allowAiSuppliers" />
+          <param name="allowBuildstorage" value="$allowBuildstorage" />
+          <param name="allowResources" value="$allowResources" />
+          <param name="allowIntermediates" value="$allowIntermediates" />
+          <param name="lockWares" value="$lockWares" />
+          <param name="specialWareBasket" value="$specialWareBasket" />
+          <param name="maxTrades" value="$maxTrades" />
+          <param name="minCargoUsed" value="$minCargoUsed" />
+          <param name="playerStockThreshold" value="$playerStockThreshold" />
+          <param name="corridorDepth" value="$corridorDepth" />
+          <param name="corridorMarkup" value="$corridorMarkup" />
+        </create_order>
+        <set_value name="$subordinate.pilot.$mwexFleetCopySignature" exact="$copySignature" />
+        <set_value name="$subordinate.pilot.$mwexFleetCopiedFrom" exact="this.ship" />
+        <set_value name="$subordinate.pilot.$mwexFleetCopiedOrder" exact="$subordinate.defaultorder" />
+        <wait min="50ms" max="150ms" />
+      </do_for_each>
+      <set_value name="this.ship.pilot.$mwexFleetCopySignature" exact="$copySignature" />
+      <!-- Shared capacity dispatcher is the sole M4 search implementation. -->
+      <run_script name="'mule.fleet.run'">
+        <param name="cfg" value="table[$ship=this.ship,$origin=this.ship.defaultorder,$home=$home,$maxDist=$maxDist,$dedicatedServe=$dedicatedServe,$allowPlayerSuppliers=$allowPlayerSuppliers,$allowAiSuppliers=$allowAiSuppliers,$allowBuildstorage=$allowBuildstorage,$allowResources=$allowResources,$allowIntermediates=$allowIntermediates,$allowTradewares=$allowTradewares,$lockWares=$lockWares,$maxTrades=$maxTrades,$minCargoUsed=$minCargoUsed,$playerStockThreshold=$playerStockThreshold,$corridorDepth=$corridorDepth,$corridorMarkup=$corridorMarkup,$wares=$specialWareBasket]" />
+      </run_script>
+      <return />
+    </actions>
+  </attention>
 </aiscript>

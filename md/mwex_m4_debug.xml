@@ -1,0 +1,353 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mdscript name="MWEX_M4_Debug">
+  <cues>
+    <cue name="Loaded" instantiate="true" namespace="this">
+      <conditions>
+        <event_game_loaded />
+      </conditions>
+      <actions>
+        <do_if value="@global.$mwexDebug">
+          <signal_cue_instantly cue="md.MWEX_M4_Debug.Start" param="'game_loaded'" />
+        </do_if>
+      </actions>
+    </cue>
+    <cue name="Start" instantiate="true" namespace="this">
+      <conditions>
+        <event_cue_signalled />
+      </conditions>
+      <actions>
+        <do_if value="global.$mwexM4Log?">
+          <do_for_each valuename="$previousWatch" in="global.$mwexM4Log.$watches">
+            <cancel_cue cue="$previousWatch.$cue" />
+          </do_for_each>
+        </do_if>
+        <remove_value name="global.$mwexM4Log" />
+        <signal_cue_instantly cue="md.MWEX_M4_Debug.Record" param="table[$ship=null,$attempt=null,$voyage=null,$file='lifecycle',$text='BOUNDARY reason=%s priorHistory=not_reconstructed'.[event.param]]" />
+        <do_if value="@global.$mwexDebug and global.$mwexFleetHubs?">
+          <do_for_each valuename="$hub" in="global.$mwexFleetHubs">
+            <do_for_each name="$ship" in="$hub.$members.keys.list">
+              <do_if value="@$ship.pilot.exists">
+                <signal_cue_instantly cue="md.MWEX_M4_Debug.Register" param="$ship" />
+              </do_if>
+            </do_for_each>
+          </do_for_each>
+        </do_if>
+      </actions>
+    </cue>
+    <cue name="Record" instantiate="true" namespace="this">
+      <conditions>
+        <event_cue_signalled />
+      </conditions>
+      <actions>
+        <set_value name="$mwlog_ship" exact="event.param.$ship" />
+        <set_value name="$mwlog_attempt" exact="event.param.$attempt" />
+        <set_value name="$mwlog_voyage" exact="event.param.$voyage" />
+        <set_value name="$mwlog_file" exact="event.param.$file" />
+        <set_value name="$mwlog_text" exact="event.param.$text" />
+        <do_if value="@global.$mwexDebug">
+          <do_if value="not global.$mwexM4Log?">
+            <set_value name="global.$mwexM4Log" exact="table[$session='%s/%s'.[player.age,this],$seq=0,$watches=table[]]" />
+            <do_for_each name="$mwlog_header" in="['lifecycle','search','orders','economy']">
+              <debug_to_file directory="'MulesExtended'" name="'m4-%s.txt'.[$mwlog_header]" append="true" text="'M4 t=%s session=%s seq=0 ship=null object=null pilot=null attempt=null voyage=null SESSION schema=2 build=beta.8 strategy=beta.7 stream=%s timeUnit=game_seconds quantityUnit=units volumeUnit=m3 priceUnit=Cr'.[player.age,global.$mwexM4Log.$session,$mwlog_header]" />
+            </do_for_each>
+          </do_if>
+          <set_value name="global.$mwexM4Log.$seq" operation="add" exact="1" />
+          <debug_to_file directory="'MulesExtended'" name="'m4-%s.txt'.[$mwlog_file]" append="true" text="'M4 t=%s session=%s seq=%s ship=%s object=%s pilot=%s attempt=%s voyage=%s %s'.[player.age,global.$mwexM4Log.$session,global.$mwexM4Log.$seq,if @$mwlog_ship.exists then $mwlog_ship.idcode else null,$mwlog_ship,if @$mwlog_ship.exists then @$mwlog_ship.pilot else null,$mwlog_attempt,$mwlog_voyage,$mwlog_text]" />
+        </do_if>
+      </actions>
+    </cue>
+    <cue name="WatchSignal" instantiate="true" namespace="this">
+      <conditions>
+        <event_object_signalled object="player.entity" param="'mwex_m4_debug_watch'" />
+      </conditions>
+      <actions>
+        <signal_cue_instantly cue="md.MWEX_M4_Debug.Register" param="event.param2" />
+      </actions>
+    </cue>
+    <cue name="Register" instantiate="true" namespace="this">
+      <conditions>
+        <event_cue_signalled />
+      </conditions>
+      <actions>
+        <set_value name="$ship" exact="event.param" />
+        <do_if value="not @global.$mwexDebug or not @$ship.pilot.exists">
+          <cancel_cue cue="this" />
+        </do_if>
+        <do_else>
+          <set_value name="$pilot" exact="$ship.pilot" />
+          <set_value name="$shipCode" exact="$ship.idcode" />
+          <set_value name="$shipId" exact="'%s'.[$ship]" />
+          <do_if value="@global.$mwexM4Log.$watches.{$ship}.$pilot == $pilot and @global.$mwexM4Log.$watches.{$ship}.$cue?">
+            <cancel_cue cue="this" />
+          </do_if>
+          <do_else>
+            <do_if value="global.$mwexM4Log.$watches.{$ship}?">
+              <cancel_cue cue="global.$mwexM4Log.$watches.{$ship}.$cue" />
+            </do_if>
+            <set_value name="global.$mwexM4Log.$watches.{$ship}" exact="table[$cue=this,$pilot=$pilot]" />
+            <set_value name="$pilot.$mwexM4WatchCue" exact="this" />
+            <set_value name="$pilot.$mwexM4WatchSession" exact="@global.$mwexM4Log" />
+            <set_value name="$pilot.$mwexM4LogSession" exact="@global.$mwexM4Log" />
+            <signal_cue_instantly cue="md.MWEX_M4_Debug.Record" param="table[$ship=$ship,$attempt=null,$voyage=null,$file='lifecycle',$text='SHIP_BASELINE class=%s type=%s home=%s origin=%s signature=%s cargo=%s orders=%s history=observation_starts_here'.[$ship.class,$ship.type,@$pilot.$mwexFleetCfg.$home,$ship.defaultorder,@$pilot.$mwexFleetCfg.$signature,$ship.cargo.count,$ship.orders.count]]" />
+            <signal_cue_instantly cue="md.MWEX_M4_Debug.Snapshot" param="table[$ship=$ship,$pilot=$pilot,$baseline=true]" />
+          </do_else>
+        </do_else>
+      </actions>
+      <cues>
+        <cue name="Pulse">
+          <delay exact="30s" />
+          <actions>
+            <do_if value="not @global.$mwexDebug or not @$ship.exists">
+              <cancel_cue cue="parent" />
+            </do_if>
+            <do_else>
+              <signal_cue_instantly cue="md.MWEX_M4_Debug.Snapshot" param="table[$ship=$ship,$pilot=$pilot,$baseline=false]" />
+              <reset_cue cue="this" />
+            </do_else>
+          </actions>
+        </cue>
+        <cue name="Ready" instantiate="true" namespace="this">
+          <conditions>
+            <event_object_order_ready object="$ship" />
+          </conditions>
+          <actions>
+            <signal_cue_instantly cue="md.MWEX_M4_Debug.OrderEvent" param="table[$ship=$ship,$pilot=$pilot,$order=event.param,$kind='ready',$immediate=@event.param2]" />
+          </actions>
+        </cue>
+        <cue name="Finished" instantiate="true" namespace="this">
+          <conditions>
+            <event_object_order_finished object="$ship" />
+          </conditions>
+          <actions>
+            <signal_cue_instantly cue="md.MWEX_M4_Debug.OrderEvent" param="table[$ship=$ship,$pilot=$pilot,$order=event.param,$kind='finished',$immediate=@event.param2]" />
+          </actions>
+        </cue>
+        <cue name="Cancelled" instantiate="true" namespace="this">
+          <conditions>
+            <event_object_order_cancelled object="$ship" />
+          </conditions>
+          <actions>
+            <signal_cue_instantly cue="md.MWEX_M4_Debug.OrderEvent" param="table[$ship=$ship,$pilot=$pilot,$order=event.param,$kind='cancelled',$immediate=@event.param2]" />
+          </actions>
+        </cue>
+        <cue name="BuyStarted" instantiate="true" namespace="this">
+          <conditions>
+            <event_trade_started buyer="$ship" />
+          </conditions>
+          <actions>
+            <signal_cue_instantly cue="md.MWEX_M4_Debug.TradeEvent" param="table[$ship=$ship,$pilot=$pilot,$offer=event.param,$deal=event.param2,$kind='started',$side='buy']" />
+          </actions>
+        </cue>
+        <cue name="BuyCompleted" instantiate="true" namespace="this">
+          <conditions>
+            <event_trade_completed buyer="$ship" />
+          </conditions>
+          <actions>
+            <signal_cue_instantly cue="md.MWEX_M4_Debug.TradeEvent" param="table[$ship=$ship,$pilot=$pilot,$offer=event.param,$deal=event.param2,$kind='completed',$side='buy']" />
+          </actions>
+        </cue>
+        <cue name="BuyCancelled" instantiate="true" namespace="this">
+          <conditions>
+            <event_trade_cancelled buyer="$ship" />
+          </conditions>
+          <actions>
+            <signal_cue_instantly cue="md.MWEX_M4_Debug.TradeEvent" param="table[$ship=$ship,$pilot=$pilot,$offer=event.param,$deal=event.param2,$kind='cancelled',$side='buy']" />
+          </actions>
+        </cue>
+        <cue name="SellStarted" instantiate="true" namespace="this">
+          <conditions>
+            <event_trade_started seller="$ship" />
+          </conditions>
+          <actions>
+            <signal_cue_instantly cue="md.MWEX_M4_Debug.TradeEvent" param="table[$ship=$ship,$pilot=$pilot,$offer=event.param,$deal=event.param2,$kind='started',$side='sell']" />
+          </actions>
+        </cue>
+        <cue name="SellCompleted" instantiate="true" namespace="this">
+          <conditions>
+            <event_trade_completed seller="$ship" />
+          </conditions>
+          <actions>
+            <signal_cue_instantly cue="md.MWEX_M4_Debug.TradeEvent" param="table[$ship=$ship,$pilot=$pilot,$offer=event.param,$deal=event.param2,$kind='completed',$side='sell']" />
+          </actions>
+        </cue>
+        <cue name="SellCancelled" instantiate="true" namespace="this">
+          <conditions>
+            <event_trade_cancelled seller="$ship" />
+          </conditions>
+          <actions>
+            <signal_cue_instantly cue="md.MWEX_M4_Debug.TradeEvent" param="table[$ship=$ship,$pilot=$pilot,$offer=event.param,$deal=event.param2,$kind='cancelled',$side='sell']" />
+          </actions>
+        </cue>
+        <cue name="Sector" instantiate="true" namespace="this">
+          <conditions>
+            <event_object_changed_sector object="$ship" />
+          </conditions>
+          <actions>
+            <signal_cue_instantly cue="md.MWEX_M4_Debug.Record" param="table[$ship=$ship,$attempt=@$pilot.$mwexM4Search.$attempt,$voyage=@$pilot.$mwexM4Voyage,$file='lifecycle',$text='SECTOR_CHANGED from=%s to=%s'.[event.param2,event.param]]" />
+          </actions>
+        </cue>
+        <cue name="Docking" instantiate="true" namespace="this">
+          <conditions>
+            <event_object_docking_started object="$ship" />
+          </conditions>
+          <actions>
+            <signal_cue_instantly cue="md.MWEX_M4_Debug.Record" param="table[$ship=$ship,$attempt=@$pilot.$mwexM4Search.$attempt,$voyage=@$pilot.$mwexM4Voyage,$file='lifecycle',$text='DOCKING_STARTED dock=%s'.[event.param]]" />
+          </actions>
+        </cue>
+        <cue name="Docked" instantiate="true" namespace="this">
+          <conditions>
+            <event_object_docked object="$ship" />
+          </conditions>
+          <actions>
+            <signal_cue_instantly cue="md.MWEX_M4_Debug.Record" param="table[$ship=$ship,$attempt=@$pilot.$mwexM4Search.$attempt,$voyage=@$pilot.$mwexM4Voyage,$file='lifecycle',$text='DOCKED dock=%s'.[event.param]]" />
+          </actions>
+        </cue>
+        <cue name="Undocked" instantiate="true" namespace="this">
+          <conditions>
+            <event_object_undocked object="$ship" />
+          </conditions>
+          <actions>
+            <signal_cue_instantly cue="md.MWEX_M4_Debug.Record" param="table[$ship=$ship,$attempt=@$pilot.$mwexM4Search.$attempt,$voyage=@$pilot.$mwexM4Voyage,$file='lifecycle',$text='UNDOCKED dock=%s'.[event.param]]" />
+          </actions>
+        </cue>
+        <cue name="Attacked" instantiate="true" namespace="this">
+          <conditions>
+            <event_object_attacked object="$ship" />
+          </conditions>
+          <actions>
+            <set_value name="$pilot.$mwexM4AttackCount" exact="@$pilot.$mwexM4AttackCount+1" />
+            <set_value name="$pilot.$mwexM4LastAttack" exact="player.age" />
+            <do_if value="not $pilot.$mwexM4AttackLogged? or player.age ge $pilot.$mwexM4AttackLogged+10s">
+              <signal_cue_instantly cue="md.MWEX_M4_Debug.Record" param="table[$ship=$ship,$attempt=@$pilot.$mwexM4Search.$attempt,$voyage=@$pilot.$mwexM4Voyage,$file='lifecycle',$text='ATTACKED attacker=%s method=%s count=%s attribution=event_only'.[event.param,event.param2,$pilot.$mwexM4AttackCount]]" />
+              <set_value name="$pilot.$mwexM4AttackLogged" exact="player.age" />
+            </do_if>
+          </actions>
+        </cue>
+        <cue name="Destroyed" instantiate="true" namespace="this">
+          <conditions>
+            <event_object_destroyed object="$ship" />
+          </conditions>
+          <actions>
+            <signal_cue_instantly cue="md.MWEX_M4_Debug.Record" param="table[$ship=$ship,$attempt=null,$voyage=@$pilot.$mwexM4Voyage,$file='lifecycle',$text='SHIP_DESTROYED shipCode=%s shipObject=%s outstandingOrders=%s cargoOutcome=unknown'.[$shipCode,$shipId,@$pilot.$mwexM4LogOrders.count]]" />
+            <cancel_cue cue="parent" />
+          </actions>
+        </cue>
+      </cues>
+    </cue>
+    <cue name="Snapshot" instantiate="true" namespace="this">
+      <conditions>
+        <event_cue_signalled />
+      </conditions>
+      <actions>
+        <do_if value="@global.$mwexDebug">
+          <set_value name="$ship" exact="event.param.$ship" />
+          <set_value name="$pilot" exact="event.param.$pilot" />
+          <set_value name="$baseline" exact="event.param.$baseline" />
+          <do_if value="@$ship.exists and @$pilot.exists">
+            <set_value name="$inScope" exact="@$ship.defaultorder.id == 'SupplyMule' and $ship.defaultorder == @$pilot.$mwexFleetCfg.$origin" />
+            <signal_cue_instantly cue="md.MWEX_M4_Debug.Record" param="table[$ship=$ship,$attempt=@$pilot.$mwexM4Search.$attempt,$voyage=@$pilot.$mwexM4Voyage,$file='lifecycle',$text='HEARTBEAT scopeM4=%s baseline=%s currentPilot=%s defaultOrder=%s currentOrder=%s state=%s orders=%s cargo=%s sector=%s searchActorAlive=%s phase=%s progressAt=%s checks=%s expanded=%s waitingSince=%s next=%s failures=%s misses=%s lastAttack=%s attackCount=%s'.[$inScope,$baseline,$ship.pilot,$ship.defaultorder,$ship.order,@$ship.order.state,$ship.orders.count,$ship.cargo.count,$ship.sector,@$pilot.$mwexM4Search.$actor.exists,@$pilot.$mwexM4Search.$phase,@$pilot.$mwexM4Search.$progressAt,@$pilot.$mwexM4Search.$checks,@$pilot.$mwexM4Search.$expanded,@$pilot.$mwexFleetAttempt.$waitingSince,@$pilot.$mwexFleetAttempt.$next,@$pilot.$mwexFleetAttempt.$failures,@$pilot.$mwexFleetAttempt.$misses,@$pilot.$mwexM4LastAttack,@$pilot.$mwexM4AttackCount]]" />
+            <do_if value="not $pilot.$mwexM4LogOrders?">
+              <set_value name="$pilot.$mwexM4LogOrders" exact="[]" />
+            </do_if>
+            <set_value name="$known" exact="table[]" />
+            <do_for_each name="$entry" in="$pilot.$mwexM4LogOrders">
+              <set_value name="$known.{$entry.$order}" exact="true" />
+            </do_for_each>
+            <do_for_each name="$order" in="$ship.orders">
+              <do_if value="$inScope and @$order.trade.exists and not $known.{$order}?">
+                <set_value name="$entry" exact="table[$order=$order,$orderId='%s'.[$order],$trade=$order.trade,$tradeId='%s'.[$order.trade],$offer=@$order.trade.tradeoffer,$ware=$order.trade.ware,$planned=null,$side=if $order.trade.buyer == $ship then 'buy' else 'sell',$attempt=null,$voyage='baseline',$created=player.age,$transferred=$order.trade.transferredamount,$terminal=false,$baseline=true]" />
+                <append_to_list name="$pilot.$mwexM4LogOrders" exact="$entry" />
+                <signal_cue_instantly cue="md.MWEX_M4_Debug.Record" param="table[$ship=$ship,$attempt=null,$voyage='baseline',$file='orders',$text='ORDER_ADOPTED order=%s trade=%s side=%s ware=%s remaining=%s transferred=%s planned=unknown history=preexisting'.[$entry.$orderId,$entry.$tradeId,$entry.$side,$entry.$ware,$order.trade.amount,$entry.$transferred]]" />
+              </do_if>
+            </do_for_each>
+            <do_for_each name="$entry" in="$pilot.$mwexM4LogOrders.clone" reverse="true">
+              <do_if value="@$entry.$order.exists">
+                <set_value name="$state" exact="$entry.$order.state" />
+                <set_value name="$transferred" exact="if @$entry.$trade.exists then $entry.$trade.transferredamount else null" />
+                <set_value name="$remaining" exact="if @$entry.$trade.exists then $entry.$trade.amount else null" />
+                <do_if value="$baseline or @$entry.$lastState != $state or @$entry.$lastTransferred != $transferred or @$entry.$lastRemaining != $remaining or player.age ge @$entry.$observedAt+120s">
+                  <signal_cue_instantly cue="md.MWEX_M4_Debug.Record" param="table[$ship=$ship,$attempt=$entry.$attempt,$voyage=$entry.$voyage,$file='orders',$text='ORDER_OBSERVED order=%s trade=%s side=%s state=%s remaining=%s transferred=%s planned=%s baseline=%s'.[$entry.$orderId,$entry.$tradeId,$entry.$side,$state,$remaining,$transferred,$entry.$planned,$baseline]]" />
+                  <set_value name="$entry.$lastState" exact="$state" />
+                  <set_value name="$entry.$lastTransferred" exact="$transferred" />
+                  <set_value name="$entry.$lastRemaining" exact="$remaining" />
+                  <set_value name="$entry.$observedAt" exact="player.age" />
+                </do_if>
+              </do_if>
+              <do_elseif value="not $entry.$terminal">
+                <signal_cue_instantly cue="md.MWEX_M4_Debug.Record" param="table[$ship=$ship,$attempt=$entry.$attempt,$voyage=$entry.$voyage,$file='orders',$text='ORDER_GONE order=%s trade=%s side=%s lastTransferred=%s outcome=unknown reason=no_terminal_event_observed'.[$entry.$orderId,$entry.$tradeId,$entry.$side,@$entry.$lastTransferred]]" />
+                <set_value name="$entry.$terminal" exact="true" />
+                <set_value name="$entry.$endedAt" exact="player.age" />
+              </do_elseif>
+              <do_if value="$entry.$terminal and not @$entry.$order.exists and player.age ge @$entry.$endedAt+10min">
+                <remove_from_list name="$pilot.$mwexM4LogOrders" exact="$entry" />
+              </do_if>
+            </do_for_each>
+          </do_if>
+        </do_if>
+      </actions>
+    </cue>
+    <cue name="OrderEvent" instantiate="true" namespace="this">
+      <conditions>
+        <event_cue_signalled />
+      </conditions>
+      <actions>
+        <do_if value="@global.$mwexDebug">
+          <set_value name="$msg" exact="event.param" />
+          <set_value name="$ship" exact="$msg.$ship" />
+          <set_value name="$matched" exact="false" />
+          <do_if value="$msg.$pilot.$mwexM4LogOrders?">
+            <do_for_each name="$entry" in="$msg.$pilot.$mwexM4LogOrders">
+              <do_if value="$entry.$order == $msg.$order">
+                <set_value name="$matched" exact="true" />
+                <signal_cue_instantly cue="md.MWEX_M4_Debug.Record" param="table[$ship=$ship,$attempt=$entry.$attempt,$voyage=$entry.$voyage,$file='orders',$text='NATIVE_ORDER event=%s order=%s trade=%s side=%s immediate=%s orderExists=%s transferred=%s outcome=native_event cause=unknown'.[$msg.$kind,$entry.$orderId,$entry.$tradeId,$entry.$side,$msg.$immediate,@$msg.$order.exists,if @$entry.$trade.exists then $entry.$trade.transferredamount else null]]" />
+                <do_if value="$msg.$kind == 'finished' or ($msg.$kind == 'cancelled' and $msg.$immediate and not @$msg.$order.exists)">
+                  <set_value name="$entry.$terminal" exact="true" />
+                  <set_value name="$entry.$endedAt" exact="player.age" />
+                </do_if>
+              </do_if>
+            </do_for_each>
+          </do_if>
+          <do_if value="not $matched and @$ship.defaultorder.id == 'SupplyMule' and $ship.defaultorder == @$msg.$pilot.$mwexFleetCfg.$origin">
+            <signal_cue_instantly cue="md.MWEX_M4_Debug.Record" param="table[$ship=$ship,$attempt=null,$voyage=null,$file='orders',$text='NATIVE_ORDER event=%s order=%s immediate=%s orderExists=%s correlation=unmatched'.[$msg.$kind,$msg.$order,$msg.$immediate,@$msg.$order.exists]]" />
+          </do_if>
+        </do_if>
+      </actions>
+    </cue>
+    <cue name="TradeEvent" instantiate="true" namespace="this">
+      <conditions>
+        <event_cue_signalled />
+      </conditions>
+      <actions>
+        <do_if value="@global.$mwexDebug">
+          <set_value name="$msg" exact="event.param" />
+          <set_value name="$ship" exact="$msg.$ship" />
+          <set_value name="$deal" exact="if @$msg.$deal.exists then $msg.$deal else null" />
+          <set_value name="$attempt" exact="null" />
+          <set_value name="$voyage" exact="null" />
+          <set_value name="$orderId" exact="null" />
+          <set_value name="$correlation" exact="'unmatched'" />
+          <do_if value="$msg.$pilot.$mwexM4LogOrders?">
+            <do_for_each name="$entry" in="$msg.$pilot.$mwexM4LogOrders">
+              <do_if value="$entry.$trade == $msg.$deal or $entry.$trade == $msg.$offer">
+                <set_value name="$attempt" exact="$entry.$attempt" />
+                <set_value name="$voyage" exact="$entry.$voyage" />
+                <set_value name="$orderId" exact="$entry.$orderId" />
+                <set_value name="$correlation" exact="'exact_trade'" />
+                <do_if value="@$entry.$trade.exists">
+                  <set_value name="$deal" exact="$entry.$trade" />
+                </do_if>
+                <do_if value="@$deal.exists">
+                  <set_value name="$entry.$transferred" exact="$deal.transferredamount" />
+                </do_if>
+                <break />
+              </do_if>
+            </do_for_each>
+          </do_if>
+          <do_if value="$correlation == 'exact_trade' or (@$ship.defaultorder.id == 'SupplyMule' and $ship.defaultorder == @$msg.$pilot.$mwexFleetCfg.$origin)">
+            <signal_cue_instantly cue="md.MWEX_M4_Debug.Record" param="table[$ship=$ship,$attempt=$attempt,$voyage=$voyage,$file='orders',$text='NATIVE_TRADE event=%s side=%s order=%s offer=%s deal=%s ware=%s buyer=%s seller=%s remaining=%s transferred=%s destroyed=%s unitPrice=%s valueCr=%s internal=%s buyfree=%s correlation=%s'.[$msg.$kind,$msg.$side,$orderId,$msg.$offer,$msg.$deal,@$deal.ware,@$deal.buyer,@$deal.seller,if @$deal.exists then $deal.amount else null,if @$deal.exists then $deal.transferredamount else null,if @$deal.exists then $deal.destroyedamount else null,if @$deal.exists then $deal.unitprice/1Cr else null,if @$deal.exists then $deal.unitprice*$deal.transferredamount/1Cr else null,if @$deal.exists then @$deal.buyer.owner == @$deal.seller.owner else null,@$deal.buyfree,$correlation]]" />
+          </do_if>
+        </do_if>
+      </actions>
+    </cue>
+  </cues>
+</mdscript>

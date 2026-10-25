@@ -1,54 +1,107 @@
 <?xml version="1.0" encoding="utf-8"?>
-<aiscript name="mule.fleet.discover" version="1">
-  <params><param name="hub"/></params>
-  <attention min="unknown"><actions>
-    <set_value name="$home" exact="$hub.$home"/>
-    <set_value name="$hub.$cacheDirty" exact="false"/>
-    <set_value name="$buildEpoch" exact="global.$mwexFleetEpoch"/>
-    <set_value name="$sector" exact="if $home.isclass.sector then $home else $home.sector"/>
-    <set_value name="$range" exact="0"/>
-    <do_for_each valuename="$cfg" in="$hub.$members">
-      <set_value name="$range" exact="[$range,$cfg.$maxDist].max"/>
-    </do_for_each>
-    <set_value name="$hub.$range" exact="$range"/>
-    <get_ware_definition result="$wares" flags="economy"/>
-    <!-- Broad discovery is SHARED. Per-vessel legality is checked against native APIs in mule.fleet.offer. -->
-    <find_buy_offer space="player.galaxy" wares="$wares" result="$hub.$needs" multiple="true" excludeempty="false">
-      <match_buyer>
-        <match tradesknownto="faction.player"/>
-        <match_gate_distance object="$sector" min="0" max="$range"/>
-      </match_buyer>
-    </find_buy_offer>
-    <set_value name="$neededWares" exact="table[]"/>
-    <do_for_each name="$need" in="$hub.$needs">
-      <do_if value="$need.amount gt 0"><set_value name="$neededWares.{$need.ware}" exact="$need.ware"/></do_if>
-    </do_for_each>
-    <set_value name="$offers" exact="[]"/>
-    <do_if value="$neededWares.keys.count">
-      <find_sell_offer space="player.galaxy" wares="$neededWares.keys.list" result="$offers" multiple="true" excludeempty="false">
-      <match_seller>
-        <match tradesknownto="faction.player"/>
-        <match_gate_distance object="$sector" min="0" max="$range"/>
-      </match_seller>
-      </find_sell_offer>
-    </do_if>
-    <set_value name="$hub.$sources" exact="table[]"/>
-    <set_value name="$counter" exact="0"/>
-    <do_for_each name="$offer" in="$offers">
-      <do_if value="not $hub.$sources.{$offer.ware}?"><set_value name="$hub.$sources.{$offer.ware}" exact="table[]"/></do_if>
-      <do_if value="not $hub.$sources.{$offer.ware}.{$offer.owner.sector}?"><set_value name="$hub.$sources.{$offer.ware}.{$offer.owner.sector}" exact="table[]"/></do_if>
-      <set_value name="$hub.$sources.{$offer.ware}.{$offer.owner.sector}.{$offer.owner}" exact="$offer"/>
-      <set_value name="$counter" operation="add" exact="1"/>
-      <do_if value="$counter ge 128">
-        <set_value name="global.$mwexFleetLock.$time" exact="player.age"/>
-        <wait exact="1ms"/>
-        <set_value name="$counter" exact="0"/>
+<aiscript name="mule.fleet.discover" version="3">
+  <params>
+    <param name="hub" />
+  </params>
+  <patch sinceversion="3">
+    <return />
+  </patch>
+  <patch sinceversion="2">
+    <return />
+  </patch>
+  <attention min="unknown">
+    <actions>
+      <set_value name="$home" exact="$hub.$home" />
+      <set_value name="$build" exact="@$hub.$building" />
+      <set_value name="$hub.$cacheDirty" exact="false" />
+      <set_value name="$buildEpoch" exact="global.$mwexFleetEpoch" />
+      <set_value name="$sector" exact="if $home.isclass.sector then $home else $home.sector" />
+      <set_value name="$range" exact="0" />
+      <do_for_each valuename="$cfg" in="$hub.$members">
+        <set_value name="$range" exact="[$range,$cfg.$maxDist].max" />
+      </do_for_each>
+      <set_value name="$hub.$range" exact="$range" />
+      <get_ware_definition result="$wares" flags="economy" />
+      <!-- Broad discovery is SHARED. Per-vessel legality is checked against native APIs in mule.fleet.offer. -->
+      <find_buy_offer space="player.galaxy" wares="$wares" result="$allNeeds" multiple="true" excludeempty="false">
+        <match_buyer>
+          <match tradesknownto="faction.player" />
+          <match_gate_distance object="$sector" min="0" max="$range" />
+        </match_buyer>
+      </find_buy_offer>
+      <set_value name="$needs" exact="[]" />
+      <set_value name="$counter" exact="0" />
+      <do_for_each name="$need" in="$allNeeds">
+        <set_value name="$mwscope_home" exact="$home" />
+        <set_value name="$mwscope_offer" exact="$need" />
+        <include_interrupt_actions ref="MWEX_Fleet_scope" />
+        <set_value name="$allowed" exact="$mwscope_out_allowed" />
+        <do_if value="$allowed">
+          <append_to_list name="$needs" exact="$need" />
+        </do_if>
+        <set_value name="$counter" operation="add" exact="1" />
+        <do_if value="$counter ge 128">
+          <do_if value="$build and @$hub.$building == $build">
+            <set_value name="$hub.$building.$time" exact="player.age" />
+          </do_if>
+          <wait exact="1ms" />
+          <set_value name="$counter" exact="0" />
+        </do_if>
+      </do_for_each>
+      <set_value name="$neededWares" exact="table[]" />
+      <do_for_each name="$need" in="$needs">
+        <do_if value="$need.amount gt 0">
+          <set_value name="$neededWares.{$need.ware}" exact="$need.ware" />
+        </do_if>
+      </do_for_each>
+      <set_value name="$offers" exact="[]" />
+      <do_if value="$neededWares.keys.count">
+        <find_sell_offer space="player.galaxy" wares="$neededWares.keys.list" result="$offers" multiple="true" excludeempty="false">
+          <match_seller>
+            <match tradesknownto="faction.player" />
+            <match_gate_distance object="$sector" min="0" max="$range" />
+          </match_seller>
+        </find_sell_offer>
       </do_if>
-    </do_for_each>
-    <set_value name="$hub.$cacheUntil" exact="player.age+30s"/>
-    <set_value name="$hub.$cacheEpoch" exact="$buildEpoch"/>
-    <do_if value="@global.$mwexDebug"><debug_to_file directory="'MulesExtended'" name="'debug.txt'" append="true"
-      text="'DISCOVER home=%s needs=%s sources=%s range=%s epoch=%s'.[$home,$hub.$needs.count,$offers.count,$range,$hub.$cacheEpoch]"/></do_if>
-    <return/>
-  </actions></attention>
+      <set_value name="$sources" exact="table[]" />
+      <set_value name="$counter" exact="0" />
+      <do_for_each name="$offer" in="$offers">
+        <do_if value="not $sources.{$offer.ware}?">
+          <set_value name="$sources.{$offer.ware}" exact="table[]" />
+        </do_if>
+        <do_if value="not $sources.{$offer.ware}.{$offer.owner.sector}?">
+          <set_value name="$sources.{$offer.ware}.{$offer.owner.sector}" exact="table[]" />
+        </do_if>
+        <set_value name="$sources.{$offer.ware}.{$offer.owner.sector}.{$offer.owner}" exact="$offer" />
+        <set_value name="$counter" operation="add" exact="1" />
+        <do_if value="$counter ge 128">
+          <do_if value="$build and @$hub.$building == $build">
+            <set_value name="$hub.$building.$time" exact="player.age" />
+          </do_if>
+          <wait exact="1ms" />
+          <set_value name="$counter" exact="0" />
+        </do_if>
+      </do_for_each>
+      <!-- A replacement builder owns publication. Events during a yield require a follow-up refresh. -->
+      <do_if value="$build and @$hub.$building != $build">
+        <return />
+      </do_if>
+      <remove_value name="$hub.$coarse" />
+      <set_value name="$hub.$needs" exact="$needs" />
+      <set_value name="$hub.$sources" exact="$sources" />
+      <set_value name="$hub.$failures" exact="table[]" />
+      <set_value name="$hub.$cacheDirty" exact="$buildEpoch != global.$mwexFleetEpoch or @$build.$changed" />
+      <set_value name="$hub.$cacheUntil" exact="player.age+30s" />
+      <set_value name="$hub.$cacheEpoch" exact="$buildEpoch" />
+      <do_if value="@global.$mwexDebug">
+        <do_if value="@global.$mwexDebug">
+          <set_value name="$mwtrace_diagnostic" exact="table[$ship=null,$attempt=null,$relaxed=false]" />
+          <set_value name="$mwtrace_text" exact="'DISCOVER home=%s needs=%s sources=%s range=%s epoch=%s'.[$home,$hub.$needs.count,$offers.count,$range,$hub.$cacheEpoch]" />
+          <set_value name="$mwtrace_file" exact="'lifecycle'" />
+          <include_interrupt_actions ref="MWEX_Fleet_trace" />
+        </do_if>
+      </do_if>
+      <return />
+    </actions>
+  </attention>
 </aiscript>

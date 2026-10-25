@@ -1,13 +1,39 @@
 <?xml version="1.0" encoding="utf-8"?>
-<aiscript name="mule.fleet.trace" version="2">
-  <params><param name="diagnostic"/><param name="text"/></params>
-  <patch sinceversion="2"><return/></patch>
-  <attention min="unknown"><actions>
-    <!-- Callers also guard formatting. Never retain a list of candidate strings. -->
-    <do_if value="@global.$mwexDebug">
-      <debug_to_file directory="'MulesExtended'" name="'debug.txt'" append="true"
-        text="'[time=%s ship=%s relaxed=%s] %s'.[player.age,$diagnostic.$ship.idcode,$diagnostic.$relaxed,$text]"/>
-    </do_if>
-    <return/>
-  </actions></attention>
+<aiscript name="mule.fleet.trace" version="4">
+  <params>
+    <param name="diagnostic" />
+    <param name="text" />
+  </params>
+  <interrupts>
+    <library>
+      <actions name="MWEX_Fleet_trace">
+        <!--Non-blocking. Inputs and outputs use a library-specific prefix; reset outputs on EVERY invocation.-->
+        <!-- Callers also guard formatting. Never retain a list of candidate strings. -->
+        <do_if value="@global.$mwexDebug">
+          <set_value name="$mwlog_ship" exact="@$mwtrace_diagnostic.$ship" />
+          <set_value name="$mwlog_attempt" exact="@$mwtrace_diagnostic.$attempt" />
+          <set_value name="$mwlog_voyage" exact="@$mwtrace_diagnostic.$voyage" />
+          <set_value name="$mwlog_file" exact="if $mwtrace_file? then $mwtrace_file else 'lifecycle'" />
+          <set_value name="$mwlog_text" exact="'relaxed=%s %s'.[@$mwtrace_diagnostic.$relaxed,$mwtrace_text]" />
+          <include_interrupt_actions ref="MWEX_Log_emit" />
+        </do_if>
+      </actions>
+    </library>
+  </interrupts>
+  <patch sinceversion="3">
+    <return />
+  </patch>
+  <patch sinceversion="4">
+    <return />
+  </patch>
+  <attention min="unknown">
+    <actions>
+      <!--Compatibility entry for saved calls and direct tools; live dispatch uses the action library.-->
+      <set_value name="$mwtrace_diagnostic" exact="$diagnostic" />
+      <set_value name="$mwtrace_text" exact="$text" />
+      <set_value name="$mwtrace_file" exact="'lifecycle'" />
+      <include_interrupt_actions ref="MWEX_Fleet_trace" />
+      <return />
+    </actions>
+  </attention>
 </aiscript>

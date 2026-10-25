@@ -27,11 +27,15 @@ class ReleasePackageChecks(unittest.TestCase):
             package=build.OUT/summary['package']
             extensions=Path(temporary)/'X4 Foundations'/'extensions';extensions.mkdir(parents=True)
             with zipfile.ZipFile(package) as archive:archive.extractall(extensions)
-            self.assertEqual([p.name for p in extensions.iterdir()],['mules_and_warehouses_extended'])
-            installed=extensions/'mules_and_warehouses_extended'
+            self.assertEqual([p.name for p in extensions.iterdir()],['mules_supply_mod_opus'])
+            installed=extensions/'mules_supply_mod_opus'
             for name in ('content.xml','README.md','README.en.md','LICENCE.md','ATTRIBUTION.md','VERSION','ext_01.cat','ext_01.dat'):
                 self.assertEqual((installed/name).read_bytes(),(ROOT/name).read_bytes() if name not in ('ext_01.cat','ext_01.dat') else (build.OUT/name).read_bytes())
-            self.assertEqual(ET.parse(installed/'content.xml').getroot().get('id'),'ws_2013772865')
+            metadata=ET.parse(installed/'content.xml').getroot()
+            self.assertEqual(metadata.get('id'),'mules_supply_mod_opus')
+            self.assertFalse(metadata.get('id').startswith('ws_'))
+            self.assertNotIn('lastupdate',metadata.attrib)
+            self.assertEqual(summary['extension_id'],'mules_supply_mod_opus')
             payload=(installed/'ext_01.dat').read_bytes();offset=0;runtime={}
             for line in (installed/'ext_01.cat').read_text(encoding='utf-8').splitlines():
                 name,size,stamp,checksum=line.rsplit(' ',3);size=int(size)
