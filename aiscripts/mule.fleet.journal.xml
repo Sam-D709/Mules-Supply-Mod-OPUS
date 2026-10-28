@@ -1,5 +1,5 @@
-<?xml version="1.0" encoding="utf-8"?>
-<aiscript name="mule.fleet.journal" version="4">
+<?xml version='1.0' encoding='utf-8'?>
+<aiscript name="mule.fleet.journal" version="5">
   <params>
     <param name="cfg" />
     <param name="diagnostic" />
@@ -12,7 +12,6 @@
   <interrupts>
     <library>
       <actions name="MWEX_Fleet_journal">
-        <!--Non-blocking. Inputs and outputs use a library-specific prefix; reset outputs on EVERY invocation.-->
         <do_all exact="1">
           <set_value name="$mwjournal_ship" exact="$mwjournal_cfg.$ship" />
           <do_if value="not $mwjournal_ship.isoperational or not $mwjournal_ship.pilot.exists or not $mwjournal_diagnostic">
@@ -24,10 +23,26 @@
           <set_value name="$mwjournal_diagnostic.$recorded" exact="true" />
           <remove_value name="$mwjournal_ship.pilot.$mwexFleetJournalLast" />
           <remove_value name="$mwjournal_ship.pilot.$mwexFleetJournalSerial" />
-          <!-- Disk results precede the player-facing cooldown, so failed attempts remain traceable. -->
           <do_if value="@global.$mwexDebug">
+            <set_value name="$mwjournal_search" exact="@$mwjournal_diagnostic.$logSearchSnapshot" />
+            <set_value name="$mwjournal_committedVolume" exact="null" />
+            <set_value name="$mwjournal_committedCapacity" exact="null" />
+            <set_value name="$mwjournal_committedLots" exact="null" />
+            <do_if value="$mwjournal_diagnostic.$status == 'success'">
+              <set_value name="$mwjournal_committedVolume" exact="0" />
+              <set_value name="$mwjournal_committedCapacity" exact="$mwjournal_diagnostic.$capacity" />
+              <set_value name="$mwjournal_committedLots" exact="$mwjournal_plan.count" />
+              <do_for_each name="$mwjournal_committedLeg" in="$mwjournal_plan">
+                <set_value name="$mwjournal_committedVolume" operation="add" exact="$mwjournal_committedLeg.$amount*$mwjournal_committedLeg.$ware.volume" />
+              </do_for_each>
+            </do_if>
+            <set_value name="$mwload_volume" exact="$mwjournal_committedVolume" />
+            <set_value name="$mwload_capacity" exact="$mwjournal_committedCapacity" />
+            <include_interrupt_actions ref="MWEX_Log_load" />
             <set_value name="$mwtrace_diagnostic" exact="$mwjournal_diagnostic" />
-            <set_value name="$mwtrace_text" exact="'RESULT status=%s success=%s reason=%s volume=%s capacity=%s wait=%s minLoad=%s repaired=%s checks=%s extensions=%s candidateBudget=%s routeBudget=%s gradeDeferred=%s loadRejected=%s pool=%s'.[$mwjournal_diagnostic.$status,$mwjournal_diagnostic.$status == 'success',@$mwjournal_diagnostic.$failure,$mwjournal_diagnostic.$volume,$mwjournal_diagnostic.$capacity,@$mwjournal_diagnostic.$waitAge,@$mwjournal_diagnostic.$minLoad,@$mwjournal_diagnostic.$repaired,@$mwjournal_diagnostic.$checks,@$mwjournal_diagnostic.$expanded,@$mwjournal_diagnostic.$candidateBudget,@$mwjournal_diagnostic.$routeBudget,@$mwjournal_diagnostic.$gradeDeferred,@$mwjournal_diagnostic.$loadRejected,@$mwjournal_diagnostic.$pool]" />
+            <set_value name="$mwtrace_event" exact="'RESULT'" />
+            <set_value name="$mwtrace_fields" exact="'capacityBasis,status,success,reason,detail,searchVolume,searchCapacity,searchLots,searchLoadPercent,searchLoadState,searchSnapshotSession,committedVolume,committedCapacity,committedLots,committedLoadPercent,committedLoadState,committedState,wait,minLoad,repaired,checks,extensions,candidateBudget,routeBudget,gradeDeferred,loadRejected,pool,searchAcceptedPlan,searchPartialBelowLoad,acceptedStates,loadBlockedStates'" />
+            <set_value name="$mwtrace_text" exact="'RESULT status=%s success=%s reason=%s detail=%s searchVolume=%s searchCapacity=%s searchLots=%s searchLoadPercent=%s searchLoadState=%s searchSnapshotSession=%s committedVolume=%s committedCapacity=%s committedLots=%s committedLoadPercent=%s committedLoadState=%s committedState=%s wait=%s minLoad=%s repaired=%s checks=%s extensions=%s candidateBudget=%s routeBudget=%s gradeDeferred=%s loadRejected=%s pool=%s searchAcceptedPlan=%s searchPartialBelowLoad=%s acceptedStates=%s loadBlockedStates=%s capacityBasis=last_ware_whole_unit_limit'.[$mwjournal_diagnostic.$status,$mwjournal_diagnostic.$status == 'success',if $mwjournal_diagnostic.$status == 'success' then 'orders_created' else $mwjournal_diagnostic.$status,@$mwjournal_diagnostic.$failure,@$mwjournal_search.$volume,@$mwjournal_search.$capacity,@$mwjournal_search.$lots,@$mwjournal_search.$loadPercent,if $mwjournal_search then $mwjournal_search.$loadState else 'snapshot_unavailable',@$mwjournal_search.$session.$session,$mwjournal_committedVolume,$mwjournal_committedCapacity,$mwjournal_committedLots,$mwload_out_percent,if $mwjournal_diagnostic.$status == 'success' then $mwload_out_code else 'not_committed',if $mwjournal_diagnostic.$status == 'success' then 'orders_created' else 'not_committed',@$mwjournal_diagnostic.$waitAge,@$mwjournal_diagnostic.$minLoad,@$mwjournal_diagnostic.$repaired,@$mwjournal_diagnostic.$checks,@$mwjournal_diagnostic.$expanded,@$mwjournal_diagnostic.$candidateBudget,@$mwjournal_diagnostic.$routeBudget,@$mwjournal_diagnostic.$gradeDeferred,@$mwjournal_diagnostic.$loadRejected,@$mwjournal_diagnostic.$pool,@$mwjournal_diagnostic.$logHasAcceptedPlan,@$mwjournal_diagnostic.$logPartialLoadBlocked,@$mwjournal_diagnostic.$logAcceptedStates,@$mwjournal_diagnostic.$logLoadBlockedStates]" />
             <set_value name="$mwtrace_file" exact="'lifecycle'" />
             <set_value name="$mwtrace_diagnostic.$logClosed" exact="true" />
             <set_value name="$mwtrace_diagnostic.$phase" exact="'finished'" />
@@ -63,12 +78,14 @@
   <patch sinceversion="3">
     <return />
   </patch>
+  <patch sinceversion="5">
+    <return />
+  </patch>
   <patch sinceversion="4">
     <return />
   </patch>
   <attention min="unknown">
     <actions>
-      <!--Compatibility entry for saved calls and direct tools; live dispatch uses the action library.-->
       <set_value name="$mwjournal_cfg" exact="$cfg" />
       <set_value name="$mwjournal_diagnostic" exact="$diagnostic" />
       <set_value name="$mwjournal_plan" exact="$plan" />

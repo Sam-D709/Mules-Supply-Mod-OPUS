@@ -1,5 +1,5 @@
-<?xml version="1.0" encoding="utf-8"?>
-<aiscript name="mule.fleet.wave" version="16">
+<?xml version='1.0' encoding='utf-8'?>
+<aiscript name="mule.fleet.wave" version="17">
   <params>
     <param name="hub" />
     <param name="cfg" default="null" />
@@ -18,9 +18,11 @@
   <patch sinceversion="16">
     <return />
   </patch>
+  <patch sinceversion="17">
+    <return />
+  </patch>
   <attention min="unknown">
     <actions>
-      <!-- Each pilot searches only for itself. Returning ships never wait for a fleet-wide sweep. -->
       <do_if value="not $cfg">
         <return />
       </do_if>
@@ -38,6 +40,8 @@
       <do_if value="not $attempt or $attempt.$signature != $cfg.$signature or $attempt.$origin != $cfg.$origin">
         <do_if value="@global.$mwexDebug">
           <set_value name="$mwtrace_diagnostic" exact="table[$ship=$ship,$attempt=null,$relaxed=false]" />
+          <set_value name="$mwtrace_event" exact="'WAIT_RESET'" />
+          <set_value name="$mwtrace_fields" exact="'reason,oldWaitingSince,oldFailures,oldMisses'" />
           <set_value name="$mwtrace_text" exact="'WAIT_RESET reason=configuration_or_origin oldWaitingSince=%s oldFailures=%s oldMisses=%s'.[@$attempt.$waitingSince,@$attempt.$failures,@$attempt.$misses]" />
           <set_value name="$mwtrace_file" exact="'lifecycle'" />
           <include_interrupt_actions ref="MWEX_Fleet_trace" />
@@ -105,6 +109,8 @@
       <include_interrupt_actions ref="MWEX_Log_state" />
       <do_if value="@global.$mwexDebug">
         <set_value name="$mwtrace_diagnostic" exact="table[$ship=$ship,$attempt=null,$relaxed=$relaxed]" />
+        <set_value name="$mwtrace_event" exact="'WAVE_INPUT'" />
+        <set_value name="$mwtrace_fields" exact="'waitingSince,waitAge,failures,misses,backoff,next,trigger,returnToken'" />
         <set_value name="$mwtrace_text" exact="'WAVE_INPUT waitingSince=%s waitAge=%s failures=%s misses=%s backoff=%s next=%s trigger=%s returnToken=%s'.[$attempt.$waitingSince,$waitAge,$attempt.$failures,@$attempt.$misses,$attempt.$backoff,$attempt.$next,$debugTrigger,$debugReturnToken]" />
         <set_value name="$mwtrace_file" exact="'lifecycle'" />
         <include_interrupt_actions ref="MWEX_Fleet_trace" />
@@ -113,6 +119,8 @@
         <param name="hub" value="$hub" />
         <param name="cfg" value="$cfg" />
         <param name="relaxed" value="$relaxed" />
+        <param name="inputWaitAge" value="$waitAge" />
+        <param name="inputWaitingSince" value="$attempt.$waitingSince" />
         <param name="debugWait" value="$waitAge" />
         <param name="debugWaitingSince" value="$attempt.$waitingSince" />
         <param name="debugWave" value="this" />
@@ -123,6 +131,8 @@
       <do_if value="$reason == 'ship_changed'">
         <do_if value="@global.$mwexDebug and $diagnostic">
           <set_value name="$mwtrace_diagnostic" exact="$diagnostic" />
+          <set_value name="$mwtrace_event" exact="'RESULT'" />
+          <set_value name="$mwtrace_fields" exact="'status,success'" />
           <set_value name="$mwtrace_text" exact="'RESULT status=ship_changed success=false'" />
           <set_value name="$mwtrace_file" exact="'lifecycle'" />
           <set_value name="$mwtrace_diagnostic.$logClosed" exact="true" />
@@ -151,6 +161,8 @@
         <do_if value="$reason == 'commit_busy'">
           <do_if value="@global.$mwexDebug">
             <set_value name="$mwtrace_diagnostic" exact="$diagnostic" />
+            <set_value name="$mwtrace_event" exact="'RESULT'" />
+            <set_value name="$mwtrace_fields" exact="'status,success'" />
             <set_value name="$mwtrace_text" exact="'RESULT status=commit_busy success=false'" />
             <set_value name="$mwtrace_file" exact="'lifecycle'" />
             <set_value name="$mwtrace_diagnostic.$logClosed" exact="true" />
@@ -171,6 +183,8 @@
       <set_value name="$attempt.$lastStatus" exact="$diagnostic.$status" />
       <do_if value="@global.$mwexDebug">
         <set_value name="$mwtrace_diagnostic" exact="$diagnostic" />
+        <set_value name="$mwtrace_event" exact="'ATTEMPT_BEFORE_UPDATE'" />
+        <set_value name="$mwtrace_fields" exact="'status,failures,misses,waitingSince,next,budget,loadRejected'" />
         <set_value name="$mwtrace_text" exact="'ATTEMPT_BEFORE_UPDATE status=%s failures=%s misses=%s waitingSince=%s next=%s budget=%s loadRejected=%s'.[$diagnostic.$status,$attempt.$failures,$attempt.$misses,$attempt.$waitingSince,$attempt.$next,$diagnostic.$budgetExhausted,$diagnostic.$loadRejected]" />
         <set_value name="$mwtrace_file" exact="'lifecycle'" />
         <include_interrupt_actions ref="MWEX_Fleet_trace" />
@@ -189,6 +203,8 @@
         <set_value name="$attempt.$next" exact="player.age+$attempt.$backoff" />
         <do_if value="@global.$mwexDebug">
           <set_value name="$mwtrace_diagnostic" exact="$diagnostic" />
+          <set_value name="$mwtrace_event" exact="'ATTEMPT_UPDATE'" />
+          <set_value name="$mwtrace_fields" exact="'failures,misses,waitingSince,backoff,next,needOffset,sourceOffset'" />
           <set_value name="$mwtrace_text" exact="'ATTEMPT_UPDATE failures=%s misses=%s waitingSince=%s backoff=%s next=%s needOffset=%s sourceOffset=%s'.[$attempt.$failures,$attempt.$misses,$attempt.$waitingSince,$attempt.$backoff,$attempt.$next,@$ship.pilot.$mwexFleetNeedOffset,@$ship.pilot.$mwexFleetSearchOffset]" />
           <set_value name="$mwtrace_file" exact="'lifecycle'" />
           <include_interrupt_actions ref="MWEX_Fleet_trace" />
@@ -206,7 +222,6 @@
         <set_value name="$mwreport_cfg" exact="$cfg" />
         <set_value name="$mwreport_reason" exact="$reason" />
         <include_interrupt_actions ref="MWEX_Fleet_report" />
-        <!-- Retain throttled home alerts without another whole-fleet or whole-failure-table sweep. -->
         <set_value name="$need" exact="@$diagnostic.$lastNeed" />
         <do_if value="$need and not $diagnostic.$loadRejected and not $diagnostic.$budgetExhausted and (not $hub.$warnings.{$need}? or player.age ge $hub.$warnings.{$need}+10min)">
           <set_value name="$mwnet_offer" exact="$need" />
@@ -225,7 +240,9 @@
     <do_if value="@global.$mwexDebug and $ship? and @$ship.pilot.$mwexM4Search.$wave == this and not @$ship.pilot.$mwexM4Search.$logClosed">
       <do_if value="@global.$mwexDebug">
         <set_value name="$mwtrace_diagnostic" exact="$ship.pilot.$mwexM4Search" />
-        <set_value name="$mwtrace_text" exact="'RESULT status=aborted success=false reason=script_interrupted stage=wave phase=%s cause=unknown'.[@$ship.pilot.$mwexM4Search.$phase]" />
+        <set_value name="$mwtrace_event" exact="'RESULT'" />
+        <set_value name="$mwtrace_fields" exact="'status,success,reason,stage,phase,cause'" />
+        <set_value name="$mwtrace_text" exact="'RESULT status=aborted success=false reason=script_interrupted stage=wave phase=%s cause=engine_reason_not_provided'.[@$ship.pilot.$mwexM4Search.$phase]" />
         <set_value name="$mwtrace_file" exact="'lifecycle'" />
         <set_value name="$mwtrace_diagnostic.$logClosed" exact="true" />
         <set_value name="$mwtrace_diagnostic.$phase" exact="'finished'" />

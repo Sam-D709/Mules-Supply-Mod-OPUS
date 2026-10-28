@@ -14,7 +14,10 @@
         <!-- Blocking stage first; candidate rejections never replace a commit failure. -->
         <set_value name="$mwsummary_text" exact="if $mwsummary_d.$status == 'success' then {61552,4425}.[$mwsummary_d.$lots] else if $mwsummary_d.$commitFailed then $mwsummary_d.$failure else if $mwsummary_d.$status == 'budget' then {61552,4426} else if $mwsummary_d.$status == 'grade_wait' then {61552,4460} else if $mwsummary_d.$status == 'load' then {61552,4427}.[$mwsummary_min] else if $mwsummary_d.$pool == 0 then {61552,4428} else {61552,4429}" />
         <do_if value="$mwsummary_d.$capacity gt 0">
-          <set_value name="$mwsummary_text" exact="$mwsummary_text+'\n'+{61552,4430}.[$mwsummary_d.$lots,$mwsummary_d.$volume,$mwsummary_d.$capacity,(($mwsummary_d.$volume*10000/$mwsummary_d.$capacity)i)/100.0,$mwsummary_min]" />
+          <set_value name="$mwload_volume" exact="$mwsummary_d.$volume" />
+          <set_value name="$mwload_capacity" exact="$mwsummary_d.$capacity" />
+          <include_interrupt_actions ref="MWEX_Log_load" />
+          <set_value name="$mwsummary_text" exact="$mwsummary_text+'\n'+{61552,4430}.[$mwsummary_d.$lots,$mwsummary_d.$volume,$mwsummary_d.$capacity,$mwload_out_percent,$mwsummary_min]" />
         </do_if>
         <do_if value="$mwsummary_d.$secondaryChecks gt 0">
           <set_value name="$mwsummary_text" exact="$mwsummary_text+'\n'+{61552,4431}.[$mwsummary_d.$secondaryChecks i,$mwsummary_d.$secondaryAdded i]" />
@@ -36,7 +39,7 @@
         </do_else>
         <do_if value="$mwsummary_d.$status != 'success' and not $mwsummary_d.$commitFailed">
           <do_if value="$mwsummary_d.$price">
-            <set_value name="$mwsummary_text" exact="$mwsummary_text+'\n'+{61552,4437}.[$mwsummary_d.$price,$mwsummary_d.$gapWare.name,$mwsummary_d.$minGap]" />
+            <set_value name="$mwsummary_text" exact="$mwsummary_text+'\n'+{61552,4437}.[$mwsummary_d.$price,$mwsummary_d.$gapWare.name,if $mwsummary_d.$minGapCt? then '%s%s.%s%s'.[if (($mwsummary_d.$minGapCt*1ct)) lt 0ct then '-' else '',(abs((($mwsummary_d.$minGapCt*1ct)/1ct)L)/100)L,((abs((($mwsummary_d.$minGapCt*1ct)/1ct)L)%100)/10)i,(abs((($mwsummary_d.$minGapCt*1ct)/1ct)L)%10)i] else $mwsummary_d.$minGap]" />
           </do_if>
           <do_if value="$mwsummary_d.$range">
             <set_value name="$mwsummary_text" exact="$mwsummary_text+'\n'+{61552,4438}.[$mwsummary_d.$range,$mwsummary_d.$rangeWare.name,$mwsummary_d.$minExtra]" />

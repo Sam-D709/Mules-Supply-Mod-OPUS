@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+<?xml version='1.0' encoding='utf-8'?>
 <mdscript name="MWEX_Options">
   <cues>
     <!-- Public Extension Options API; no replacement of kuertee UIX menus. -->
@@ -22,9 +22,6 @@
         <signal_cue_instantly cue="md.Simple_Menu_API.Make_Text" param="table[$col=1,$colSpan=2,$text={61552,4402},$wordwrap=true]" />
         <signal_cue_instantly cue="md.Simple_Menu_API.Add_Row" param="table[$selectable=false]" />
         <signal_cue_instantly cue="md.Simple_Menu_API.Make_Text" param="table[$col=1,$colSpan=2,$text={61552,4403},$wordwrap=true]" />
-        <signal_cue_instantly cue="md.Simple_Menu_API.Add_Row" />
-        <signal_cue_instantly cue="md.Simple_Menu_API.Make_CheckBox" param="table[$id='mwex_m4_trace',$col=1,$checked=@global.$mwexM4TraceCandidates == true,$onClick=TraceChanged,$width='Helper.standardButtonHeight',$height='Helper.standardButtonHeight',$mouseOverText={61552,4472}]" />
-        <signal_cue_instantly cue="md.Simple_Menu_API.Make_Text" param="table[$col=2,$text={61552,4471}]" />
       </actions>
     </cue>
     <cue name="DebugChanged" instantiate="true">
@@ -33,12 +30,13 @@
       </conditions>
       <actions>
         <do_if value="@global.$mwexDebug and event.param.$checked != 1">
-          <signal_cue_instantly cue="md.MWEX_M4_Debug.Record" param="table[$ship=null,$attempt=null,$voyage=null,$file='lifecycle',$text='BOUNDARY reason=debug_disabled observation_ends_here=true']" />
+          <signal_cue_instantly cue="md.MWEX_M4_Debug.Record" param="table[$ship=null,$attempt=null,$voyage=null,$file='lifecycle',$eventName='BOUNDARY',$fields='reason',$text='BOUNDARY reason=debug_disabled observation_ends_here=true']" />
         </do_if>
         <set_value name="global.$mwexDebug" exact="event.param.$checked == 1" />
         <do_if value="global.$mwexDebug">
           <signal_cue_instantly cue="md.MWEX_M4_Debug.Start" param="'debug_enabled'" />
         </do_if>
+        <remove_value name="global.$mwexM4TraceCandidates" />
       </actions>
     </cue>
     <cue name="TraceChanged" instantiate="true">
@@ -46,8 +44,7 @@
         <event_cue_signalled />
       </conditions>
       <actions>
-        <set_value name="global.$mwexM4TraceCandidates" exact="event.param.$checked == 1" />
-        <signal_cue_instantly cue="md.MWEX_M4_Debug.Record" param="table[$ship=null,$attempt=null,$voyage=null,$file='lifecycle',$text='TRACE_MODE fullCandidates=%s'.[global.$mwexM4TraceCandidates]]" />
+        <remove_value name="global.$mwexM4TraceCandidates" />
       </actions>
     </cue>
   </cues>

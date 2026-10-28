@@ -73,7 +73,7 @@ def member(value, key):
     return 0
 
 
-TOKEN = re.compile(r"\s*(?:('(?:[^']|'')*')|(\d+(?:\.\d+)?(?:min|ms|Cr|s)?)(?![\w])|([$A-Za-z_][\w$]*)|(==|!=|[.{}\[\](),?@+*/=<>-]))")
+TOKEN = re.compile(r"\s*(?:('(?:[^']|'')*')|(\d+(?:\.\d+)?(?:min|ms|Cr|ct|s|f|F|L)?)(?![\w])|([$A-Za-z_][\w$]*)|(==|!=|[.{}\[\](),?@+*/%=<>-]))")
 
 
 class Parser:
@@ -100,6 +100,8 @@ class Parser:
             cond=self.expr();self.want('then');yes=self.expr();self.want('else');no=self.expr()
             left=('if',cond,yes,no)
         elif token in ('not','-','@'):left=('unary',token,self.expr(7))
+        elif token=='abs':
+            self.want('(');left=('abs',self.expr());self.want(')')
         elif token=='(':
             left=self.expr();self.want(')')
         elif token=='[':
@@ -121,8 +123,8 @@ class Parser:
             left=('text',page,entry)
         elif token.startswith("'"):left=('literal',token[1:-1].replace("''", "'"))
         elif token[0].isdigit():
-            match=re.fullmatch(r'(\d+(?:\.\d+)?)(min|ms|Cr|s)?',token)
-            left=('literal',float(match[1])*{'min':60,'ms':.001,'Cr':1,'s':1,None:1}[match[2]])
+            match=re.fullmatch(r'(\d+(?:\.\d+)?)(min|ms|Cr|ct|s|f|F|L)?',token)
+            left=('literal',float(match[1])*{'min':60,'ms':.001,'Cr':1,'ct':.01,'s':1,'f':1,'F':1,'L':1,None:1}[match[2]],match[2],match[1])
         elif token in ('true','false','null'):left=('literal',{'true':True,'false':False,'null':None}[token])
         else:left=('var',token)
         while True:
@@ -141,9 +143,9 @@ class Parser:
                 else:left=('member',left,('literal',self.pop().lstrip('$')))
                 continue
             if token=='?':self.pop();left=('present',left);continue
-            if token in ('i','f'):
+            if token in ('i','f','L'):
                 self.pop();left=('cast',token,left);continue
-            precedence={'or':1,'and':2,'==':3,'!=':3,'gt':3,'lt':3,'ge':3,'le':3,'+':4,'-':4,'*':5,'/':5}.get(token,0)
+            precedence={'or':1,'and':2,'==':3,'!=':3,'gt':3,'lt':3,'ge':3,'le':3,'+':4,'-':4,'*':5,'/':5,'%':5}.get(token,0)
             if not precedence or precedence<minimum:break
             self.pop();right=self.expr(precedence+1);left=('binary',token,left,right)
         return left
@@ -186,7 +188,8 @@ class Runner:
         if tag=='list':return [self.ev(x,local) for x in node[1]]
         if tag=='table':return Obj({key:self.ev(value,local) for key,value in node[1]})
         if tag=='if':return self.ev(node[2] if raw(self.ev(node[1],local)) else node[3],local)
-        if tag=='cast':return (int if node[1]=='i' else float)(raw(self.ev(node[2],local)))
+        if tag=='cast':return (int if node[1] in ('i','L') else float)(raw(self.ev(node[2],local)))
+        if tag=='abs':return abs(raw(self.ev(node[1],local)))
         if tag=='unary':
             try:value=raw(self.ev(node[2],local))
             except UndefinedBinding:
@@ -209,6 +212,7 @@ class Runner:
             if op=='-':return a-b
             if op=='*':return a*b
             if op=='/':return a/b
+            if op=='%':return a%b
             if op=='==':return a==b
             if op=='!=':return a!=b
             if op=='gt':return a>b
@@ -223,6 +227,8 @@ class Runner:
         else:
             assert node[0]=='member',node
             target=self.ev(node[1],local);key=raw(self.ev(node[2],local))
+            if isinstance(key,str) and node[2][0]!='literal' and any(k in repr(node[1]) for k in ('rejectCounts','prefilterCounts')) and not key.startswith('$'):
+                raise AssertionError('Native table string keys must start with $: '+key)
             if node[2] in (('var','$group'),('var','$groupKey'),('var','$failureKey')) and isinstance(key,str) and not key.startswith('$'):
                 raise AssertionError('Native table string keys must start with $: '+key)
         if isinstance(target,dict) and target.get('class') in ('ship','station','sector') and str(key).startswith('mwex'):
@@ -277,6 +283,11 @@ class Runner:
         tag=node.tag
         v=lambda key,default='null':self.value(node.get(key,default),local)
         if tag=='set_value':self.set(node.get('name'),v('exact'),local,operation=node.get('operation'));return
+        if tag=='substitute_text':
+            text=v('source') if node.get('source') else v('text')
+            for replacement in node:
+                text=text.replace(self.value(replacement.get('string'),local),self.value(replacement.get('with'),local))
+            self.set(node.get('text'),text,local);return
         if tag=='remove_value':self.set(node.get('name'),None,local,remove=True);return
         if tag=='append_to_list':
             target=v('name');target.extend(v('list')) if node.get('list') else target.append(v('exact'));return
@@ -442,6 +453,8 @@ class Offer(Obj):
 class Engine:
     def __init__(self,delayed=False,language='zh'):
         self.player=Obj(age=0,money=10**12,occupiedship=None,entity=Obj(name='player'),galaxy=Obj(name='galaxy'))
+        self.player['timewarp']=Obj(active=False,factor=1)
+        self.player['systemtime']=Proxy(lambda fmt:'2026-10-25T12:00:00')
         self.modifier_targets=set()
         self.player['hasdiscount']=Proxy(lambda target:target in self.modifier_targets)
         self.player['hascommission']=Proxy(lambda target:target in self.modifier_targets)
@@ -804,28 +817,29 @@ class XMLDispatchChecks(unittest.TestCase):
                 plan=e.runner.script('mule.fleet.plan',{'hub':e.hub(home,fleet),'cfg':cfg,'relaxed':True})['plan']
                 self.assertIs(plan[0]['source'],cheaper if same_sector else e.sources[0])
 
-    def test_stock_trigger_allows_whole_shipment_without_retained_reserve(self):
-        for stock,accepted in ((59,False),(60,False),(80,True)):
+    def test_owned_supply_uses_native_offer_despite_retired_stock_trigger(self):
+        for stock in (59,60,80):
             with self.subTest(stock=stock):
                 e,home,fleet,hub=self.setup_market([100],[100]);source=e.sources[0];ware=e.wares[0];ship,cfg=fleet[0]
                 source['owner']['owner']='player';source['owner']['cargo'][ware].update(count=stock,target=100)
-                cfg['playerStockThreshold']=60;ship['defaultorder']['playerStockThreshold']=60
+                cfg.update(playerStockThreshold=100,minCargoUsed=0);ship['defaultorder'].update(cfg)
                 source['total']=stock;e.needs[0]['unitprice']=1
                 self.dispatch(e,hub)
-                self.assertEqual(bool(ship['orders']),accepted)
-                if accepted:self.assertEqual(ship['orders'][0]['amount'],80)
+                self.assertTrue(ship['orders'])
+                self.assertEqual(ship['orders'][0]['amount'],stock)
 
-    def test_low_owned_stock_falls_back_to_npc_with_priority_on_or_off(self):
+    def test_small_owned_sell_offer_does_not_hide_larger_npc_offer(self):
         for enabled,stock in ((True,10),(False,10)):
             with self.subTest(enabled=enabled):
                 e,home,fleet,hub=self.setup_market([80],[100]);ware=e.wares[0];ship,cfg=fleet[0]
                 own=e.offer(e.station('Own',home['sector']),ware,100,200,False)
                 own['owner']['cargo'][ware]['count']=stock
+                own['total']=stock
                 cfg['allowPlayerSuppliers']=enabled;ship['defaultorder']['allowPlayerSuppliers']=enabled
                 self.dispatch(e,e.hub(home,fleet))
                 self.assertIs(ship['orders'][0]['offer'],e.sources[0])
 
-    def test_owned_priority_overrides_main_distance_in_either_candidate_order(self):
+    def test_retired_owned_priority_never_overrides_main_distance_in_either_candidate_order(self):
         for enabled in (False,True):
             for owned_first in (False,True):
                 with self.subTest(enabled=enabled,owned_first=owned_first):
@@ -835,7 +849,7 @@ class XMLDispatchChecks(unittest.TestCase):
                     cfg['allowPlayerSuppliers']=enabled;ship['defaultorder']['allowPlayerSuppliers']=enabled
                     if owned_first:e.sources.reverse()
                     self.dispatch(e,e.hub(home,fleet))
-                    self.assertIs(ship['orders'][0]['offer'],own if enabled else next(s for s in e.sources if s is not own))
+                    self.assertIs(ship['orders'][0]['offer'],next(s for s in e.sources if s is not own))
 
     def test_priority_off_still_uses_owned_source_without_npc_permission(self):
         e,home,fleet,hub=self.setup_market([80],[100]);ship,cfg=fleet[0]
@@ -844,15 +858,13 @@ class XMLDispatchChecks(unittest.TestCase):
         self.dispatch(e,hub)
         self.assertIs(ship['orders'][0]['offer'],source);self.assertEqual(ship['orders'][0]['amount'],80)
 
-    def test_owned_priority_skips_ineligible_sources_and_falls_back_to_npc(self):
-        for reason in ('threshold','equal_threshold','zero_target','empty','blocked','dock','range'):
+    def test_owned_sources_still_require_native_eligibility(self):
+        for reason in ('unavailable','empty','blocked','dock','range'):
             with self.subTest(reason=reason):
                 e,home,fleet,hub=self.setup_market([80],[100]);ship,cfg=fleet[0];ware=e.wares[0]
                 remote=e.sector('Remote');e.connect(home['sector'],remote)
                 own=e.offer(e.station('Own',remote),ware,80,100,False)
-                if reason=='threshold':own['owner']['cargo'][ware]['count']=10
-                if reason=='equal_threshold':own['owner']['cargo'][ware]['count']=40
-                if reason=='zero_target':own['owner']['cargo'][ware]['target']=0
+                if reason=='unavailable':own['exists']=False
                 if reason=='empty':own['total']=0
                 if reason=='blocked':ship['blocked'].add(remote)
                 if reason=='dock':own['owner']['docks']=('XL',)
@@ -860,13 +872,13 @@ class XMLDispatchChecks(unittest.TestCase):
                 self.dispatch(e,e.hub(home,fleet))
                 self.assertIs(ship['orders'][0]['offer'],e.sources[0])
 
-    def test_owned_priority_partial_supply_combines_npc_remainder(self):
+    def test_tiny_owned_supply_does_not_add_a_stop_to_a_complete_npc_load(self):
         e,home,fleet,hub=self.setup_market([100],[100]);ship,cfg=fleet[0];ware=e.wares[0]
         remote=e.sector('Remote');e.connect(home['sector'],remote)
         own=e.offer(e.station('Own',remote),ware,30,100,False)
         self.dispatch(e,e.hub(home,fleet))
         buys=[o for o in ship['orders'] if not o['offer']['isbuyoffer']]
-        self.assertEqual([(o['offer'],o['amount']) for o in buys],[(own,30),(e.sources[0],70)])
+        self.assertEqual([(o['offer'],o['amount']) for o in buys],[(e.sources[0],100)])
 
     def test_owned_priority_still_ranks_owned_sources_by_distance(self):
         e,home,fleet,hub=self.setup_market([80],[100]);ship,cfg=fleet[0]
@@ -876,7 +888,7 @@ class XMLDispatchChecks(unittest.TestCase):
         self.dispatch(e,e.hub(home,fleet))
         self.assertIs(ship['orders'][0]['offer'],near)
 
-    def test_secondary_owned_priority_respects_corridor_and_off_uses_normal_price(self):
+    def test_secondary_sources_use_normal_price_and_corridor_despite_retired_preference(self):
         for enabled,inside in ((True,True),(False,True),(True,False)):
             with self.subTest(enabled=enabled,inside=inside):
                 e,home,fleet,off,far,p=self.corridor_market();ship,cfg=fleet[0]
@@ -884,41 +896,38 @@ class XMLDispatchChecks(unittest.TestCase):
                 on=e.offer(e.station('On',p,'ai'),off['ware'],200,90,False)
                 off['owner']['owner']='player'
                 if not inside:off['owner']['sector']=far['owner']['sector']
-                # A priced owned quote makes price and priority genuinely compete.
+                # Keep prices meaningful even for the owned quote.
                 off.field=lambda key,field=off.field: Proxy(lambda buyer:False) if key=='buyfree' else field(key)
                 self.dispatch(e,e.hub(home,fleet))
                 buys=[o['offer'] for o in ship['orders'] if not o['offer']['isbuyoffer']]
-                if enabled and not inside:
-                    # The owned supplier can become the main pickup. Check every secondary
-                    # against that selected main's actual corridor, rather than an old anchor.
-                    self.assertIs(buys[0],off)
-                    path=e.path(home['sector'],buys[0]['owner']['sector'],ship) or []
-                    corridor=[home['sector'],buys[0]['owner']['sector']]+path
-                    for pickup in buys[1:]:
-                        self.assertLessEqual(min(len(e.path(s,pickup['owner']['sector'],ship))-1 for s in corridor),cfg['corridorDepth'])
-                else:
-                    self.assertIn(off if enabled else on,buys)
-                    self.assertNotIn(on if enabled else off,buys)
+                self.assertIn(on,buys)
+                self.assertNotIn(off,buys)
+                path=e.path(home['sector'],buys[0]['owner']['sector'],ship) or []
+                corridor=[home['sector'],buys[0]['owner']['sector']]+path
+                for pickup in buys[1:]:
+                    self.assertLessEqual(min(len(e.path(s,pickup['owner']['sector'],ship))-1 for s in corridor),cfg['corridorDepth'])
 
-    def test_live_priority_toggle_rejects_old_plan_before_commit(self):
+    def test_retired_priority_toggle_does_not_invalidate_a_legal_plan(self):
         e,home,fleet,hub=self.setup_market([80],[100]);ship,cfg=fleet[0]
         plan=e.runner.script('mule.fleet.plan',{'hub':hub,'cfg':cfg,'relaxed':True})['plan']
         ship['defaultorder']['allowPlayerSuppliers']=False
-        self.assertFalse(e.runner.script('mule.fleet.commit',{'cfg':cfg,'plan':plan})['ok']);self.assertEqual(e.created,0)
+        self.assertTrue(e.runner.script('mule.fleet.commit',{'cfg':cfg,'plan':plan})['ok']);self.assertEqual(e.created,2)
 
-    def test_mimic_forwards_priority_and_stock_threshold_including_zero(self):
+    def test_mimic_ignores_retired_priority_and_stock_threshold(self):
         node=ET.parse(SRC/'aiscripts/order.assist.xml').getroot().find('./add/do_if/run_script')
         for enabled,threshold in ((True,60),(False,0),(False,None)):
             with self.subTest(enabled=enabled,threshold=threshold):
                 e,home,fleet,hub=self.setup_market([80],[100]);ship,cfg=fleet[0]
                 origin=Obj(ship['defaultorder']);origin['allowPlayerSuppliers']=enabled
+                origin['allowAiSuppliers']=False
                 if threshold is None:origin.pop('playerStockThreshold')
                 else:origin['playerStockThreshold']=threshold
                 captured={}
                 e.runner.script=lambda name,params: captured.update(params) or {}
                 e.runner.action(node,{'order':origin,'scriptname':'supplymule'})
-                self.assertEqual(captured['allowPlayerSuppliers'],enabled)
-                self.assertEqual(captured['playerStockThreshold'],50 if threshold is None else threshold)
+                self.assertFalse(captured['allowPlayerSuppliers'])
+                self.assertTrue(captured['allowAiSuppliers'])
+                self.assertEqual(captured['playerStockThreshold'],0)
 
     def test_priority_upgrade_invalidates_old_configuration_signature(self):
         e,home,fleet,hub=self.setup_market([80],[100]);ship,cfg=fleet[0]
@@ -926,24 +935,25 @@ class XMLDispatchChecks(unittest.TestCase):
         old=Obj(fresh);old['signature']=old['signature'].rsplit('/v',1)[0]+'/v15'
         ship['pilot']['mwexFleetCfg']=old
         resolved=e.runner.script('mule.fleet.config',{'cfg':Obj(cfg)})['cfg']
-        self.assertIsNot(resolved,old);self.assertTrue(resolved['allowPlayerSuppliers'])
-        self.assertEqual(resolved['playerStockThreshold'],50)
+        self.assertIsNot(resolved,old);self.assertFalse(resolved['allowPlayerSuppliers'])
+        self.assertEqual(resolved['playerStockThreshold'],0)
 
-    def test_stock_trigger_is_per_ware_and_zero_target_does_not_divide(self):
+    def test_zero_allocated_storage_does_not_override_native_sell_offer(self):
         e,home,fleet,hub=self.setup_market([80,80],[200]);ship,cfg=fleet[0]
         for source in e.sources:source['owner']['owner']='player'
         e.sources[0]['owner']['cargo'][e.wares[0]]['target']=0
         self.dispatch(e,hub)
-        self.assertEqual([o['offer']['ware'] for o in ship['orders'] if not o['offer']['isbuyoffer']],[e.wares[1]])
+        self.assertCountEqual([o['offer']['ware'] for o in ship['orders'] if not o['offer']['isbuyoffer']],e.wares)
 
-    def test_live_stock_drop_rejects_unsubmitted_plan(self):
+    def test_live_native_sell_quantity_drop_rejects_unsubmitted_plan(self):
         e,home,fleet,hub=self.setup_market([80],[100]);ship,cfg=fleet[0];source=e.sources[0]
         source['owner']['owner']='player'
         plan=e.runner.script('mule.fleet.plan',{'hub':hub,'cfg':cfg,'relaxed':True})['plan']
         source['owner']['cargo'][e.wares[0]]['count']=10
+        source['total']=10
         self.assertFalse(e.runner.script('mule.fleet.commit',{'cfg':cfg,'plan':plan})['ok']);self.assertEqual(e.created,0)
 
-    def test_zero_stock_trigger_survives_config_refresh_and_live_change_rejects(self):
+    def test_retired_stock_trigger_change_does_not_invalidate_native_legal_plan(self):
         e,home,fleet,hub=self.setup_market([80],[100]);ship,cfg=fleet[0];source=e.sources[0]
         source['owner']['owner']='player';source['owner']['cargo'][e.wares[0]].update(count=1,target=100)
         source['total']=1;cfg['playerStockThreshold']=0;ship['defaultorder']['playerStockThreshold']=0
@@ -951,7 +961,7 @@ class XMLDispatchChecks(unittest.TestCase):
         self.assertEqual(refreshed['playerStockThreshold'],0)
         plan=e.runner.script('mule.fleet.plan',{'hub':hub,'cfg':refreshed,'relaxed':True})['plan']
         self.assertTrue(plan);ship['defaultorder']['playerStockThreshold']=75
-        self.assertFalse(e.runner.script('mule.fleet.commit',{'cfg':cfg,'plan':plan})['ok']);self.assertEqual(e.created,0)
+        self.assertTrue(e.runner.script('mule.fleet.commit',{'cfg':refreshed,'plan':plan})['ok']);self.assertEqual(e.created,2)
 
     def test_native_discount_unlocks_previously_equal_raw_quotes_and_actual_budget(self):
         e,home,fleet,hub=self.setup_market([80],[100]);ship,cfg=fleet[0];source=e.sources[0];ware=e.wares[0]
@@ -1060,7 +1070,9 @@ class XMLDispatchChecks(unittest.TestCase):
     def test_hidden_tuning_parameters_and_new_stock_slider(self):
         root=ET.parse(SRC/'aiscripts/supply_mule.xml').getroot();params={p.get('name'):p for p in root.findall('./order/params/param')}
         self.assertEqual(params['searchDepth'].get('type'),'internal');self.assertEqual(params['playerBuyMod'].get('type'),'internal')
-        self.assertEqual(params['playerStockThreshold'].get('type'),'number')
+        self.assertEqual(params['allowPlayerSuppliers'].get('type'),'internal')
+        self.assertEqual(params['allowAiSuppliers'].get('type'),'internal')
+        self.assertEqual(params['playerStockThreshold'].get('type'),'internal')
         for old in (5,40,100):
             e,home,fleet,hub=self.setup_market([100],[100]);fleet[0][1]['searchDepth']=old
             ware=e.wares[0];e.sources.clear()
@@ -1074,7 +1086,7 @@ class XMLDispatchChecks(unittest.TestCase):
         ship['pilot']['mwexFleetCfg']=old
         incoming=Obj(cfg);incoming.pop('playerStockThreshold')
         resolved=e.runner.script('mule.fleet.config',{'cfg':incoming})['cfg']
-        self.assertIsNot(resolved,old);self.assertEqual(resolved['playerStockThreshold'],50)
+        self.assertIsNot(resolved,old);self.assertEqual(resolved['playerStockThreshold'],0)
 
     def test_sector_service_dispatches_to_six_player_factories_and_excludes_npc(self):
         e,home,fleet,hub=self.setup_market([10],[100]);ware=e.wares[0];e.sources[0]['total']=1000
@@ -1106,7 +1118,7 @@ class XMLDispatchChecks(unittest.TestCase):
         e,_,fleet,hub=self.setup_market([350,250,100],[1000,100])
         self.dispatch(e,hub)
         text='\n'.join(x['text'] for x in e.logbook if x['object'] is fleet[0][0])
-        self.assertIn('装载70.0%',text);self.assertNotIn('临时解除',text)
+        self.assertIn('计划装载70.00%',text);self.assertNotIn('临时解除',text)
         self.assertEqual(sum(o['amount'] for o in fleet[0][0]['orders'][:3]),700)
     def test_below_threshold_reaches_small_ship_first(self):
         e,_,fleet,hub=self.setup_market([699],[1000,100])
@@ -1256,15 +1268,15 @@ class XMLDispatchChecks(unittest.TestCase):
         e,home,fleet,hub=self.setup_market([0],[100,200]);self.run_roster(e,home,fleet,hub)
         fleet[1][0]['commander']=Obj(name='other');self.run_roster(e,home,fleet,hub)
         self.assertNotIn(fleet[1][0],hub['members'])
-    def test_roster_refresh_preserves_each_ships_stock_threshold_including_zero(self):
+    def test_roster_refresh_ignores_retired_stock_threshold(self):
         for threshold in (0,60,100):
             with self.subTest(threshold=threshold):
                 e,home,fleet,hub=self.setup_market([0],[100,200])
                 candidate,old_cfg=fleet[1]
                 candidate['defaultorder']['playerStockThreshold']=threshold
                 self.run_roster(e,home,fleet,hub)
-                self.assertEqual(hub['members'][candidate]['playerStockThreshold'],threshold)
-                self.assertEqual(candidate['pilot']['mwexFleetCfg']['playerStockThreshold'],threshold)
+                self.assertEqual(hub['members'][candidate]['playerStockThreshold'],0)
+                self.assertEqual(candidate['pilot']['mwexFleetCfg']['playerStockThreshold'],0)
     def test_discovery_indexes_sources_by_ware_sector_owner(self):
         e,home,fleet,hub=self.setup_market([100,0],[100])
         e.runner.script('mule.fleet.discover',{'hub':hub})
@@ -1304,7 +1316,7 @@ class XMLDispatchChecks(unittest.TestCase):
     def test_live_parameter_change_rejects_plan_without_orders(self):
         e,home,fleet,hub=self.setup_market([100],[100]);ship,cfg=fleet[0]
         plan=e.runner.script('mule.fleet.plan',{'hub':hub,'cfg':cfg,'relaxed':False})['plan']
-        ship['defaultorder']['allowAiSuppliers']=False
+        ship['defaultorder']['maxTrades']=1
         self.assertFalse(e.runner.script('mule.fleet.commit',{'cfg':cfg,'plan':plan})['ok'])
         self.assertEqual(e.created,0)
     def test_late_blacklist_change_rejects_draft_before_commit(self):
@@ -1606,7 +1618,7 @@ class XMLDispatchChecks(unittest.TestCase):
                 expected='价格检查失败' if kind=='price' else '副单范围排除'
                 self.assertEqual(text.count(expected),1)
                 self.assertIn('w1',text)
-                self.assertIn('90.0 Cr' if kind=='price' else '超出1跳',text)
+                self.assertIn('90.00 Cr' if kind=='price' else '超出1跳',text)
                 self.assertNotIn(expected,entries[-1]['text'])
                 self.assertEqual(len(ship['orders']),2)
 
@@ -1649,7 +1661,7 @@ class XMLDispatchChecks(unittest.TestCase):
         committed=[x for x in e.logbook if x['object'] is ship and '提交失败' in x['title']]
         self.assertEqual(len(committed),1);text=committed[0]['text']
         self.assertIn('提交失败',text);self.assertNotIn('实际派单成功',text)
-        self.assertIn('组合：',text);self.assertEqual(ship['orders'],[])
+        self.assertIn('最近方案（非实载）：',text);self.assertEqual(ship['orders'],[])
         self.dispatch(e,hub)
         self.assertEqual(len([x for x in e.logbook if '提交失败' in x['title']]),1)
 
@@ -1764,6 +1776,8 @@ if __name__=='__main__':
     suite=unittest.defaultTestLoader.loadTestsFromTestCase(XMLDispatchChecks)
     scheduler=runpy.run_path(str(HERE/'test_scheduler.py'),init_globals=globals())
     suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(scheduler['SchedulerChecks']))
+    selection=runpy.run_path(str(HERE/'test_m4_selection.py'))
+    suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(selection['M4SelectionChecks']))
     observation=runpy.run_path(str(HERE/'test_m4_observation.py'))
     suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(observation['M4ObservationChecks']))
     # Keep regressions for the other behaviors and the public M4 load slider.

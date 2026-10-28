@@ -96,6 +96,8 @@
       <do_if value="@global.$mwexDebug">
         <do_if value="@global.$mwexDebug">
           <set_value name="$mwtrace_diagnostic" exact="table[$ship=null,$attempt=null,$relaxed=false]" />
+          <set_value name="$mwtrace_event" exact="'DISCOVER'" />
+          <set_value name="$mwtrace_fields" exact="'home,needs,sources,range,epoch'" />
           <set_value name="$mwtrace_text" exact="'DISCOVER home=%s needs=%s sources=%s range=%s epoch=%s'.[$home,$hub.$needs.count,$offers.count,$range,$hub.$cacheEpoch]" />
           <set_value name="$mwtrace_file" exact="'lifecycle'" />
           <include_interrupt_actions ref="MWEX_Fleet_trace" />

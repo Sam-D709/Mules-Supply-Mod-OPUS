@@ -18,6 +18,8 @@
               <do_if value="@global.$mwexDebug">
                 <set_value name="$mwtrace_diagnostic" exact="table[$ship=@this.ship,$attempt=@this.ship.pilot.$mwexM4Search.$attempt,$relaxed=false,$voyage=@$mwnet_hold.$logVoyage]" />
                 <set_value name="$mwtrace_file" exact="'economy'" />
+                <set_value name="$mwtrace_event" exact="'HOLD_RELEASE'" />
+                <set_value name="$mwtrace_fields" exact="'reason,offer,order,ownerShip,amount'" />
                 <set_value name="$mwtrace_text" exact="'HOLD_RELEASE reason=%s offer=%s order=%s ownerShip=%s amount=%s'.['invalid_reference',@$mwnet_hold.$offer,@$mwnet_hold.$logOrderId,@$mwnet_hold.$ship,$mwnet_hold.$amount]" />
                 <include_interrupt_actions ref="MWEX_Fleet_trace" />
               </do_if>
@@ -29,6 +31,8 @@
               <do_if value="@global.$mwexDebug">
                 <set_value name="$mwtrace_diagnostic" exact="table[$ship=@this.ship,$attempt=@this.ship.pilot.$mwexM4Search.$attempt,$relaxed=false,$voyage=@$mwnet_hold.$logVoyage]" />
                 <set_value name="$mwtrace_file" exact="'economy'" />
+                <set_value name="$mwtrace_event" exact="'HOLD_RELEASE'" />
+                <set_value name="$mwtrace_fields" exact="'reason,offer,order,ownerShip,amount'" />
                 <set_value name="$mwtrace_text" exact="'HOLD_RELEASE reason=%s offer=%s order=%s ownerShip=%s amount=%s'.['native_transfer_started',@$mwnet_hold.$offer,@$mwnet_hold.$logOrderId,@$mwnet_hold.$ship,$mwnet_hold.$amount]" />
                 <include_interrupt_actions ref="MWEX_Fleet_trace" />
               </do_if>
@@ -52,6 +56,8 @@
             <do_if value="@global.$mwexDebug and (not $mwnet_logHold.$logNet? or @$mwnet_logHold.$logNet != $mwnet_net or @$mwnet_logHold.$logNativeOwn != $mwnet_nativeOwn or @$mwnet_logHold.$logMissing != $mwnet_missing)">
               <do_if value="@global.$mwexDebug">
                 <set_value name="$mwtrace_diagnostic" exact="table[$ship=@this.ship,$attempt=@this.ship.pilot.$mwexM4Search.$attempt,$relaxed=false]" />
+                <set_value name="$mwtrace_event" exact="'NET'" />
+                <set_value name="$mwtrace_fields" exact="'offer,ownerShip,amount,expected,nativeOwn,localMissing,net'" />
                 <set_value name="$mwtrace_text" exact="'NET offer=%s ownerShip=%s amount=%s expected=%s nativeOwn=%s localMissing=%s net=%s'.[$mwnet_offer,$mwnet_entry.$ship.idcode,$mwnet_offer.amount,$mwnet_entry.$amount,$mwnet_nativeOwn,$mwnet_missing,$mwnet_net]" />
                 <set_value name="$mwtrace_file" exact="'economy'" />
                 <include_interrupt_actions ref="MWEX_Fleet_trace" />
@@ -64,6 +70,8 @@
               <do_if value="@global.$mwexDebug">
                 <set_value name="$mwtrace_diagnostic" exact="table[$ship=@this.ship,$attempt=@this.ship.pilot.$mwexM4Search.$attempt,$relaxed=false]" />
                 <set_value name="$mwtrace_file" exact="'economy'" />
+                <set_value name="$mwtrace_event" exact="'HOLD_RELEASE'" />
+                <set_value name="$mwtrace_fields" exact="'reason,offer,ownerShip,expected,nativeOwn'" />
                 <set_value name="$mwtrace_text" exact="'HOLD_RELEASE reason=native_reservation_visible offer=%s ownerShip=%s expected=%s nativeOwn=%s'.[$mwnet_offer,$mwnet_entry.$ship,$mwnet_entry.$amount,$mwnet_nativeOwn]" />
                 <include_interrupt_actions ref="MWEX_Fleet_trace" />
               </do_if>

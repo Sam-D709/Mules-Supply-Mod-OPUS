@@ -13,6 +13,8 @@
       <do_if value="@global.$mwexDebug">
         <set_value name="$mwtrace_diagnostic" exact="table[$ship=$ship,$attempt=null,$relaxed=false,$voyage=@$ship.pilot.$mwexM4Voyage]" />
         <set_value name="$mwtrace_file" exact="'economy'" />
+        <set_value name="$mwtrace_event" exact="'RECOVERY_BEGIN'" />
+        <set_value name="$mwtrace_fields" exact="'cargo,orders,reason'" />
         <set_value name="$mwtrace_text" exact="'RECOVERY_BEGIN cargo=%s orders=%s reason=idle_cargo'.[$ship.cargo.count,$ship.orders.count]" />
         <include_interrupt_actions ref="MWEX_Fleet_trace" />
       </do_if>
@@ -26,11 +28,13 @@
         <do_if value="$removed gt 0">
           <set_value name="$refund" exact="$removed*$ware.averageprice" />
           <reward_player money="$refund" />
-          <write_to_logbook category="upkeep" object="$ship" title="{61552,4200}" interaction="showonmap" money="$refund" text="{61552,4320}.[$ship.knownname,$ware.name,$removed,$ware.averageprice/1Cr,$refund/1Cr]" />
+          <write_to_logbook category="upkeep" object="$ship" title="{61552,4200}" interaction="showonmap" money="$refund" text="{61552,4320}.[$ship.knownname,$ware.name,$removed,'%s%s.%s%s'.[if ($ware.averageprice) lt 0ct then '-' else '',(abs(($ware.averageprice/1ct)L)/100)L,((abs(($ware.averageprice/1ct)L)%100)/10)i,(abs(($ware.averageprice/1ct)L)%10)i],'%s%s.%s%s'.[if ($refund) lt 0ct then '-' else '',(abs(($refund/1ct)L)/100)L,((abs(($refund/1ct)L)%100)/10)i,(abs(($refund/1ct)L)%10)i]]" />
           <do_if value="@global.$mwexDebug">
             <do_if value="@global.$mwexDebug">
               <set_value name="$mwtrace_diagnostic" exact="table[$ship=$ship,$attempt=null,$relaxed=false,$voyage=@$ship.pilot.$mwexM4Voyage]" />
-              <set_value name="$mwtrace_text" exact="'RECOVERY_REFUND ware=%s removed=%s averagePrice=%s refundCr=%s reason=idle_cargo_virtual_liquidation'.[$ware,$removed,$ware.averageprice/1Cr,$refund/1Cr]" />
+              <set_value name="$mwtrace_event" exact="'RECOVERY_REFUND'" />
+              <set_value name="$mwtrace_fields" exact="'ware,removed,averagePrice,averagePriceCt,refundCr,refundCt,reason'" />
+              <set_value name="$mwtrace_text" exact="'RECOVERY_REFUND ware=%s removed=%s averagePrice=%s averagePriceCt=%s refundCr=%s refundCt=%s reason=idle_cargo_virtual_liquidation'.[$ware,$removed,'%s%s.%s%s'.[if ($ware.averageprice) lt 0ct then '-' else '',(abs(($ware.averageprice/1ct)L)/100)L,((abs(($ware.averageprice/1ct)L)%100)/10)i,(abs(($ware.averageprice/1ct)L)%10)i],$ware.averageprice/1ct,'%s%s.%s%s'.[if ($refund) lt 0ct then '-' else '',(abs(($refund/1ct)L)/100)L,((abs(($refund/1ct)L)%100)/10)i,(abs(($refund/1ct)L)%10)i],$refund/1ct]" />
               <set_value name="$mwtrace_file" exact="'economy'" />
               <include_interrupt_actions ref="MWEX_Fleet_trace" />
             </do_if>
@@ -40,6 +44,8 @@
       <do_if value="@global.$mwexDebug">
         <set_value name="$mwtrace_diagnostic" exact="table[$ship=$ship,$attempt=null,$relaxed=false,$voyage=@$ship.pilot.$mwexM4Voyage]" />
         <set_value name="$mwtrace_file" exact="'economy'" />
+        <set_value name="$mwtrace_event" exact="'RECOVERY_END'" />
+        <set_value name="$mwtrace_fields" exact="'cargo,orders'" />
         <set_value name="$mwtrace_text" exact="'RECOVERY_END cargo=%s orders=%s'.[$ship.cargo.count,$ship.orders.count]" />
         <include_interrupt_actions ref="MWEX_Fleet_trace" />
       </do_if>

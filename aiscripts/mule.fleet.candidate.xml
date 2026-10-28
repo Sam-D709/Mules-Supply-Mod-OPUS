@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<aiscript name="mule.fleet.candidate" version="2">
+<aiscript name="mule.fleet.candidate" version="4">
   <params>
     <param name="cfg" />
     <param name="need" />
@@ -26,21 +26,7 @@
             <break />
           </do_if>
           <set_value name="$mwcandidate_selfOwned" exact="$mwcandidate_source.owner.owner == $mwcandidate_ship.owner" />
-          <do_if value="not $mwcandidate_selfOwned and not $mwcandidate_cfg.$allowAiSuppliers">
-            <set_value name="$mwcandidate_out_candidate" exact="null" />
-            <set_value name="$mwcandidate_out_failure" exact="{61552,4315}.[$mwcandidate_source.owner.knownname]" />
-            <set_value name="$mwcandidate_out_code" exact="'ai_disabled'" />
-            <set_value name="$mwcandidate_done" exact="true" />
-            <break />
-          </do_if>
           <set_value name="$mwcandidate_ware" exact="$mwcandidate_need.ware" />
-          <do_if value="$mwcandidate_selfOwned and ($mwcandidate_source.owner.cargo.{$mwcandidate_ware}.target le 0 or $mwcandidate_source.owner.cargo.{$mwcandidate_ware}.count*100 le $mwcandidate_source.owner.cargo.{$mwcandidate_ware}.target*$mwcandidate_cfg.$playerStockThreshold)">
-            <set_value name="$mwcandidate_out_candidate" exact="null" />
-            <set_value name="$mwcandidate_out_failure" exact="{61552,4303}.[$mwcandidate_source.owner.knownname,$mwcandidate_ware.name,$mwcandidate_source.owner.cargo.{$mwcandidate_ware}.count,$mwcandidate_source.owner.cargo.{$mwcandidate_ware}.target,$mwcandidate_cfg.$playerStockThreshold]" />
-            <set_value name="$mwcandidate_out_code" exact="'owned_stock_threshold'" />
-            <set_value name="$mwcandidate_done" exact="true" />
-            <break />
-          </do_if>
           <!-- Cache only within this vessel's attempt: no reuse across personal blacklists. -->
           <do_for_each name="$mwcandidate_offer" in="[$mwcandidate_need,$mwcandidate_source]">
             <do_if value="not $mwcandidate_cache.{$mwcandidate_offer}?">
@@ -90,12 +76,13 @@
           <set_value name="$mwcandidate_builder" exact="$mwcandidate_cfg.$allowBuildstorage and not $mwcandidate_cfg.$allowResources and not $mwcandidate_cfg.$allowIntermediates and $mwcandidate_need.owner.isclass.buildstorage and $mwcandidate_need.owner.owner == faction.player" />
           <do_if value="not $mwcandidate_selfOwned and not $mwcandidate_builder and $mwcandidate_sell.$price le $mwcandidate_buy.$price">
             <set_value name="$mwcandidate_diagnostic.$price" operation="add" exact="1" />
-            <do_if value="($mwcandidate_buy.$price-$mwcandidate_sell.$price)/1Cr lt $mwcandidate_diagnostic.$minGap">
+            <do_if value="not $mwcandidate_diagnostic.$minGapCt? or ($mwcandidate_buy.$price-$mwcandidate_sell.$price)/1ct lt @$mwcandidate_diagnostic.$minGapCt">
               <set_value name="$mwcandidate_diagnostic.$minGap" exact="($mwcandidate_buy.$price-$mwcandidate_sell.$price)/1Cr" />
+              <set_value name="$mwcandidate_diagnostic.$minGapCt" exact="($mwcandidate_buy.$price-$mwcandidate_sell.$price)/1ct" />
               <set_value name="$mwcandidate_diagnostic.$gapWare" exact="$mwcandidate_ware" />
             </do_if>
             <set_value name="$mwcandidate_out_candidate" exact="null" />
-            <set_value name="$mwcandidate_out_failure" exact="{61552,4304}.[$mwcandidate_ware.name,$mwcandidate_source.owner.knownname,$mwcandidate_buy.$price/1Cr,$mwcandidate_need.owner.knownname,$mwcandidate_sell.$price/1Cr,$mwcandidate_source.unitprice/1Cr]" />
+            <set_value name="$mwcandidate_out_failure" exact="{61552,4304}.[$mwcandidate_ware.name,$mwcandidate_source.owner.knownname,'%s%s.%s%s'.[if ($mwcandidate_buy.$price) lt 0ct then '-' else '',(abs(($mwcandidate_buy.$price/1ct)L)/100)L,((abs(($mwcandidate_buy.$price/1ct)L)%100)/10)i,(abs(($mwcandidate_buy.$price/1ct)L)%10)i],$mwcandidate_need.owner.knownname,'%s%s.%s%s'.[if ($mwcandidate_sell.$price) lt 0ct then '-' else '',(abs(($mwcandidate_sell.$price/1ct)L)/100)L,((abs(($mwcandidate_sell.$price/1ct)L)%100)/10)i,(abs(($mwcandidate_sell.$price/1ct)L)%10)i],'%s%s.%s%s'.[if ($mwcandidate_source.unitprice) lt 0ct then '-' else '',(abs(($mwcandidate_source.unitprice/1ct)L)/100)L,((abs(($mwcandidate_source.unitprice/1ct)L)%100)/10)i,(abs(($mwcandidate_source.unitprice/1ct)L)%10)i]]" />
             <set_value name="$mwcandidate_out_code" exact="'spread'" />
             <set_value name="$mwcandidate_done" exact="true" />
             <break />
@@ -112,12 +99,12 @@
           </do_if>
           <do_if value="$mwcandidate_amount le 0 or $mwcandidate_amount lt $mwcandidate_source.minamount or $mwcandidate_amount lt $mwcandidate_need.minamount">
             <set_value name="$mwcandidate_out_candidate" exact="null" />
-            <set_value name="$mwcandidate_out_failure" exact="{61552,4306}.[$mwcandidate_source.owner.knownname,$mwcandidate_ware.name,$mwcandidate_sell.$net,$mwcandidate_buy.$net,$mwcandidate_ship.cargo.free.all,$mwcandidate_amount,$mwcandidate_source.minamount,$mwcandidate_need.minamount,$mwcandidate_ship.money/1Cr,$mwcandidate_buy.$price/1Cr]" />
+            <set_value name="$mwcandidate_out_failure" exact="{61552,4306}.[$mwcandidate_source.owner.knownname,$mwcandidate_ware.name,$mwcandidate_sell.$net,$mwcandidate_buy.$net,$mwcandidate_ship.cargo.free.all,$mwcandidate_amount,$mwcandidate_source.minamount,$mwcandidate_need.minamount,'%s%s.%s%s'.[if ($mwcandidate_ship.money) lt 0ct then '-' else '',(abs(($mwcandidate_ship.money/1ct)L)/100)L,((abs(($mwcandidate_ship.money/1ct)L)%100)/10)i,(abs(($mwcandidate_ship.money/1ct)L)%10)i],'%s%s.%s%s'.[if ($mwcandidate_buy.$price) lt 0ct then '-' else '',(abs(($mwcandidate_buy.$price/1ct)L)/100)L,((abs(($mwcandidate_buy.$price/1ct)L)%100)/10)i,(abs(($mwcandidate_buy.$price/1ct)L)%10)i]]" />
             <set_value name="$mwcandidate_out_code" exact="'quantity_or_funds'" />
             <set_value name="$mwcandidate_done" exact="true" />
             <break />
           </do_if>
-          <set_value name="$mwcandidate_out_candidate" exact="table[$need=$mwcandidate_need,$source=$mwcandidate_source,$ware=$mwcandidate_ware,$amount=$mwcandidate_amount,$buyprice=$mwcandidate_buy.$price,$sellprice=$mwcandidate_sell.$price,$paidprice=$mwcandidate_paidPrice,$needNet=$mwcandidate_sell.$net,$sourceNet=$mwcandidate_buy.$net,$distance=$mwcandidate_buy.$distance,$supplierRank=if $mwcandidate_cfg.$allowPlayerSuppliers and $mwcandidate_selfOwned then 0 else 1]" />
+          <set_value name="$mwcandidate_out_candidate" exact="table[$need=$mwcandidate_need,$source=$mwcandidate_source,$ware=$mwcandidate_ware,$amount=$mwcandidate_amount,$buyprice=$mwcandidate_buy.$price,$sellprice=$mwcandidate_sell.$price,$paidprice=$mwcandidate_paidPrice,$needNet=$mwcandidate_sell.$net,$sourceNet=$mwcandidate_buy.$net,$distance=$mwcandidate_buy.$distance]" />
           <set_value name="$mwcandidate_out_failure" exact="'ok'" />
           <set_value name="$mwcandidate_out_code" exact="'ok'" />
           <set_value name="$mwcandidate_done" exact="true" />
@@ -126,6 +113,12 @@
       </actions>
     </library>
   </interrupts>
+  <patch sinceversion="3">
+    <return>
+      <retval name="candidate" value="null" />
+      <retval name="failure" value="{61552,4316}" />
+    </return>
+  </patch>
   <patch sinceversion="2">
     <return>
       <retval name="candidate" value="null" />

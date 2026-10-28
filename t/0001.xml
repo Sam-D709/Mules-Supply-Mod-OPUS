@@ -68,7 +68,7 @@
     <t id="4003">Assign Ship To Station</t>
     <t id="4004">Max Jumps From Home</t>
     <t id="4005">Supply Home Station/Sector Only</t>
-    <t id="4006">Prefer Player-Owned Suppliers</t>
+    <t id="4006">Retired owned-supplier preference</t>
     <t id="4007">Collect from AI Factions</t>
     <t id="4008">Supply Construction Storage</t>
     <t id="4009">Supply Externally Produced Consumables</t>
@@ -91,8 +91,8 @@
     <t id="4103">Assign to the home station if it's the players.</t>
     <t id="4104">Max gate distance to buy.</t>
     <t id="4105">With a player station as home, supply only that station and its construction storage. With a sector as home, supply player stations in that sector. Disabling allows other player stations within range. Suppliers may be in other sectors within range. An explicitly selected NPC home follows its own NPC service rules.</t>
-    <t id="4106">Prefer eligible owned supply within feasible trips. A trip meeting minimum load takes precedence over an underfilled trip. Then compare the owned share of capacity and estimated delivered volume per time. Turning this off keeps owned sources eligible under the same ordinary ranking; their stock threshold still applies. NPC supply has its own switch.</t>
-    <t id="4107">Allows buys from AI Faction Stations.</t>
+    <t id="4106">Retired setting, ignored by M4. Eligible player and NPC sources use the same ranking. Native sell offers control available stock.</t>
+    <t id="4107">Retired M4 setting; saved values are ignored. All native-eligible NPC sources participate. Native trade restrictions still apply.</t>
     <t id="4108">Buy materials for delivery to the receiving station's construction storage, for building or expansion. This does not collect goods from construction storage.</t>
     <t id="4109">Supply wares the receiver consumes or needs for resupply but does not produce itself, such as microchips for an advanced electronics factory. This is a receiver-use category, not a restriction to ore or gas. The ship must still carry the ware.</t>
     <t id="4110">Supply wares the receiver both produces and consumes. For example, an integrated factory can buy refined metals when its own production cannot keep up with hull-part production.</t>
@@ -117,8 +117,8 @@
     <t id="4201">%s: no executable procurement for %s within %s home jumps. Last rejection: %s.</t>
     <t id="4205">%s: incomplete submission; queued orders are withdrawn where possible. Running orders remain. After all orders end, remaining cargo is liquidated at ware average price. See M4 Capacity Dispatch.</t>
     <t id="4206">%s has remaining cargo that cannot currently be delivered to its planned receiver/home. Cargo is preserved. Check offers, funds and trade rules.</t>
-    <t id="4026">Player Supplier Stock Threshold %</t>
-    <t id="4126">Current ware stock divided by allocated ware storage; default 50%. Stock must strictly exceed the threshold in both preference modes. This is an eligibility trigger, not a retained reserve: an accepted shipment may take all legally offered stock. Zero allows positive stock; 100 requires stock above allocation. Zero allocation is skipped. Owned transfers ignore profit spread.</t>
+    <t id="4026">Retired Player Stock Trigger</t>
+    <t id="4126">Retired setting, ignored by M4. Control stock to retain through the station native sell settings. Only legally available sell-offer quantities may be procured.</t>
     <t id="4300">No unmet demand matches service scope, ware category and cargo compatibility.</t>
     <t id="4301">No indexed supplier quote for this ware; waiting for quote updates.</t>
     <t id="4302">Cannot resolve actual partner price: quote may have disappeared, become restricted or changed. Skip and retry.</t>
@@ -158,11 +158,11 @@
     <t id="4355">Temporarily waive minimum load for THIS evaluation after three consecutive completed insufficient-load searches by this ship. Player settings are unchanged. Purchase count, price, route, docking and drone checks still apply.</t>
     <t id="4356">Normal evaluation: this idle ship plans independently. Combined primary and secondary purchases must meet its configured minimum load. Other ships can search during its planning yields.</t>
     <t id="4357">Home capacity group [listed smallest first]: representative name %s; capacity %s m³; %s registered ships, %s operational ships with empty order queues. This describes fleet state, not eligibility for every trade.</t>
-    <t id="4358">Source/demand settings: prefer owned=%s; allow NPC=%s; home only=%s; build storage=%s; non-produced inputs=%s; self-produced inputs=%s; locked ware list=%s. Compare bounded alternative primary suppliers and combined trip throughput. Secondary purchases may cover other wares or more of the same ware, sharing one receiver.</t>
+    <t id="4358">Source/demand settings: retired owned preference=%s (ignored); allow NPC=%s; home only=%s; build storage=%s; non-produced inputs=%s; self-produced inputs=%s; locked ware list=%s. Compare bounded alternative primary suppliers and combined trip throughput. Secondary purchases may cover other wares or more of the same ware, sharing one receiver.</t>
     <t id="4360">Purchase %s search / ware %s / receiver %s: %s</t>
     <t id="4361">Demand excluded / ware %s / receiver %s: %s</t>
     <t id="4362">Supplier %s: %s</t>
-    <t id="4363">Candidate purchase %s: ware %s, supplier %s [%s], executable quantity %s; home distance %s jumps; raw ask %s Cr, actual ask %s Cr, receiver bid %s Cr; corridor deviation %s jumps, comparison score %s Cr; supplier tier %s [0=preferred owned, 1=ordinary comparison]. Result: %s.</t>
+    <t id="4363">Candidate purchase %s: ware %s, supplier %s [%s], executable quantity %s; home distance %s jumps; raw ask %s Cr, actual ask %s Cr, receiver bid %s Cr; corridor deviation %s jumps, comparison score %s Cr; supplier tier %s [retired; ignored]. Result: %s.</t>
     <t id="4364">Purchase %s search found no executable next lot. Stop combining with %s lots; the configured %s is a maximum, not a required count. Earlier entries record the actual candidate rejection reasons.</t>
     <t id="4365">Planned purchase %s: %s × %s, from %s [%s] to %s [%s]; actual buy %s Cr/unit, delivery %s Cr/unit.</t>
     <t id="4366">Combined planned volume reaches cargo capacity; stop adding purchases.</t>
@@ -191,8 +191,8 @@
     <t id="4389">Reached the configured maximum of %s purchases per trip; stop adding secondary lots even if cargo space remains.</t>
     <t id="4390">Fixed primary-route sectors: %s. Secondary deviation is the shortest legal distance to these sectors; secondary stops do not extend the corridor outward.</t>
     <t id="4401">Debug: detailed disk logging</t>
-    <t id="4402">Off by default. Ship logs contain compact results only. Enable to write detailed search decisions to disk; start X4 with -scriptlogfiles. Enabling Debug can reduce performance. Saved in this savegame.</t>
-    <t id="4403">File: Documents/Egosoft/X4/[user ID]/logs/MulesExtended/debug.txt. X4 scripts cannot write directly into the mod installation directory.</t>
+    <t id="4402">Off by default. Enable Debug to record all M4 candidate evaluations, grading, refreshes, task results and order/trade events in four disk log files. Start X4 with -scriptlogfiles. Detailed logging can reduce performance. Saved in this savegame; no separate trace switch is required.</t>
+    <t id="4403">M4 files: Documents/Egosoft/X4/[user ID]/logs/MulesExtended/m4-*.txt. The four files share a session and sequence number.</t>
     <t id="4404">M4 summary · %s · %s</t>
     <t id="4405">Waiting: no purchase committed</t>
     <t id="4406">This evaluation temporarily waived minimum load after three consecutive completed insufficient-load searches by this ship. The configured minimum is unchanged; maximum purchases and all trade checks still apply.</t>
@@ -200,7 +200,7 @@
     <t id="4408">Price check rejected %s times, including %s during secondary search. Smallest actual purchase price minus receiver bid: %s Cr, ware %s. NPC purchases require a strictly positive spread; equality is rejected too. A cheaper bid alone does not guarantee all remaining conditions.</t>
     <t id="4409">Secondary corridor range rejected %s times; closest rejected source was still %s jumps over the configured limit, ware %s. Increasing the limit alone does not guarantee a valid trade.</t>
     <t id="4410">Secondary route unreachable under the current travel rules: %s checks. Unreachable routes are not counted as a large finite deviation.</t>
-    <t id="4411">Other filters rejected %s checks: quote availability, receiver scope, cargo type, stock threshold, funds, quantity, docking or drones. Specific live failure is shown in the ship's Behaviour tab; detailed candidates require Debug.</t>
+    <t id="4411">Other filters rejected %s checks: quote availability, receiver scope, cargo type, funds, quantity, docking or drones. Specific live failure is shown in the ship's Behaviour tab; detailed candidates require Debug.</t>
     <t id="4412">Reused a same-wave failed assessment from a compatible vessel with the same model and settings; the counts below come from that assessment, without repeating its full search.</t>
     <t id="4413">Combination stopped: planned cargo reached capacity.</t>
     <t id="4414">Combination stopped: reached the configured maximum purchases per trip.</t>
@@ -216,7 +216,7 @@
     <t id="4427">Reason: best available draft is below the %s%% minimum load.</t>
     <t id="4428">Reason: no executable demand/supply candidates passed filtering.</t>
     <t id="4429">Reason: candidates could not form a feasible route.</t>
-    <t id="4430">Draft: %s lots, %s / %s m³, load %s%%; minimum %s%%.</t>
+    <t id="4430">Latest plan (not measured cargo): %s lots, %s / %s m³, planned load %s%%; minimum %s%%.</t>
     <t id="4431">Secondary lots: %s extensions tried, %s feasible additions across alternative drafts.</t>
     <t id="4432">Secondary search skipped: purchase limit is one.</t>
     <t id="4433">No secondary extension: primary lot fills cargo capacity.</t>
@@ -247,7 +247,5 @@
     <t id="4464">Quantities changed before submission: draft resized or topped up from existing candidates, then verified again.</t>
     <t id="4465">Even total candidate demand is below this ship's loading threshold.</t>
     <t id="4466">Eligible supply in this candidate pool is below the loading threshold; unselected suppliers are not included.</t>
-    <t id="4471">M4: full candidate trace (large logs)</t>
-    <t id="4472">Off: keep reason counts, bounded samples and every task result. On: log every candidate. M4 only; requires Debug.</t>
   </page>
 </language>

@@ -21,7 +21,11 @@
           </do_for_each>
         </do_for_each>
         <do_if value="$mwrepair_changed">
-          <set_value name="$mwrepair_state" exact="table[$plan=[],$usedNeed=table[],$usedSource=table[],$volume=0,$capacity=0,$receiver=null,$cargoTag=null,$budget=$mwrepair_cfg.$ship.money,$receiverBudget=0Cr,$travel=0,$time=1,$penalty=0Cr,$ownedVolume=0,$score=0]" />
+          <do_if value="@global.$mwexDebug">
+            <set_value name="$mwrepair_logBeforeVolume" exact="$mwrepair_diagnostic.$volume" />
+            <set_value name="$mwrepair_logBeforeCapacity" exact="$mwrepair_diagnostic.$capacity" />
+          </do_if>
+          <set_value name="$mwrepair_state" exact="table[$plan=[],$usedNeed=table[],$usedSource=table[],$volume=0,$capacity=0,$receiver=null,$cargoTag=null,$budget=$mwrepair_cfg.$ship.money,$receiverBudget=0Cr,$travel=0,$time=1,$penalty=0Cr,$score=0]" />
           <set_value name="$mwrepair_cache" exact="table[]" />
           <set_value name="$mwrepair_paths" exact="table[]" />
           <set_value name="$mwrepair_distances" exact="table[]" />
@@ -79,8 +83,13 @@
             <set_value name="$mwrepair_diagnostic.$stop" exact="if $mwrepair_state.$volume ge $mwrepair_state.$capacity then 1 else if $mwrepair_out.count ge $mwrepair_cfg.$maxTrades then 2 else 0" />
           </do_if>
           <do_if value="@global.$mwexDebug">
+            <set_value name="$mwload_volume" exact="$mwrepair_state.$volume" />
+            <set_value name="$mwload_capacity" exact="$mwrepair_state.$capacity" />
+            <include_interrupt_actions ref="MWEX_Log_load" />
             <set_value name="$mwtrace_diagnostic" exact="$mwrepair_diagnostic" />
-            <set_value name="$mwtrace_text" exact="'REPAIR accepted=%s volume=%s capacity=%s minLoad=%s extraChecks=%s added=%s'.[@$mwrepair_diagnostic.$repaired,$mwrepair_state.$volume,$mwrepair_state.$capacity,$mwrepair_min,$mwrepair_attempts,$mwrepair_added]" />
+            <set_value name="$mwtrace_event" exact="'REPAIR'" />
+            <set_value name="$mwtrace_fields" exact="'capacityBasis,accepted,candidateVolume,candidateCapacity,minLoad,extraChecks,added,beforeVolume,beforeCapacity,candidateLoadPercent,candidateLoadState'" />
+            <set_value name="$mwtrace_text" exact="'REPAIR accepted=%s candidateVolume=%s candidateCapacity=%s minLoad=%s extraChecks=%s added=%s beforeVolume=%s beforeCapacity=%s candidateLoadPercent=%s candidateLoadState=%s capacityBasis=last_ware_whole_unit_limit'.[@$mwrepair_diagnostic.$repaired,$mwrepair_state.$volume,$mwrepair_state.$capacity,$mwrepair_min,$mwrepair_attempts,$mwrepair_added,$mwrepair_logBeforeVolume,$mwrepair_logBeforeCapacity,$mwload_out_percent,$mwload_out_code]" />
             <set_value name="$mwtrace_file" exact="'orders'" />
             <include_interrupt_actions ref="MWEX_Fleet_trace" />
           </do_if>

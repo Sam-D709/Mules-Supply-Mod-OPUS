@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<aiscript name="mule.fleet.extend" version="3">
+<aiscript name="mule.fleet.extend" version="4">
   <params>
     <param name="cfg" />
     <param name="state" />
@@ -145,8 +145,8 @@
           <set_value name="$mwextend_next.$travel" exact="$mwextend_state.$travel+$mwextend_distance*$mwextend_gateTime+$mwextend_dockTime" />
           <set_value name="$mwextend_next.$time" exact="$mwextend_next.$travel+$mwextend_back*$mwextend_gateTime+$mwextend_dockTime" />
           <set_value name="$mwextend_next.$penalty" exact="$mwextend_state.$penalty+$mwextend_amount*$mwextend_c.$buyprice*(1+$mwextend_deviation*$mwextend_cfg.$corridorMarkup/100.0)" />
-          <set_value name="$mwextend_next.$ownedVolume" exact="$mwextend_state.$ownedVolume+(if $mwextend_c.$supplierRank == 0 then $mwextend_amount*$mwextend_ware.volume else 0)" />
-          <set_value name="$mwextend_next.$score" exact="$mwextend_next.$volume/$mwextend_next.$time" />
+          <!-- Fixed-point throughput: multiply as 64-bit before division; score / 1000000 is volume per time weight. -->
+          <set_value name="$mwextend_next.$score" exact="(($mwextend_next.$volume)L*1000000L/$mwextend_next.$time)L" />
           <set_value name="$mwextend_out_state" exact="$mwextend_next" />
           <set_value name="$mwextend_out_failure" exact="'ok'" />
           <break />
@@ -156,6 +156,12 @@
   </interrupts>
   <patch sinceversion="2">
     <return />
+  </patch>
+  <patch sinceversion="4">
+    <return>
+      <retval name="state" value="null" />
+      <retval name="failure" value="'scope_or_storage'" />
+    </return>
   </patch>
   <patch sinceversion="3">
     <return>

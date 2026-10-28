@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<aiscript name="mule.fleet.run" version="12">
+<aiscript name="mule.fleet.run" version="13">
   <params>
     <param name="cfg" />
     <param name="once" default="false" />
@@ -35,6 +35,9 @@
   <patch sinceversion="4">
     <resume label="register" />
   </patch>
+  <patch sinceversion="13">
+    <return />
+  </patch>
   <patch sinceversion="12">
     <return />
   </patch>
@@ -50,6 +53,8 @@
         <do_if value="@global.$mwexDebug">
           <do_if value="@global.$mwexDebug">
             <set_value name="$mwtrace_diagnostic" exact="table[$ship=$cfg.$ship,$attempt=null,$relaxed=false]" />
+            <set_value name="$mwtrace_event" exact="'RETURN_SEARCH'" />
+            <set_value name="$mwtrace_fields" exact="'ship,token,sincePoll'" />
             <set_value name="$mwtrace_text" exact="'RETURN_SEARCH ship=%s token=%s sincePoll=%s'.[$cfg.$ship.idcode,$returnToken,player.age-@$cfg.$ship.pilot.$mwexFleetReturnPolled]" />
             <set_value name="$mwtrace_file" exact="'lifecycle'" />
             <include_interrupt_actions ref="MWEX_Fleet_trace" />
@@ -149,6 +154,8 @@
         <do_if value="@global.$mwexDebug">
           <do_if value="@global.$mwexDebug">
             <set_value name="$mwtrace_diagnostic" exact="table[$ship=$ship,$attempt=null,$relaxed=false]" />
+            <set_value name="$mwtrace_event" exact="'HOME_CHANGED'" />
+            <set_value name="$mwtrace_fields" exact="'ship,old,new'" />
             <set_value name="$mwtrace_text" exact="'HOME_CHANGED ship=%s old=%s new=%s'.[$ship.idcode,$previousCfg.$home,$home]" />
             <set_value name="$mwtrace_file" exact="'lifecycle'" />
             <include_interrupt_actions ref="MWEX_Fleet_trace" />
@@ -213,7 +220,7 @@
           <do_for_each name="$candidate" in="$home.allsubordinates">
             <do_if value="$candidate.isoperational and $candidate.pilot.exists and $candidate.defaultorder.id == 'SupplyMule' and $candidate.defaultorder.$home == $home">
               <run_script name="'mule.fleet.config'">
-                <param name="cfg" value="table[$ship=$candidate,$origin=$candidate.defaultorder,$home=$candidate.defaultorder.$home,$maxDist=$candidate.defaultorder.$maxDist,$dedicatedServe=if $candidate.defaultorder.$dedicatedServe? then $candidate.defaultorder.$dedicatedServe else false,$allowPlayerSuppliers=if $candidate.defaultorder.$allowPlayerSuppliers? then $candidate.defaultorder.$allowPlayerSuppliers else true,$allowAiSuppliers=if $candidate.defaultorder.$allowAiSuppliers? then $candidate.defaultorder.$allowAiSuppliers else true,$allowBuildstorage=if $candidate.defaultorder.$allowBuildstorage? then $candidate.defaultorder.$allowBuildstorage else true,$allowResources=if $candidate.defaultorder.$allowResources? then $candidate.defaultorder.$allowResources else true,$allowIntermediates=if $candidate.defaultorder.$allowIntermediates? then $candidate.defaultorder.$allowIntermediates else true,$allowTradewares=if $candidate.defaultorder.$allowTradewares? then $candidate.defaultorder.$allowTradewares else true,$playerStockThreshold=if $candidate.defaultorder.$playerStockThreshold? then $candidate.defaultorder.$playerStockThreshold else 50,$lockWares=if $candidate.defaultorder.$lockWares? then $candidate.defaultorder.$lockWares else false,$maxTrades=if $candidate.defaultorder.$maxTrades? then $candidate.defaultorder.$maxTrades else 3,$minCargoUsed=if $candidate.defaultorder.$minCargoUsed? then $candidate.defaultorder.$minCargoUsed else 75,$corridorDepth=if $candidate.defaultorder.$corridorDepth? then $candidate.defaultorder.$corridorDepth else 2,$corridorMarkup=if $candidate.defaultorder.$corridorMarkup? then $candidate.defaultorder.$corridorMarkup else 5,$wares=if $candidate.defaultorder.$specialWareBasket? then $candidate.defaultorder.$specialWareBasket else []]" />
+                <param name="cfg" value="table[$ship=$candidate,$origin=$candidate.defaultorder,$home=$candidate.defaultorder.$home,$maxDist=$candidate.defaultorder.$maxDist,$dedicatedServe=if $candidate.defaultorder.$dedicatedServe? then $candidate.defaultorder.$dedicatedServe else false,$allowPlayerSuppliers=false,$allowAiSuppliers=true,$allowBuildstorage=if $candidate.defaultorder.$allowBuildstorage? then $candidate.defaultorder.$allowBuildstorage else true,$allowResources=if $candidate.defaultorder.$allowResources? then $candidate.defaultorder.$allowResources else true,$allowIntermediates=if $candidate.defaultorder.$allowIntermediates? then $candidate.defaultorder.$allowIntermediates else true,$allowTradewares=if $candidate.defaultorder.$allowTradewares? then $candidate.defaultorder.$allowTradewares else true,$playerStockThreshold=0,$lockWares=if $candidate.defaultorder.$lockWares? then $candidate.defaultorder.$lockWares else false,$maxTrades=if $candidate.defaultorder.$maxTrades? then $candidate.defaultorder.$maxTrades else 3,$minCargoUsed=if $candidate.defaultorder.$minCargoUsed? then $candidate.defaultorder.$minCargoUsed else 75,$corridorDepth=if $candidate.defaultorder.$corridorDepth? then $candidate.defaultorder.$corridorDepth else 2,$corridorMarkup=if $candidate.defaultorder.$corridorMarkup? then $candidate.defaultorder.$corridorMarkup else 5,$wares=if $candidate.defaultorder.$specialWareBasket? then $candidate.defaultorder.$specialWareBasket else []]" />
                 <save_retval name="cfg" variable="$candidateCfg" />
               </run_script>
               <do_if value="not $hub.$members.{$candidate}?">
@@ -241,6 +248,8 @@
         <do_if value="@global.$mwexDebug">
           <do_if value="@global.$mwexDebug">
             <set_value name="$mwtrace_diagnostic" exact="table[$ship=$ship,$attempt=null,$relaxed=false]" />
+            <set_value name="$mwtrace_event" exact="'ROSTER'" />
+            <set_value name="$mwtrace_fields" exact="'home,ships'" />
             <set_value name="$mwtrace_text" exact="'ROSTER home=%s ships=%s'.[$home,$hub.$members.keys.count]" />
             <set_value name="$mwtrace_file" exact="'lifecycle'" />
             <include_interrupt_actions ref="MWEX_Fleet_trace" />

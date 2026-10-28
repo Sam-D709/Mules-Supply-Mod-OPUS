@@ -1,71 +1,53 @@
-# beta.8：M4压测日志
+# M4日志与验收：beta.20 / schema=9
 
-本版为 **0.1.0-beta.8 / 内部670**，仅增强M4诊断。选单、分级、等待解限、返航轮询、提交、清仓规则均沿用beta.7；尚未修复beta.7压测发现的等待年龄及搜索流程问题。M1/M2/M3及其共用旧助手文件保持原样。
+一个Debug开关控制M4四路日志。默认关闭；关闭时不启动SESSION、金额探针或详细观察。开启、或Debug已开启时读档，创建新会话；SESSION不是每艘船、每笔交易各写一次。船只的简要游戏日志簿独立保留。
 
-## 下一轮30分钟压测
-
-1. 完整退出X4。beta.9及以后将安装包中的 `mules_supply_mod_opus` 安装到游戏 `extensions`；从beta.8及以前升级，先移走旧 `mules_and_warehouses_extended` 目录，退订或禁用原版骡子。源码和构建产物位于 `support`，构建本身不会更新实装目录。
-2. 保留启动参数 `-scriptlogfiles`。完整启动游戏，加载测试存档，开启扩展选项中的Debug。
-3. **建议本轮关闭“M4：完整候选追踪”**。基础模式保留所有任务结果、原生交易事件、状态心跳、完整原因计数，以及每轮每类前2条候选/过滤样本。分级暂缓保留3条例子。开启完整追踪才输出全部候选和分级记录；不会增加报价或路径查询。
-4. 确认 `m4-lifecycle.txt` 新增 `SESSION schema=2 build=beta.8 strategy=beta.7`，以及船只的 `SHIP_BASELINE`、新搜索的 `BEGIN`。Debug在旧存档中已经开启时，读档也会建立新观察边界。
-5. 保存开始存档；运行30现实分钟，记录是否使用SETA；保存结束存档。完整退出游戏后保留四个文件，避免复制时还在写入。无需同时开启全游戏调试输出。
-6. 文件均追加写入。旧文件可以在游戏退出后另存；不用删除旧的 `debug.txt` 或M1～M3日志。若途中读档或切换Debug，应保留完整文件及操作说明。
-
-本机目录：`C:\Users\SCP343\Documents\Egosoft\X4\1112832858\logs\MulesExtended`。
-
-## 四个文件
+启动参数需包含`-scriptlogfiles`。日志目录为游戏用户目录中的logs/MulesExtended；每路追加写入，不自动覆盖旧日志。普通/SETA共用这四路文件，依据每行seta/factor分段，且应把跨切换点的搜索单列。
 
 | 文件 | 内容 |
 |---|---|
-| `m4-lifecycle.txt` | 会话边界、配置/基线、状态、30游戏秒心跳、等待年龄上下层值、搜索阶段、重叠/中断、最终RESULT、返航轮询、遇袭、进出星区及停靠 |
-| `m4-search.txt` | 需求/货源过滤、索引与筛选范围、候选样本和完整原因计数、净数量刷新、分级依据、带父子状态编号的扩展、最佳方案变更、LIMITS/END及草案 |
-| `m4-orders.txt` | 提交复核、修复、订单创建及身份映射、实际队列、原生交易开始/完成/取消、原生订单通知、状态变化和订单消失 |
-| `m4-economy.txt` | 模组占额创建、净数量/原生接管变化、占额释放、剩余货物清仓和退款 |
+| m4-lifecycle.txt | 配置、状态、心跳、时钟、最终RESULT和边界 |
+| m4-search.txt | 候选、预筛、刷新、分级、扩展、搜索结果和计数 |
+| m4-orders.txt | 提交复核、QUEUE、ORDER_CREATED、原生通知和订单观察 |
+| m4-economy.txt | 模组预订创建/接管/释放、净量、余货回收 |
 
-事件逐行写入；多个船的事件仍会交错，这是正常现象。使用共同前缀关联：
+每次会话四路均应有schema=9、mod=0.1.0-beta.20、internal=682的SESSION、SESSION_META及SESSION_MONEY_PROBE。探针应为rawCt=1223、moneyProbeCr=12.23、moneyProbeValid=1（适配器显示True）。它只验证这个日志换算表达式，不能证明真实交易金额、所有字段或所有事件完整。strategy=beta.19表示贸易规则版本。
 
-```text
-M4 t=... session=... seq=... ship=... object=... pilot=... attempt=... voyage=... EVENT ...
-```
+常规行包含t、session、seq、ship/object/pilot、attempt、voyage、事件与wall/seta/factor。seq跨四路共用，头部使用0；合并后按session+seq检查普通事件连续性。使用attempt关联搜索，voyage关联航次，order/trade关联原生身份；不能按行相邻或时间相近猜测归属。seq连续也不能证明未生成的事件存在，仍须核对事件配对和明细数量。
 
-`t`是 `player.age` 游戏秒数，SETA会加速。`seq`是本次观察会话内四个文件共用的递增序号；各文件的SESSION头均为0。`object`是船对象，`pilot`是驾驶员，`attempt`是搜索轮次，`voyage`关联本次提交与原生订单。没有对应对象的共享索引事件保留空身份。
+## 装载率阶段
 
-每次读档/重新开启Debug都会创建边界。SESSION标记及其出现次序也属于会话身份，不能只按游戏时间或船号跨读档拼接。游戏时间内的规划耗时包含脚本调度和让出，不是CPU耗时。
+| 记录 | 含义 |
+|---|---|
+| BEST / END / DRAFT_LEG，stage=search | 搜索时的最优方案或草案 |
+| SEARCH_CONSTRAINTS，search* | 搜索结束快照，提交修复不会回写 |
+| REPAIR，before* / candidate* / accepted | 修复前与尝试修复后的方案；accepted不等于最终订单创建成功 |
+| RESULT，search* | 原搜索快照；无快照时snapshot_unavailable |
+| RESULT，committed* | 仅成功创建订单时计算；失败为null/not_committed |
 
-## 重点看什么
+committedLoadPercent是最终订单计划体积/容量，orders_created不是实载或已交付。实际货物转移看NATIVE_TRADE、ORDER_OBSERVED和ORDER_OUTCOME。百分比保留两位并截断，原始体积和容量才是复算依据。capacityBasis=last_ware_whole_unit_limit说明分母是最后一笔货物的整件最大容积；混合货物舍入可能略超100%，不截平原始证据，也不据此认定实际超载。
 
-### 等待年龄
+schema=8的observedLoadPercent不能直接当成schema=9的committedLoadPercent；旧volume/capacity/lots也不能不分阶段混用。旧日志按当时schema解读。
 
-`WAVE_INPUT`记录上层等待起点、年龄、失败/未获单计数和触发来源。随后同轮 `WAIT_INPUT`同时记录wave值、plan值、原生存在性表达式的结果、配置装载门槛、有效门槛、装载豁免及分级放宽。这样可以辨认参数读取差异，不依靠结束存档才能发现。
+## 金额、计数与失败
 
-### 搜索消失或重复开始
+金额以整数ct为核对依据，100ct=1Cr；Cr为固定两位文本，逐对核对。NATIVE_TRADE的valueCt=unitPriceCt×transferred属于该原生交易身份的累计观察，不是本回调新增现金流；started/completed可能报告同一交易。deltaTransferred相对观察缓存，缓存也可能由轮询推进，不能直接相加声称精确收支。内部免费交易另看internal/buyfree。
 
-`PHASE`、心跳中的actor存活、phase/progressAt/checks/expanded与 `SEARCH_OVERLAP`可以定位停止位置。planner与wave补充on_abort，提交阶段继续保留on_abort。终止结果使用 `RESULT status=aborted ... stage=... cause=unknown`，不会把同期遇袭或定时器认作已证实的中断原因。
+QUEUE与ORDER_CREATED按session、船、attempt/voyage、订单身份、货物、数量配对；历史订单用ORDER_ADOPTED，不要求有本会话ORDER_CREATED。原生终止通知不保证说明原因，cause=native_reason_not_provided按未知原因处理。订单消失但没有终止通知时为not_observed；不能自动写成失败或成功。transferState只表示已观察到的转移事实。
 
-重叠只代表新搜索遇到未闭合的旧观察，不自动宣称旧搜索已取消。游戏退出、版本迁移、Debug关闭或读档造成的观察缺口，不能当作一次交易失败。30秒心跳同样受原生调度影响，不保证严格按时写盘。
+LOGGER_ERROR保留事件名、消息字段或字段清单及可用原始ct；字段清单表示排查范围，不是精确底层故障定位。无此错误也须检查正文、序号和配对。COUNTS_SUMMARY的countsValid表示计数自洽；detailBodiesComplete还要求完整枚举、同会话及汇总前无格式失败，且detailScope=planner_enumeration。它不涵盖后续提交/订单/原生回调，也不确认文件系统持久化；failureScope=through_summary说明时间边界。读取跨会话及中止轮次时分开统计。
 
-### 有候选却不接单
+HEARTBEAT的invocationAlive=not_observable不等于调用仍在运行。WATCH_READY的nativeDelivery=unverified表示已设置观察器，真正回调投递须由NATIVE_ORDER/NATIVE_TRADE证实。PHASE_TIME、YIELD、elapsed、等待和t均为游戏时钟跨度，包括让出与调度；不是CPU耗时，不能推断SETA计算优先级或漏算船只。
 
-`PREFILTER_COUNTS`、`CANDIDATE_COUNTS`保留完整检查计数，样本有上限；计数包括同站/同报价的多次检查，不等于去重工厂数量。`SOURCE_SCAN`显示共享粗筛、资格通过与本船抽选范围；其数量仅适用于已知报价和本轮索引。
+## 本版短测步骤
 
-`GRADE`给出档位参考仓容、需求/同收货对象组合上界和暂缓依据。`RESULT`独立保留candidateBudget、routeBudget、gradeDeferred、loadRejected，避免只看到最终budget标签。候选上界不保证某条路线最终可执行。
+1. 确认正常退出游戏后安装备份过的beta.20。保留旧存档4、2及历史日志，不在游戏运行中移动日志。使用新槽位建立本轮基点和终点。
+2. 载入可继续的存档，先保持SETA关闭。无需在载入瞬间抢暂停，先让初始M4计算和界面恢复稳定。确认“从AI派系中收集”选项消失。
+3. 通过唯一Debug选项开启记录。若载入时已经开启，会自动建新会话；为了清楚的新边界，可在稳定后关一次再开启。等四路SESSION和初始化写出后再暂停，另存新基点，记录槽位和游戏时间。Debug保持开启。
+4. 解除暂停，以普通速度运行到至少一艘船完成一轮搜索并新建订单；尽量等一笔采购或交付触发原生交易通知。然后开启SETA，继续运行几分钟，使新会话包含两种速度及多轮M4记录。先Debug、后SETA；暂停时不会推进模拟。
+5. 结束时先关闭SETA，再暂停，保持Debug开启另存终点。记下槽位、时间和速度切换；之后关闭Debug，正常退出游戏。不要覆盖旧证据。
+6. 检查本会话四路有效头、12.23探针、代表性候选、ORDER_CREATED↔QUEUE、RESULT分阶段装载率、原生事件及LOGGER_ERROR；按原始ct复算。没有发生修复时，不要求出现REPAIR，可在以后报价竞争时验证；不能伪造游戏验收覆盖。
 
-候选中 `unknown`代表未查询或查询未成功；真实0仍为0。`native_offer_unusable`只说明原生查询不允许该船使用报价，具体黑名单、权限、撤单等归因保持未知。
+本版静态、适配器、结构比较和包体检查已通过；2026-10-28存档4→5普通速度、5→6 SETA的原生日志验收也已通过，见[验收记录](NATIVE_BETA20.zh-CN.md)。以上步骤供复现或后续修改验收使用。beta.16曾按用户决定直接长测，这属于历史安排，不能当作本版原生短测已经通过。
 
-### 实际交易与取消
-
-`ORDER_CREATED`保存order/trade身份、采购或交付方向、计划数量和voyage。原生事件 `NATIVE_TRADE`记录自身的offer/deal、转移量、销毁量和单价；仅当trade身份精确匹配时标记 `correlation=exact_trade`。未能匹配的事件仍保留原生事实，不借用当前航次的身份。
-
-`NATIVE_ORDER event=cancelled immediate=false`是关键状态的取消请求，不能当作订单已经删除。`NATIVE_ORDER event=finished`也不能单独证明全量交货。`ORDER_GONE outcome=unknown`表示观察时订单已不在，但没有观察到原生终止通知；不虚构手动取消或交货成功。
-
-若原生事件只提供报价而无法取得实际交易对象，成交量及成交价保留为空值，不把报价余量误记为实际成交。船只改派其他任务后，继续跟踪已关联的M4订单；不接管新任务的订单，也不将新任务的未关联交易写成M4交易。心跳的 `scopeM4` 表示当前是否仍属M4配置。
-
-原生成交的 `valueCr`是单价乘转移量的交易价值，**不是已核对的玩家现金净利润**；自有站转运、免费交易、销毁及清仓退款应分别分析。`RECOVERY_REFUND`是现有虚拟清仓行为，绝不计作对空间站的正常交付。
-
-读档时或Debug中途开启的已有订单记录为 `ORDER_ADOPTED ... planned=unknown history=preexisting`。这类订单可继续观察执行，但不能追补原始搜索和原始计划量。
-
-## 验证边界
-
-本地回归运行实际AI/MD动作，并校验不增加报价/路径查询、不改变创建订单或普通船只日志；覆盖采样计数、中断闭合、原生部分成交关联、取消请求、基线接续和未知结果。XSD验证动作和事件结构。两者均不能代替游戏内的MD事件触发、保存恢复和SETA写盘验收。
-
-新增观察器只写诊断变量和文件，不发出移动、交易、取消、货物或资金操作。开启日志仍有CPU/写盘开销，关闭Debug后停止新的M4详细记录。已创建的订单继续由原生系统执行。
+M1–M3日志仍是继承的旧格式，部分旧输出按chance采样、使用旧文件且无M4会话/ct保证；本轮扫描保留其代码，不把M4的完整性承诺扩展到它们。

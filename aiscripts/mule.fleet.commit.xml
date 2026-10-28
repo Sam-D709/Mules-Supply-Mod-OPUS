@@ -1,5 +1,5 @@
-<?xml version="1.0" encoding="utf-8"?>
-<aiscript name="mule.fleet.commit" version="10">
+<?xml version='1.0' encoding='utf-8'?>
+<aiscript name="mule.fleet.commit" version="13">
   <params>
     <param name="cfg" />
     <param name="plan" />
@@ -36,6 +36,42 @@
       <retval name="failure" value="'ship_changed'" />
     </return>
   </patch>
+  <patch sinceversion="13">
+    <do_if value="$lock?">
+      <do_if value="@global.$mwexFleetLock == $lock">
+        <remove_value name="global.$mwexFleetLock" />
+      </do_if>
+    </do_if>
+    <return>
+      <retval name="ok" value="false" />
+      <retval name="failure" value="'ship_changed'" />
+      <retval name="status" value="'commit_ship'" />
+    </return>
+  </patch>
+  <patch sinceversion="12">
+    <do_if value="$lock?">
+      <do_if value="@global.$mwexFleetLock == $lock">
+        <remove_value name="global.$mwexFleetLock" />
+      </do_if>
+    </do_if>
+    <return>
+      <retval name="ok" value="false" />
+      <retval name="failure" value="'ship_changed'" />
+      <retval name="status" value="'commit_ship'" />
+    </return>
+  </patch>
+  <patch sinceversion="11">
+    <do_if value="$lock?">
+      <do_if value="@global.$mwexFleetLock == $lock">
+        <remove_value name="global.$mwexFleetLock" />
+      </do_if>
+    </do_if>
+    <return>
+      <retval name="ok" value="false" />
+      <retval name="failure" value="'ship_changed'" />
+      <retval name="status" value="'commit_ship'" />
+    </return>
+  </patch>
   <patch sinceversion="10">
     <do_if value="$lock?">
       <do_if value="@global.$mwexFleetLock == $lock">
@@ -66,6 +102,8 @@
       </do_if>
       <do_if value="@global.$mwexDebug">
         <set_value name="$mwtrace_diagnostic" exact="$diagnostic" />
+        <set_value name="$mwtrace_event" exact="'COMMIT_BEGIN'" />
+        <set_value name="$mwtrace_fields" exact="'plannedLots,initialEligible,orders,cargo,signature'" />
         <set_value name="$mwtrace_text" exact="'COMMIT_BEGIN plannedLots=%s initialEligible=%s orders=%s cargo=%s signature=%s'.[$plan.count,$ok,$ship.orders.count,$ship.cargo.count,$cfg.$signature]" />
         <set_value name="$mwtrace_file" exact="'orders'" />
         <include_interrupt_actions ref="MWEX_Fleet_trace" />
@@ -77,6 +115,12 @@
       <set_value name="$deliveryVolume" exact="0" />
       <set_value name="$orders" exact="[]" />
       <do_if value="not $ok">
+        <do_if value="@global.$mwexDebug">
+          <set_value name="$mwcommit_status" exact="$status" />
+          <set_value name="$mwcommit_failure" exact="$failure" />
+          <set_value name="$mwcommit_stage" exact="'initial_eligibility'" />
+          <include_interrupt_actions ref="MWEX_Log_commit_reject" />
+        </do_if>
         <return>
           <retval name="ok" value="false" />
           <retval name="failure" value="$failure" />
@@ -88,7 +132,6 @@
       <set_value name="$mwrepair_diagnostic" exact="$diagnostic" />
       <include_interrupt_actions ref="MWEX_Fleet_repair" />
       <set_value name="$plan" exact="$mwrepair_out" />
-      <!-- Revalidate full plan BEFORE the first economic write. No real orders are used for feasibility tests. -->
       <do_for_each name="$leg" in="$plan">
         <do_for_each name="$offer" in="[$leg.$source,$leg.$need]">
           <set_value name="$mwoffer_offer" exact="$offer" />
@@ -104,7 +147,9 @@
             <set_value name="$status" exact="'commit_offer'" />
             <do_if value="@global.$mwexDebug">
               <set_value name="$mwtrace_diagnostic" exact="$diagnostic" />
-              <set_value name="$mwtrace_text" exact="'COMMIT_CHECK ship=%s station=%s ware=%s reason=%s'.[$ship.idcode,$offer.owner,$offer.ware,$offerReason]" />
+              <set_value name="$mwtrace_event" exact="'COMMIT_CHECK'" />
+              <set_value name="$mwtrace_fields" exact="'code,side,offer,station,ware,planned,eligible,offerReasonCode,detail'" />
+              <set_value name="$mwtrace_text" exact="'COMMIT_CHECK code=offer side=%s offer=%s station=%s ware=%s planned=%s eligible=%s offerReasonCode=%s detail=%s'.[if $offer == $leg.$source then 'buy' else 'sell',$offer,@$offer.owner,@$offer.ware,$leg.$amount,$valid != null,$mwoffer_out_code,$offerReason]" />
               <set_value name="$mwtrace_file" exact="'orders'" />
               <include_interrupt_actions ref="MWEX_Fleet_trace" />
             </do_if>
@@ -122,7 +167,9 @@
               <set_value name="$status" exact="'commit_price'" />
               <do_if value="@global.$mwexDebug">
                 <set_value name="$mwtrace_diagnostic" exact="$diagnostic" />
-                <set_value name="$mwtrace_text" exact="'COMMIT_CHECK %s ship=%s station=%s ware=%s planned=%sCr live=%sCr priceAvailable=%s'.[{61552,4323},$ship.idcode,$offer.owner,$offer.ware,(if $offer.isbuyoffer then $leg.$sellprice else $leg.$buyprice)/1Cr,$livePrice/1Cr,$priced]" />
+                <set_value name="$mwtrace_event" exact="'COMMIT_CHECK'" />
+                <set_value name="$mwtrace_fields" exact="'code,ship,station,ware,plannedCr,plannedCt,liveCr,liveCt,priceAvailable'" />
+                <set_value name="$mwtrace_text" exact="'COMMIT_CHECK code=price ship=%s station=%s ware=%s plannedCr=%s plannedCt=%s liveCr=%s liveCt=%s priceAvailable=%s'.[$ship.idcode,$offer.owner,$offer.ware,'%s%s.%s%s'.[if ((if $offer.isbuyoffer then $leg.$sellprice else $leg.$buyprice)) lt 0ct then '-' else '',(abs(((if $offer.isbuyoffer then $leg.$sellprice else $leg.$buyprice)/1ct)L)/100)L,((abs(((if $offer.isbuyoffer then $leg.$sellprice else $leg.$buyprice)/1ct)L)%100)/10)i,(abs(((if $offer.isbuyoffer then $leg.$sellprice else $leg.$buyprice)/1ct)L)%10)i],(if $offer.isbuyoffer then $leg.$sellprice else $leg.$buyprice)/1ct,'%s%s.%s%s'.[if ($livePrice) lt 0ct then '-' else '',(abs(($livePrice/1ct)L)/100)L,((abs(($livePrice/1ct)L)%100)/10)i,(abs(($livePrice/1ct)L)%10)i],$livePrice/1ct,$priced]" />
                 <set_value name="$mwtrace_file" exact="'orders'" />
                 <include_interrupt_actions ref="MWEX_Fleet_trace" />
               </do_if>
@@ -138,22 +185,13 @@
         <set_value name="$builder" exact="$cfg.$allowBuildstorage and not $cfg.$allowResources and not $cfg.$allowIntermediates and $leg.$need.owner.isclass.buildstorage and $leg.$need.owner.owner == faction.player" />
         <do_if value="$leg.$source.owner.owner != $ship.owner and not $builder and $leg.$sellprice le $leg.$buyprice">
           <set_value name="$ok" exact="false" />
-          <set_value name="$failure" exact="{61552,4457}.[$leg.$ware.name,$leg.$buyprice/1Cr,$leg.$sellprice/1Cr]" />
+          <set_value name="$failure" exact="{61552,4457}.[$leg.$ware.name,'%s%s.%s%s'.[if ($leg.$buyprice) lt 0ct then '-' else '',(abs(($leg.$buyprice/1ct)L)/100)L,((abs(($leg.$buyprice/1ct)L)%100)/10)i,(abs(($leg.$buyprice/1ct)L)%10)i],'%s%s.%s%s'.[if ($leg.$sellprice) lt 0ct then '-' else '',(abs(($leg.$sellprice/1ct)L)/100)L,((abs(($leg.$sellprice/1ct)L)%100)/10)i,(abs(($leg.$sellprice/1ct)L)%10)i]]" />
           <set_value name="$status" exact="'commit_spread'" />
           <do_if value="@global.$mwexDebug">
             <set_value name="$mwtrace_diagnostic" exact="$diagnostic" />
-            <set_value name="$mwtrace_text" exact="'COMMIT_CHECK code=spread ware=%s source=%s receiver=%s buy=%s sell=%s builder=%s'.[$leg.$ware,$leg.$source.owner,$leg.$need.owner,$leg.$buyprice/1Cr,$leg.$sellprice/1Cr,$builder]" />
-            <set_value name="$mwtrace_file" exact="'orders'" />
-            <include_interrupt_actions ref="MWEX_Fleet_trace" />
-          </do_if>
-        </do_if>
-        <do_if value="$leg.$source.owner.owner == $ship.owner and ($leg.$source.owner.cargo.{$leg.$ware}.target le 0 or $leg.$source.owner.cargo.{$leg.$ware}.count*100 le $leg.$source.owner.cargo.{$leg.$ware}.target*$cfg.$playerStockThreshold)">
-          <set_value name="$ok" exact="false" />
-          <set_value name="$failure" exact="{61552,4456}.[$leg.$source.owner.knownname,$leg.$ware.name,$cfg.$playerStockThreshold]" />
-          <set_value name="$status" exact="'commit_stock'" />
-          <do_if value="@global.$mwexDebug">
-            <set_value name="$mwtrace_diagnostic" exact="$diagnostic" />
-            <set_value name="$mwtrace_text" exact="{61552,4303}.[$leg.$source.owner.knownname,$leg.$ware.name,$leg.$source.owner.cargo.{$leg.$ware}.count,$leg.$source.owner.cargo.{$leg.$ware}.target,$cfg.$playerStockThreshold]" />
+            <set_value name="$mwtrace_event" exact="'COMMIT_CHECK'" />
+            <set_value name="$mwtrace_fields" exact="'code,ware,source,receiver,buyCr,buyCt,sellCr,sellCt,builder'" />
+            <set_value name="$mwtrace_text" exact="'COMMIT_CHECK code=spread ware=%s source=%s receiver=%s buyCr=%s buyCt=%s sellCr=%s sellCt=%s builder=%s'.[$leg.$ware,$leg.$source.owner,$leg.$need.owner,'%s%s.%s%s'.[if ($leg.$buyprice) lt 0ct then '-' else '',(abs(($leg.$buyprice/1ct)L)/100)L,((abs(($leg.$buyprice/1ct)L)%100)/10)i,(abs(($leg.$buyprice/1ct)L)%10)i],$leg.$buyprice/1ct,'%s%s.%s%s'.[if ($leg.$sellprice) lt 0ct then '-' else '',(abs(($leg.$sellprice/1ct)L)/100)L,((abs(($leg.$sellprice/1ct)L)%100)/10)i,(abs(($leg.$sellprice/1ct)L)%10)i],$leg.$sellprice/1ct,$builder]" />
             <set_value name="$mwtrace_file" exact="'orders'" />
             <include_interrupt_actions ref="MWEX_Fleet_trace" />
           </do_if>
@@ -165,19 +203,30 @@
         <set_value name="$deliveryVolume" operation="add" exact="$leg.$amount*$leg.$ware.volume" />
       </do_for_each>
       <do_if value="not $ok">
+        <do_if value="@global.$mwexDebug">
+          <set_value name="$mwcommit_status" exact="$status" />
+          <set_value name="$mwcommit_failure" exact="$failure" />
+          <set_value name="$mwcommit_stage" exact="'offers_prices_stock'" />
+          <include_interrupt_actions ref="MWEX_Log_commit_reject" />
+        </do_if>
         <return>
           <retval name="ok" value="false" />
           <retval name="failure" value="$failure" />
           <retval name="status" value="$status" />
         </return>
       </do_if>
-      <!-- Final net checks and economic writes use only schema-validated non-blocking actions, including all helper includes. -->
       <do_if value="global.$mwexFleetLock?">
         <do_if value="not @global.$mwexFleetLock.$actor.exists or player.age gt global.$mwexFleetLock.$time+30s">
           <remove_value name="global.$mwexFleetLock" />
         </do_if>
       </do_if>
       <do_if value="global.$mwexFleetLock?">
+        <do_if value="@global.$mwexDebug">
+          <set_value name="$mwcommit_status" exact="'commit_busy'" />
+          <set_value name="$mwcommit_failure" exact="'commit_busy'" />
+          <set_value name="$mwcommit_stage" exact="'lock_busy'" />
+          <include_interrupt_actions ref="MWEX_Log_commit_reject" />
+        </do_if>
         <return>
           <retval name="ok" value="false" />
           <retval name="failure" value="'commit_busy'" />
@@ -196,7 +245,9 @@
           <set_value name="$status" exact="'commit_quantity'" />
           <do_if value="@global.$mwexDebug">
             <set_value name="$mwtrace_diagnostic" exact="$diagnostic" />
-            <set_value name="$mwtrace_text" exact="'COMMIT_CHECK %s station=%s ware=%s planned=%s net=%s'.[{61552,4325},$offer.owner,$offer.ware,$quantity,$net]" />
+            <set_value name="$mwtrace_event" exact="'COMMIT_CHECK'" />
+            <set_value name="$mwtrace_fields" exact="'code,station,ware,planned,net'" />
+            <set_value name="$mwtrace_text" exact="'COMMIT_CHECK code=quantity station=%s ware=%s planned=%s net=%s'.[$offer.owner,$offer.ware,$quantity,$net]" />
             <set_value name="$mwtrace_file" exact="'orders'" />
             <include_interrupt_actions ref="MWEX_Fleet_trace" />
           </do_if>
@@ -212,7 +263,9 @@
           <set_value name="$status" exact="'commit_quantity'" />
           <do_if value="@global.$mwexDebug">
             <set_value name="$mwtrace_diagnostic" exact="$diagnostic" />
-            <set_value name="$mwtrace_text" exact="'COMMIT_CHECK %s station=%s ware=%s planned=%s net=%s'.[{61552,4325},$offer.owner,$offer.ware,$quantity,$net]" />
+            <set_value name="$mwtrace_event" exact="'COMMIT_CHECK'" />
+            <set_value name="$mwtrace_fields" exact="'code,station,ware,planned,net'" />
+            <set_value name="$mwtrace_text" exact="'COMMIT_CHECK code=quantity station=%s ware=%s planned=%s net=%s'.[$offer.owner,$offer.ware,$quantity,$net]" />
             <set_value name="$mwtrace_file" exact="'orders'" />
             <include_interrupt_actions ref="MWEX_Fleet_trace" />
           </do_if>
@@ -220,11 +273,13 @@
       </do_for_each>
       <do_if value="$cost gt $ship.money or $receiverCost gt $plan.{1}.$need.owner.money">
         <set_value name="$ok" exact="false" />
-        <set_value name="$failure" exact="{61552,4453}.[$cost/1Cr,$ship.money/1Cr,$receiverCost/1Cr,$plan.{1}.$need.owner.money/1Cr]" />
+        <set_value name="$failure" exact="{61552,4453}.['%s%s.%s%s'.[if ($cost) lt 0ct then '-' else '',(abs(($cost/1ct)L)/100)L,((abs(($cost/1ct)L)%100)/10)i,(abs(($cost/1ct)L)%10)i],'%s%s.%s%s'.[if ($ship.money) lt 0ct then '-' else '',(abs(($ship.money/1ct)L)/100)L,((abs(($ship.money/1ct)L)%100)/10)i,(abs(($ship.money/1ct)L)%10)i],'%s%s.%s%s'.[if ($receiverCost) lt 0ct then '-' else '',(abs(($receiverCost/1ct)L)/100)L,((abs(($receiverCost/1ct)L)%100)/10)i,(abs(($receiverCost/1ct)L)%10)i],'%s%s.%s%s'.[if ($plan.{1}.$need.owner.money) lt 0ct then '-' else '',(abs(($plan.{1}.$need.owner.money/1ct)L)/100)L,((abs(($plan.{1}.$need.owner.money/1ct)L)%100)/10)i,(abs(($plan.{1}.$need.owner.money/1ct)L)%10)i]]" />
         <set_value name="$status" exact="'commit_funds'" />
         <do_if value="@global.$mwexDebug">
           <set_value name="$mwtrace_diagnostic" exact="$diagnostic" />
-          <set_value name="$mwtrace_text" exact="'COMMIT_CHECK %s ship=%s cost=%sCr budget=%sCr receiverCost=%sCr receiverBudget=%sCr'.[{61552,4326},$ship.idcode,$cost/1Cr,$ship.money/1Cr,$receiverCost/1Cr,$plan.{1}.$need.owner.money/1Cr]" />
+          <set_value name="$mwtrace_event" exact="'COMMIT_CHECK'" />
+          <set_value name="$mwtrace_fields" exact="'code,ship,costCr,costCt,budgetCr,budgetCt,receiverCostCr,receiverCostCt,receiverBudgetCr,receiverBudgetCt'" />
+          <set_value name="$mwtrace_text" exact="'COMMIT_CHECK code=budget ship=%s costCr=%s costCt=%s budgetCr=%s budgetCt=%s receiverCostCr=%s receiverCostCt=%s receiverBudgetCr=%s receiverBudgetCt=%s'.[$ship.idcode,'%s%s.%s%s'.[if ($cost) lt 0ct then '-' else '',(abs(($cost/1ct)L)/100)L,((abs(($cost/1ct)L)%100)/10)i,(abs(($cost/1ct)L)%10)i],$cost/1ct,'%s%s.%s%s'.[if ($ship.money) lt 0ct then '-' else '',(abs(($ship.money/1ct)L)/100)L,((abs(($ship.money/1ct)L)%100)/10)i,(abs(($ship.money/1ct)L)%10)i],$ship.money/1ct,'%s%s.%s%s'.[if ($receiverCost) lt 0ct then '-' else '',(abs(($receiverCost/1ct)L)/100)L,((abs(($receiverCost/1ct)L)%100)/10)i,(abs(($receiverCost/1ct)L)%10)i],$receiverCost/1ct,'%s%s.%s%s'.[if ($plan.{1}.$need.owner.money) lt 0ct then '-' else '',(abs(($plan.{1}.$need.owner.money/1ct)L)/100)L,((abs(($plan.{1}.$need.owner.money/1ct)L)%100)/10)i,(abs(($plan.{1}.$need.owner.money/1ct)L)%10)i],$plan.{1}.$need.owner.money/1ct]" />
           <set_value name="$mwtrace_file" exact="'orders'" />
           <include_interrupt_actions ref="MWEX_Fleet_trace" />
         </do_if>
@@ -235,7 +290,9 @@
         <set_value name="$status" exact="'commit_cargo'" />
         <do_if value="@global.$mwexDebug">
           <set_value name="$mwtrace_diagnostic" exact="$diagnostic" />
-          <set_value name="$mwtrace_text" exact="'COMMIT_CHECK %s ship=%s volume=%s shipFree=%s receiverFree=%s'.[{61552,4327},$ship.idcode,$deliveryVolume,$ship.cargo.free.{$plan.{1}.$ware.transporttag},$plan.{1}.$need.owner.cargo.free.{$plan.{1}.$ware.transporttag}]" />
+          <set_value name="$mwtrace_event" exact="'COMMIT_CHECK'" />
+          <set_value name="$mwtrace_fields" exact="'code,ship,volume,shipFree,receiverFree'" />
+          <set_value name="$mwtrace_text" exact="'COMMIT_CHECK code=capacity ship=%s volume=%s shipFree=%s receiverFree=%s'.[$ship.idcode,$deliveryVolume,$ship.cargo.free.{$plan.{1}.$ware.transporttag},$plan.{1}.$need.owner.cargo.free.{$plan.{1}.$ware.transporttag}]" />
           <set_value name="$mwtrace_file" exact="'orders'" />
           <include_interrupt_actions ref="MWEX_Fleet_trace" />
         </do_if>
@@ -246,7 +303,9 @@
         <set_value name="$status" exact="'commit_ship'" />
         <do_if value="@global.$mwexDebug">
           <set_value name="$mwtrace_diagnostic" exact="$diagnostic" />
-          <set_value name="$mwtrace_text" exact="'COMMIT_CHECK %s ship=%s origin=%s liveOrder=%s home=%s threshold=%s'.[{61552,4328},$ship.idcode,$cfg.$origin,$ship.defaultorder,$cfg.$home,$cfg.$playerStockThreshold]" />
+          <set_value name="$mwtrace_event" exact="'COMMIT_CHECK'" />
+          <set_value name="$mwtrace_fields" exact="'code,ship,origin,liveOrder,home'" />
+          <set_value name="$mwtrace_text" exact="'COMMIT_CHECK code=binding ship=%s origin=%s liveOrder=%s home=%s'.[$ship.idcode,$cfg.$origin,$ship.defaultorder,$cfg.$home]" />
           <set_value name="$mwtrace_file" exact="'orders'" />
           <include_interrupt_actions ref="MWEX_Fleet_trace" />
         </do_if>
@@ -257,31 +316,35 @@
         <set_value name="$status" exact="'commit_ship'" />
         <do_if value="@global.$mwexDebug">
           <set_value name="$mwtrace_diagnostic" exact="$diagnostic" />
-          <set_value name="$mwtrace_text" exact="'COMMIT_CHECK %s ship=%s origin=%s liveOrder=%s home=%s threshold=%s'.[{61552,4328},$ship.idcode,$cfg.$origin,$ship.defaultorder,$cfg.$home,$cfg.$playerStockThreshold]" />
+          <set_value name="$mwtrace_event" exact="'COMMIT_CHECK'" />
+          <set_value name="$mwtrace_fields" exact="'code,ship,origin,liveOrder,home'" />
+          <set_value name="$mwtrace_text" exact="'COMMIT_CHECK code=binding ship=%s origin=%s liveOrder=%s home=%s'.[$ship.idcode,$cfg.$origin,$ship.defaultorder,$cfg.$home]" />
           <set_value name="$mwtrace_file" exact="'orders'" />
           <include_interrupt_actions ref="MWEX_Fleet_trace" />
         </do_if>
       </do_if>
-      <do_if value="$ship.defaultorder.id == 'SupplyMule' and ($ship.defaultorder.$home != $cfg.$home or $ship.defaultorder.$maxDist != $cfg.$maxDist or $ship.defaultorder.$dedicatedServe != $cfg.$dedicatedServe or $ship.defaultorder.$allowPlayerSuppliers != $cfg.$allowPlayerSuppliers or $ship.defaultorder.$allowAiSuppliers != $cfg.$allowAiSuppliers or $ship.defaultorder.$allowBuildstorage != $cfg.$allowBuildstorage or $ship.defaultorder.$allowResources != $cfg.$allowResources or $ship.defaultorder.$allowIntermediates != $cfg.$allowIntermediates or $ship.defaultorder.$allowTradewares != $cfg.$allowTradewares or $ship.defaultorder.$lockWares != $cfg.$lockWares or $ship.defaultorder.$maxTrades != $cfg.$maxTrades or $ship.defaultorder.$minCargoUsed != $cfg.$minCargoUsed or (if $ship.defaultorder.$playerStockThreshold? then $ship.defaultorder.$playerStockThreshold else 50) != $cfg.$playerStockThreshold or $ship.defaultorder.$corridorDepth != $cfg.$corridorDepth or $ship.defaultorder.$corridorMarkup != $cfg.$corridorMarkup or '%s'.[$ship.defaultorder.$specialWareBasket] != '%s'.[$cfg.$wares])">
+      <do_if value="$ship.defaultorder.id == 'SupplyMule' and ($ship.defaultorder.$home != $cfg.$home or $ship.defaultorder.$maxDist != $cfg.$maxDist or $ship.defaultorder.$dedicatedServe != $cfg.$dedicatedServe or $ship.defaultorder.$allowBuildstorage != $cfg.$allowBuildstorage or $ship.defaultorder.$allowResources != $cfg.$allowResources or $ship.defaultorder.$allowIntermediates != $cfg.$allowIntermediates or $ship.defaultorder.$allowTradewares != $cfg.$allowTradewares or $ship.defaultorder.$lockWares != $cfg.$lockWares or $ship.defaultorder.$maxTrades != $cfg.$maxTrades or $ship.defaultorder.$minCargoUsed != $cfg.$minCargoUsed or $ship.defaultorder.$corridorDepth != $cfg.$corridorDepth or $ship.defaultorder.$corridorMarkup != $cfg.$corridorMarkup or '%s'.[$ship.defaultorder.$specialWareBasket] != '%s'.[$cfg.$wares])">
         <set_value name="$ok" exact="false" />
         <set_value name="$failure" exact="{61552,4455}" />
         <set_value name="$status" exact="'commit_ship'" />
         <do_if value="@global.$mwexDebug">
           <set_value name="$mwtrace_diagnostic" exact="$diagnostic" />
-          <set_value name="$mwtrace_text" exact="'COMMIT_CHECK %s ship=%s origin=%s liveOrder=%s home=%s threshold=%s'.[{61552,4328},$ship.idcode,$cfg.$origin,$ship.defaultorder,$cfg.$home,$cfg.$playerStockThreshold]" />
+          <set_value name="$mwtrace_event" exact="'COMMIT_CHECK'" />
+          <set_value name="$mwtrace_fields" exact="'code,ship,origin,liveOrder,home'" />
+          <set_value name="$mwtrace_text" exact="'COMMIT_CHECK code=binding ship=%s origin=%s liveOrder=%s home=%s'.[$ship.idcode,$cfg.$origin,$ship.defaultorder,$cfg.$home]" />
           <set_value name="$mwtrace_file" exact="'orders'" />
           <include_interrupt_actions ref="MWEX_Fleet_trace" />
         </do_if>
       </do_if>
       <do_if value="not $ok">
-        <do_if value="@global.$mwexDebug">
-          <set_value name="$mwtrace_diagnostic" exact="$diagnostic" />
-          <set_value name="$mwtrace_text" exact="{61552,4321}.[$ship.idcode]" />
-          <set_value name="$mwtrace_file" exact="'orders'" />
-          <include_interrupt_actions ref="MWEX_Fleet_trace" />
-        </do_if>
         <do_if value="@global.$mwexFleetLock == $lock">
           <remove_value name="global.$mwexFleetLock" />
+        </do_if>
+        <do_if value="@global.$mwexDebug">
+          <set_value name="$mwcommit_status" exact="$status" />
+          <set_value name="$mwcommit_failure" exact="$failure" />
+          <set_value name="$mwcommit_stage" exact="'quantities_funds_binding'" />
+          <include_interrupt_actions ref="MWEX_Log_commit_reject" />
         </do_if>
         <return>
           <retval name="ok" value="false" />
@@ -297,7 +360,6 @@
         <set_value name="$ship.pilot.$mwexM4Voyage" exact="$diagnostic.$voyage" />
         <set_value name="$diagnostic.$phase" exact="'create_orders'" />
       </do_if>
-      <!-- No waits, no per-leg immediate=true: enqueue ALL pickups before ALL deliveries. -->
       <do_for_each name="$leg" in="$plan">
         <create_trade_order object="$ship" tradeoffer="$leg.$source" amount="$leg.$amount" immediate="false" name="$order" />
         <set_value name="$mwlog_order_cfg" exact="$cfg" />
@@ -317,6 +379,8 @@
               <do_if value="@global.$mwexDebug">
                 <set_value name="$mwtrace_diagnostic" exact="$diagnostic" />
                 <set_value name="$mwtrace_file" exact="'economy'" />
+                <set_value name="$mwtrace_event" exact="'HOLD_CREATE'" />
+                <set_value name="$mwtrace_fields" exact="'order,offer,ownerShip,amount'" />
                 <set_value name="$mwtrace_text" exact="'HOLD_CREATE order=%s offer=%s ownerShip=%s amount=%s'.[$logHold.$logOrderId,$logHold.$offer,$ship,$logHold.$amount]" />
                 <include_interrupt_actions ref="MWEX_Fleet_trace" />
               </do_if>
@@ -351,6 +415,8 @@
                 <do_if value="@global.$mwexDebug">
                   <set_value name="$mwtrace_diagnostic" exact="$diagnostic" />
                   <set_value name="$mwtrace_file" exact="'economy'" />
+                  <set_value name="$mwtrace_event" exact="'HOLD_CREATE'" />
+                  <set_value name="$mwtrace_fields" exact="'order,offer,ownerShip,amount'" />
                   <set_value name="$mwtrace_text" exact="'HOLD_CREATE order=%s offer=%s ownerShip=%s amount=%s'.[$logHold.$logOrderId,$logHold.$offer,$ship,$logHold.$amount]" />
                   <include_interrupt_actions ref="MWEX_Fleet_trace" />
                 </do_if>
@@ -367,11 +433,12 @@
         </do_for_each>
       </do_if>
       <do_if value="not $ok">
-        <!-- Critical/running trades are NOT assumed cancellable. Keep voyage identity for real-cargo recovery. -->
         <do_for_each name="$created" in="$orders" reverse="true">
           <do_if value="@$created.exists and not $created.isrunning">
             <do_if value="@global.$mwexDebug">
               <set_value name="$mwtrace_diagnostic" exact="$diagnostic" />
+              <set_value name="$mwtrace_event" exact="'ROLLBACK_CANCEL_REQUEST'" />
+              <set_value name="$mwtrace_fields" exact="'order,running,reason'" />
               <set_value name="$mwtrace_text" exact="'ROLLBACK_CANCEL_REQUEST order=%s running=%s reason=create_incomplete'.[$created,@$created.isrunning]" />
               <set_value name="$mwtrace_file" exact="'orders'" />
               <include_interrupt_actions ref="MWEX_Fleet_trace" />
@@ -379,6 +446,8 @@
             <cancel_order order="$created" />
             <do_if value="@global.$mwexDebug">
               <set_value name="$mwtrace_diagnostic" exact="$diagnostic" />
+              <set_value name="$mwtrace_event" exact="'ROLLBACK_CANCEL_OBSERVED'" />
+              <set_value name="$mwtrace_fields" exact="'order,exists,running'" />
               <set_value name="$mwtrace_text" exact="'ROLLBACK_CANCEL_OBSERVED order=%s exists=%s running=%s'.[$created,@$created.exists,@$created.isrunning]" />
               <set_value name="$mwtrace_file" exact="'orders'" />
               <include_interrupt_actions ref="MWEX_Fleet_trace" />
@@ -397,6 +466,8 @@
       </do_if>
       <do_if value="@global.$mwexDebug">
         <set_value name="$mwtrace_diagnostic" exact="$diagnostic" />
+        <set_value name="$mwtrace_event" exact="'COMMIT'" />
+        <set_value name="$mwtrace_fields" exact="'status,lots,orders,success'" />
         <set_value name="$mwtrace_text" exact="'COMMIT status=%s lots=%s orders=%s success=%s'.[$status,$plan.count,$orders.count,$ok]" />
         <set_value name="$mwtrace_file" exact="'orders'" />
         <include_interrupt_actions ref="MWEX_Fleet_trace" />
@@ -404,7 +475,9 @@
       <do_if value="@global.$mwexDebug">
         <do_for_each name="$leg" in="$plan" counter="$i">
           <set_value name="$mwtrace_diagnostic" exact="$diagnostic" />
-          <set_value name="$mwtrace_text" exact="'COMMIT_LEG index=%s source=%s need=%s ware=%s amount=%s buy=%sCr sell=%sCr buyOrder=%s sellOrder=%s success=%s'.[$i,$leg.$source,$leg.$need,$leg.$ware,$leg.$amount,$leg.$buyprice/1Cr,$leg.$sellprice/1Cr,@$leg.$buyOrder,@$leg.$sellOrder,$ok]" />
+          <set_value name="$mwtrace_event" exact="'COMMIT_LEG'" />
+          <set_value name="$mwtrace_fields" exact="'index,source,need,ware,amount,buyCr,buyCt,sellCr,sellCt,buyOrder,sellOrder,success'" />
+          <set_value name="$mwtrace_text" exact="'COMMIT_LEG index=%s source=%s need=%s ware=%s amount=%s buyCr=%s buyCt=%s sellCr=%s sellCt=%s buyOrder=%s sellOrder=%s success=%s'.[$i,$leg.$source,$leg.$need,$leg.$ware,$leg.$amount,'%s%s.%s%s'.[if ($leg.$buyprice) lt 0ct then '-' else '',(abs(($leg.$buyprice/1ct)L)/100)L,((abs(($leg.$buyprice/1ct)L)%100)/10)i,(abs(($leg.$buyprice/1ct)L)%10)i],$leg.$buyprice/1ct,'%s%s.%s%s'.[if ($leg.$sellprice) lt 0ct then '-' else '',(abs(($leg.$sellprice/1ct)L)/100)L,((abs(($leg.$sellprice/1ct)L)%100)/10)i,(abs(($leg.$sellprice/1ct)L)%10)i],$leg.$sellprice/1ct,@$leg.$buyOrder,@$leg.$sellOrder,$ok]" />
           <set_value name="$mwtrace_file" exact="'orders'" />
           <include_interrupt_actions ref="MWEX_Fleet_trace" />
         </do_for_each>
@@ -412,6 +485,8 @@
       <do_for_each name="$queued" in="$ship.orders" counter="$index">
         <do_if value="@global.$mwexDebug">
           <set_value name="$mwtrace_diagnostic" exact="$diagnostic" />
+          <set_value name="$mwtrace_event" exact="'QUEUE'" />
+          <set_value name="$mwtrace_fields" exact="'ship,index,order,trade,amount,state'" />
           <set_value name="$mwtrace_text" exact="'QUEUE ship=%s index=%s order=%s trade=%s amount=%s state=%s'.[$ship.idcode,$index,$queued,$queued.trade,@$queued.trade.amount,$queued.state]" />
           <set_value name="$mwtrace_file" exact="'orders'" />
           <include_interrupt_actions ref="MWEX_Fleet_trace" />
@@ -424,6 +499,8 @@
           <set_value name="$attempt.$misses" exact="0" />
           <do_if value="@global.$mwexDebug">
             <set_value name="$mwtrace_diagnostic" exact="$diagnostic" />
+            <set_value name="$mwtrace_event" exact="'WAIT_RESET'" />
+            <set_value name="$mwtrace_fields" exact="'reason,previousWaitingSince,failures,misses'" />
             <set_value name="$mwtrace_text" exact="'WAIT_RESET reason=orders_created previousWaitingSince=%s failures=%s misses=%s'.[$attempt.$waitingSince,$attempt.$failures,$attempt.$misses]" />
             <set_value name="$mwtrace_file" exact="'lifecycle'" />
             <include_interrupt_actions ref="MWEX_Fleet_trace" />
@@ -439,6 +516,16 @@
             <remove_value name="$hub.$warnings.{$completedLeg.$need}" />
             <remove_value name="$hub.$failures.{$completedLeg.$need}" />
           </do_for_each>
+        </do_if>
+      </do_if>
+      <do_if value="@global.$mwexDebug">
+        <do_if value="not $ok">
+          <do_if value="@global.$mwexDebug">
+            <set_value name="$mwcommit_status" exact="$status" />
+            <set_value name="$mwcommit_failure" exact="$failure" />
+            <set_value name="$mwcommit_stage" exact="'order_creation'" />
+            <include_interrupt_actions ref="MWEX_Log_commit_reject" />
+          </do_if>
         </do_if>
       </do_if>
       <set_value name="$diagnostic.$status" exact="$status" />
@@ -457,7 +544,6 @@
     </actions>
   </attention>
   <on_abort>
-    <!--Only release this transaction's token. Submitted orders and voyage identity survive normal order preemption.-->
     <do_if value="$lock?">
       <do_if value="@global.$mwexFleetLock == $lock">
         <remove_value name="global.$mwexFleetLock" />
@@ -465,6 +551,8 @@
     </do_if>
     <do_if value="@global.$mwexDebug and $diagnostic? and $diagnostic and not @$diagnostic.$recorded">
       <set_value name="$mwtrace_diagnostic" exact="$diagnostic" />
+      <set_value name="$mwtrace_event" exact="'RESULT'" />
+      <set_value name="$mwtrace_fields" exact="'status,success,reason'" />
       <set_value name="$mwtrace_text" exact="'RESULT status=aborted success=false reason=script_interrupted'" />
       <set_value name="$mwtrace_file" exact="'lifecycle'" />
       <set_value name="$mwtrace_diagnostic.$logClosed" exact="true" />

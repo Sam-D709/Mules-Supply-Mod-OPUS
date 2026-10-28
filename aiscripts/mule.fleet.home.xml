@@ -13,6 +13,8 @@
       <actions>
         <do_if value="@global.$mwexDebug">
           <set_value name="$mwtrace_diagnostic" exact="table[$ship=$ship,$attempt=null,$relaxed=false]" />
+          <set_value name="$mwtrace_event" exact="'RETURN_SIGNAL'" />
+          <set_value name="$mwtrace_fields" exact="'token,activeAttempt,activePhase,activeActorAlive,orders'" />
           <set_value name="$mwtrace_text" exact="'RETURN_SIGNAL token=%s activeAttempt=%s activePhase=%s activeActorAlive=%s orders=%s'.[$returnToken,@$ship.pilot.$mwexM4Search.$attempt,@$ship.pilot.$mwexM4Search.$phase,@$ship.pilot.$mwexM4Search.$actor.exists,$ship.orders.count]" />
           <set_value name="$mwtrace_file" exact="'lifecycle'" />
           <include_interrupt_actions ref="MWEX_Fleet_trace" />
@@ -25,6 +27,8 @@
         <do_if value="@global.$mwexDebug">
           <do_if value="@global.$mwexDebug">
             <set_value name="$mwtrace_diagnostic" exact="table[$ship=$ship,$attempt=null,$relaxed=false]" />
+            <set_value name="$mwtrace_event" exact="'RETURN_POLL'" />
+            <set_value name="$mwtrace_fields" exact="'ship,token,lastSearchAgo'" />
             <set_value name="$mwtrace_text" exact="'RETURN_POLL ship=%s token=%s lastSearchAgo=%s'.[$ship.idcode,$returnToken,player.age-(if $ship.pilot.$mwexFleetLastSearch? then $ship.pilot.$mwexFleetLastSearch else $returnStarted)]" />
             <set_value name="$mwtrace_file" exact="'lifecycle'" />
             <include_interrupt_actions ref="MWEX_Fleet_trace" />
@@ -104,6 +108,8 @@
       <do_if value="@global.$mwexDebug">
         <do_if value="@global.$mwexDebug">
           <set_value name="$mwtrace_diagnostic" exact="table[$ship=$ship,$attempt=null,$relaxed=false]" />
+          <set_value name="$mwtrace_event" exact="'RETURN_HOME'" />
+          <set_value name="$mwtrace_fields" exact="'ship,home,token'" />
           <set_value name="$mwtrace_text" exact="'RETURN_HOME ship=%s home=%s token=%s'.[$ship.idcode,$home,$returnToken]" />
           <set_value name="$mwtrace_file" exact="'lifecycle'" />
           <include_interrupt_actions ref="MWEX_Fleet_trace" />
@@ -125,6 +131,8 @@
       <label name="finish" />
       <do_if value="@global.$mwexDebug">
         <set_value name="$mwtrace_diagnostic" exact="table[$ship=$ship,$attempt=null,$relaxed=false]" />
+        <set_value name="$mwtrace_event" exact="'RETURN_END'" />
+        <set_value name="$mwtrace_fields" exact="'token,sector,zone,orders,homeExists,reason'" />
         <set_value name="$mwtrace_text" exact="'RETURN_END token=%s sector=%s zone=%s orders=%s homeExists=%s reason=move_returned_or_interrupted'.[$returnToken,$ship.sector,$ship.zone,$ship.orders.count,@$home.exists]" />
         <set_value name="$mwtrace_file" exact="'lifecycle'" />
         <include_interrupt_actions ref="MWEX_Fleet_trace" />

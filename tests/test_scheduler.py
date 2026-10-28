@@ -9,6 +9,33 @@ if 'XMLDispatchChecks' not in globals():
 class SchedulerChecks(unittest.TestCase):
     setup_market = XMLDispatchChecks.setup_market
 
+    def test_wait_snapshot_controls_threshold_even_if_blackboard_changes(self):
+        for debug in (False,True):
+            for age,threshold,has_plan in ((0,75,False),(120,50,False),(300,25,True),(360,25,True)):
+                e,h,f,hub=self.setup_market([40],[100]);ship,cfg=f[0]
+                cfg['minCargoUsed']=75;e.global_['mwexDebug']=debug;e.player['age']=1000
+                ship['pilot']['mwexFleetAttempt']=Obj(waitingSince=999,misses=0)
+                result=e.runner.script('mule.fleet.plan',dict(hub=hub,cfg=cfg,relaxed=False,inputWaitAge=age,inputWaitingSince=1000-age))
+                self.assertEqual(result['diagnostic']['waitAge'],age)
+                self.assertEqual(result['diagnostic']['minLoad'],threshold)
+                self.assertEqual(bool(result['plan']),has_plan)
+
+    def test_candidate_batches_survive_integer_division_semantics(self):
+        e,h,f,hub=self.setup_market([20]*80,[100]);ship,cfg=f[0]
+        for source in e.sources:source['unitprice']=200
+        actual=e.runner.action;evaluate=e.runner.ev;yield_checks=[]
+        def integer_checks(node,local):
+            # Native integer division stress mode, narrowly scoped to the old batch condition.
+            if node[0]=='binary' and node[1]=='/' and node[2]==('var','$checks'):
+                return int(evaluate(node[2],local)/evaluate(node[3],local))
+            return evaluate(node,local)
+        def capture(node,local):
+            if node.tag=='wait' and local.get('diagnostic',{}).get('phase')=='candidates':yield_checks.append(local['checks'])
+            return actual(node,local)
+        e.runner.ev=integer_checks;e.runner.action=capture
+        self.plan(e,hub,cfg)
+        self.assertEqual(yield_checks,[16,32,48,64,80])
+
     def wave(self,e,hub,ship,cfg):
         e.player['age']+=31
         e.roots['this']=ship['pilot'];ship['pilot']['ship']=ship
@@ -402,7 +429,7 @@ class SchedulerChecks(unittest.TestCase):
         self.assertEqual(r['diagnostic']['pool'],1);self.assertEqual(r['plan'],[])
         self.assertEqual(len(r['diagnostic']['draft']),1)
         self.assertIs(r['diagnostic']['draft'][0]['ware'],e.wares[0])
-        self.assertFalse(any(' CANDIDATE ' in x['text'] and 'accepted=True' in x['text'] and not x['text'].endswith('reason=ok') for x in e.disk_logs))
+        self.assertFalse(any(' CANDIDATE ' in x['text'] and 'accepted=True' in x['text'] and 'reason=ok' not in x['text'].split() for x in e.disk_logs))
 
     def test_normal_order_preemption_after_commit_cannot_skip_success_finalization(self):
         e,h,f,hub=self.setup_market([50,40],[100]);s,c=f[0];e.global_['mwexDebug']=True

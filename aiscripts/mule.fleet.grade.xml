@@ -1,10 +1,9 @@
-<?xml version="1.0" encoding="utf-8"?>
+<?xml version='1.0' encoding='utf-8'?>
 <aiscript name="mule.fleet.grade" version="1">
   <interrupts>
     <library>
       <actions name="MWEX_Fleet_grade">
         <!-- The validated pool is bounded at 192. No new trade queries or reservations. -->
-        <set_value name="$mwgrade_logSamples" exact="0" />
         <set_value name="$mwgrade_bands" exact="table[]" />
         <set_value name="$mwgrade_need" exact="table[]" />
         <set_value name="$mwgrade_groups" exact="table[]" />
@@ -100,10 +99,15 @@
           <set_value name="$mwgrade_c.$mainPreferred" exact="$mwgrade_relaxed or $mwgrade_target == $mwgrade_band.$own or ($mwgrade_band.$own gt $mwgrade_target and $mwgrade_groups.{$mwgrade_key}.$volume*100 ge $mwgrade_band.$refs.{$mwgrade_band.$own}*$mwgrade_minLoad)" />
           <set_value name="$mwgrade_c.$grade" exact="$mwgrade_target" />
           <set_value name="$mwgrade_c.$ownGrade" exact="$mwgrade_band.$own" />
-          <do_if value="@global.$mwexDebug and (@global.$mwexM4TraceCandidates or (not $mwgrade_c.$mainPreferred and $mwgrade_logSamples lt 3))">
-            <set_value name="$mwgrade_logSamples" exact="$mwgrade_logSamples+1" />
+          <do_if value="@global.$mwexDebug">
+            <set_value name="$mwgrade_diagnostic.$gradeTotal" exact="$mwgrade_diagnostic.$gradeTotal+1" />
+          </do_if>
+          <do_if value="@global.$mwexDebug">
+            <set_value name="$mwgrade_diagnostic.$gradeEmitted" exact="$mwgrade_diagnostic.$gradeEmitted+1" />
             <do_if value="@global.$mwexDebug">
               <set_value name="$mwtrace_diagnostic" exact="$mwgrade_diagnostic" />
+              <set_value name="$mwtrace_event" exact="'GRADE'" />
+              <set_value name="$mwtrace_fields" exact="'source,need,ware,shipBand,lotBand,refs,needVolume,receiverGroupVolume,minLoad,preferred,relaxed'" />
               <set_value name="$mwtrace_text" exact="'GRADE source=%s need=%s ware=%s shipBand=%s lotBand=%s refs=%s needVolume=%s receiverGroupVolume=%s minLoad=%s preferred=%s relaxed=%s'.[$mwgrade_c.$source,$mwgrade_c.$need,$mwgrade_c.$ware,$mwgrade_c.$ownGrade,$mwgrade_c.$grade,$mwgrade_band.$refs,$mwgrade_volume,$mwgrade_groups.{$mwgrade_key}.$volume,$mwgrade_minLoad,$mwgrade_c.$mainPreferred,$mwgrade_relaxed]" />
               <set_value name="$mwtrace_file" exact="'search'" />
               <include_interrupt_actions ref="MWEX_Fleet_trace" />

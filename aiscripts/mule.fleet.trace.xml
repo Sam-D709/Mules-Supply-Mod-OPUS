@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+<?xml version='1.0' encoding='utf-8'?>
 <aiscript name="mule.fleet.trace" version="4">
   <params>
     <param name="diagnostic" />
@@ -6,16 +6,138 @@
   </params>
   <interrupts>
     <library>
+      <actions name="MWEX_Fleet_count">
+        <set_value name="$mwcounter_bucket" exact="if $mwcounter_kind == 'candidate' then $mwcounter_diagnostic.$rejectCounts else $mwcounter_diagnostic.$prefilterCounts" />
+        <set_value name="$mwcounter_found" exact="false" />
+        <do_for_each name="$mwcounter_entry" in="$mwcounter_bucket">
+          <do_if value="$mwcounter_entry.$code == $mwcounter_code">
+            <set_value name="$mwcounter_entry.$count" operation="add" exact="1" />
+            <set_value name="$mwcounter_found" exact="true" />
+            <break />
+          </do_if>
+        </do_for_each>
+        <do_if value="not $mwcounter_found">
+          <append_to_list name="$mwcounter_bucket" exact="table[$code=$mwcounter_code,$count=1]" />
+        </do_if>
+        <do_if value="$mwcounter_kind == 'candidate'">
+          <set_value name="$mwcounter_diagnostic.$candidateTotal" operation="add" exact="1" />
+          <set_value name="$mwcounter_diagnostic.$checks" exact="$mwcounter_diagnostic.$candidateTotal" />
+        </do_if>
+        <do_else>
+          <set_value name="$mwcounter_diagnostic.$prefilterTotal" operation="add" exact="1" />
+        </do_else>
+      </actions>
+      <actions name="MWEX_Fleet_phase">
+        <set_value name="$mwlog_ship" exact="$mwphase_diagnostic.$ship" />
+        <set_value name="$mwlog_attempt" exact="$mwphase_diagnostic.$attempt" />
+        <set_value name="$mwlog_voyage" exact="@$mwphase_diagnostic.$voyage" />
+        <set_value name="$mwlog_file" exact="'search'" />
+        <set_value name="$mwlog_event" exact="'PHASE_TIME'" />
+        <set_value name="$mwlog_fields" exact="'phase,started,ended,elapsed,yieldCount,yieldGameWait,checks'" />
+        <set_value name="$mwlog_input" exact="'format_PHASE_TIME'" />
+        <set_value name="$mwlog_text" exact="'PHASE_TIME phase=%s started=%s ended=%s elapsed=%s yieldCount=%s yieldGameWait=%s checks=%s'.[$mwphase_diagnostic.$phase,$mwphase_diagnostic.$phaseStarted,player.age,player.age-$mwphase_diagnostic.$phaseStarted,$mwphase_diagnostic.$yieldCount,$mwphase_diagnostic.$yieldGameWait,@$mwphase_diagnostic.$checks]" />
+        <include_interrupt_actions ref="MWEX_Log_emit" />
+        <set_value name="$mwphase_diagnostic.$phaseStarted" exact="player.age" />
+      </actions>
+      <actions name="MWEX_Fleet_counts">
+        <do_if value="@global.$mwexDebug and $mwtrace_diagnostic and not @$mwtrace_diagnostic.$countsLogged">
+          <do_if value="not $mwtrace_diagnostic.$gradeEmitted?">
+            <set_value name="$mwtrace_diagnostic.$gradeEmitted" exact="0" />
+          </do_if>
+          <do_if value="not $mwtrace_diagnostic.$gradeTotal?">
+            <set_value name="$mwtrace_diagnostic.$gradeTotal" exact="0" />
+          </do_if>
+          <do_if value="not $mwtrace_diagnostic.$refreshEmitted?">
+            <set_value name="$mwtrace_diagnostic.$refreshEmitted" exact="0" />
+          </do_if>
+          <do_if value="not $mwtrace_diagnostic.$refreshTotal?">
+            <set_value name="$mwtrace_diagnostic.$refreshTotal" exact="0" />
+          </do_if>
+          <do_if value="not $mwtrace_diagnostic.$prefilterEmitted?">
+            <set_value name="$mwtrace_diagnostic.$prefilterEmitted" exact="0" />
+          </do_if>
+          <do_if value="not $mwtrace_diagnostic.$candidateEmitted?">
+            <set_value name="$mwtrace_diagnostic.$candidateEmitted" exact="0" />
+          </do_if>
+          <do_if value="not $mwtrace_diagnostic.$countsComplete?">
+            <set_value name="$mwtrace_diagnostic.$countsComplete" exact="false" />
+          </do_if>
+          <set_value name="$mwlog_ship" exact="@$mwtrace_diagnostic.$ship" />
+          <set_value name="$mwlog_attempt" exact="@$mwtrace_diagnostic.$attempt" />
+          <set_value name="$mwlog_voyage" exact="@$mwtrace_diagnostic.$voyage" />
+          <set_value name="$mwlog_file" exact="'search'" />
+          <set_value name="$mwcount_candidates" exact="0" />
+          <set_value name="$mwcount_prefilters" exact="0" />
+          <do_if value="$mwtrace_diagnostic.$rejectCounts?">
+            <do_for_each name="$mwcount_entry" in="$mwtrace_diagnostic.$rejectCounts">
+              <set_value name="$mwcount_value" exact="$mwcount_entry.$count" />
+              <set_value name="$mwcount_candidates" operation="add" exact="$mwcount_value" />
+              <set_value name="$mwlog_event" exact="'CANDIDATE_COUNTS'" />
+              <set_value name="$mwlog_fields" exact="'code,count,complete'" />
+              <set_value name="$mwlog_input" exact="'format_CANDIDATE_COUNTS'" />
+              <set_value name="$mwlog_text" exact="'CANDIDATE_COUNTS code=%s count=%s complete=%s'.[$mwcount_entry.$code,$mwcount_value,@$mwtrace_diagnostic.$countsComplete]" />
+              <include_interrupt_actions ref="MWEX_Log_emit" />
+            </do_for_each>
+          </do_if>
+          <do_if value="$mwtrace_diagnostic.$prefilterCounts?">
+            <do_for_each name="$mwcount_entry" in="$mwtrace_diagnostic.$prefilterCounts">
+              <set_value name="$mwcount_value" exact="$mwcount_entry.$count" />
+              <set_value name="$mwcount_prefilters" operation="add" exact="$mwcount_value" />
+              <set_value name="$mwlog_event" exact="'PREFILTER_COUNTS'" />
+              <set_value name="$mwlog_fields" exact="'code,count,complete'" />
+              <set_value name="$mwlog_input" exact="'format_PREFILTER_COUNTS'" />
+              <set_value name="$mwlog_text" exact="'PREFILTER_COUNTS code=%s count=%s complete=%s'.[$mwcount_entry.$code,$mwcount_value,@$mwtrace_diagnostic.$countsComplete]" />
+              <include_interrupt_actions ref="MWEX_Log_emit" />
+            </do_for_each>
+          </do_if>
+          <do_all exact="1">
+            <set_value name="$mwcount_valid" exact="$mwcount_candidates == @$mwtrace_diagnostic.$candidateTotal and $mwcount_prefilters == @$mwtrace_diagnostic.$prefilterTotal and $mwcount_candidates == @$mwtrace_diagnostic.$candidateEmitted and $mwcount_prefilters == @$mwtrace_diagnostic.$prefilterEmitted and @$mwtrace_diagnostic.$refreshTotal == @$mwtrace_diagnostic.$refreshEmitted and @$mwtrace_diagnostic.$gradeTotal == @$mwtrace_diagnostic.$gradeEmitted" />
+            <set_value name="$mwcount_sessionComplete" exact="@$mwtrace_diagnostic.$logSession == @global.$mwexM4Log" />
+            <do_if value="$mwcount_sessionComplete and $mwcount_candidates != @$mwtrace_diagnostic.$checks">
+              <set_value name="$mwcount_valid" exact="false" />
+            </do_if>
+            <do_if value="not $mwcount_valid">
+              <set_value name="$mwlog_text" exact="'LOGGER_ERROR reason=counter_mismatch candidates=%s candidateTotal=%s candidateEmitted=%s checks=%s prefilters=%s prefilterTotal=%s prefilterEmitted=%s'.[$mwcount_candidates,@$mwtrace_diagnostic.$candidateTotal,@$mwtrace_diagnostic.$candidateEmitted,@$mwtrace_diagnostic.$checks,$mwcount_prefilters,@$mwtrace_diagnostic.$prefilterTotal,@$mwtrace_diagnostic.$prefilterEmitted]" />
+              <include_interrupt_actions ref="MWEX_Log_emit" />
+            </do_if>
+          </do_all>
+          <set_value name="$mwlog_event" exact="'COUNTS_SUMMARY'" />
+          <set_value name="$mwlog_fields" exact="'detailScope,failureScope,complete,countsValid,detailBodiesComplete,logTextFailures,sessionComplete,candidates,candidateEmitted,candidateSuppressed,prefilters,prefilterEmitted,prefilterSuppressed,refresh,refreshEmitted,refreshSuppressed,grades,gradeEmitted,gradeSuppressed'" />
+          <set_value name="$mwlog_input" exact="'format_COUNTS_SUMMARY'" />
+          <set_value name="$mwlog_text" exact="'COUNTS_SUMMARY detailScope=planner_enumeration failureScope=through_summary complete=%s countsValid=%s detailBodiesComplete=%s logTextFailures=%s sessionComplete=%s candidates=%s candidateEmitted=%s candidateSuppressed=%s prefilters=%s prefilterEmitted=%s prefilterSuppressed=%s refresh=%s refreshEmitted=%s refreshSuppressed=%s grades=%s gradeEmitted=%s gradeSuppressed=%s'.[@$mwtrace_diagnostic.$countsComplete,$mwcount_valid,$mwcount_sessionComplete and $mwcount_valid and $mwtrace_diagnostic.$countsComplete and @$mwtrace_diagnostic.$logTextFailures == 0,@$mwtrace_diagnostic.$logTextFailures,$mwcount_sessionComplete,$mwcount_candidates,@$mwtrace_diagnostic.$candidateEmitted,$mwcount_candidates-@$mwtrace_diagnostic.$candidateEmitted,$mwcount_prefilters,@$mwtrace_diagnostic.$prefilterEmitted,$mwcount_prefilters-@$mwtrace_diagnostic.$prefilterEmitted,@$mwtrace_diagnostic.$refreshTotal,@$mwtrace_diagnostic.$refreshEmitted,@$mwtrace_diagnostic.$refreshTotal-@$mwtrace_diagnostic.$refreshEmitted,@$mwtrace_diagnostic.$gradeTotal,@$mwtrace_diagnostic.$gradeEmitted,@$mwtrace_diagnostic.$gradeTotal-@$mwtrace_diagnostic.$gradeEmitted]" />
+          <include_interrupt_actions ref="MWEX_Log_emit" />
+          <set_value name="$mwtrace_diagnostic.$countsLogged" exact="true" />
+        </do_if>
+      </actions>
       <actions name="MWEX_Fleet_trace">
-        <!--Non-blocking. Inputs and outputs use a library-specific prefix; reset outputs on EVERY invocation.-->
-        <!-- Callers also guard formatting. Never retain a list of candidate strings. -->
         <do_if value="@global.$mwexDebug">
+          <set_value name="$mwtrace_lastTextValid" exact="$mwtrace_text != null" />
+          <do_if value="$mwtrace_text == null">
+            <do_if value="$mwtrace_diagnostic">
+              <do_if value="not @$mwtrace_diagnostic.$logTextFailures?">
+                <set_value name="$mwtrace_diagnostic.$logTextFailures" exact="0" />
+              </do_if>
+              <set_value name="$mwtrace_diagnostic.$logTextFailures" exact="@$mwtrace_diagnostic.$logTextFailures+1" />
+            </do_if>
+            <set_value name="$mwtrace_text" exact="'LOGGER_ERROR reason=trace_text_unavailable stream=%s event=%s field=mwtrace_text fields=%s input=event_format rawBuyCt=%s rawSellCt=%s'.[if $mwtrace_file? then $mwtrace_file else 'file_context_not_set',if $mwtrace_event? then $mwtrace_event else 'MWEX_Fleet_trace',if $mwtrace_fields? then $mwtrace_fields else 'field_context_not_set',@$mwtrace_raw_buy_ct,@$mwtrace_raw_sell_ct]" />
+          </do_if>
+          <do_if value="$mwtrace_diagnostic and @$mwtrace_diagnostic.$logClosed and not @$mwtrace_diagnostic.$countsLogged">
+            <include_interrupt_actions ref="MWEX_Fleet_counts" />
+          </do_if>
           <set_value name="$mwlog_ship" exact="@$mwtrace_diagnostic.$ship" />
           <set_value name="$mwlog_attempt" exact="@$mwtrace_diagnostic.$attempt" />
           <set_value name="$mwlog_voyage" exact="@$mwtrace_diagnostic.$voyage" />
           <set_value name="$mwlog_file" exact="if $mwtrace_file? then $mwtrace_file else 'lifecycle'" />
-          <set_value name="$mwlog_text" exact="'relaxed=%s %s'.[@$mwtrace_diagnostic.$relaxed,$mwtrace_text]" />
+          <set_value name="$mwlog_event" exact="if $mwtrace_event? then $mwtrace_event else 'MWEX_Fleet_trace'" />
+          <set_value name="$mwlog_fields" exact="if $mwtrace_fields? then $mwtrace_fields else 'mwtrace_text'" />
+          <set_value name="$mwlog_input" exact="if $mwtrace_text == null then 'event_format' else 'trace_envelope'" />
+          <set_value name="$mwlog_raw_amount_ct" exact="@$mwtrace_raw_buy_ct" />
+          <set_value name="$mwlog_text" exact="'%s relaxed=%s'.[$mwtrace_text,@$mwtrace_diagnostic.$relaxed]" />
           <include_interrupt_actions ref="MWEX_Log_emit" />
+          <remove_value name="$mwtrace_event" />
+          <remove_value name="$mwtrace_fields" />
+          <remove_value name="$mwtrace_raw_buy_ct" />
+          <remove_value name="$mwtrace_raw_sell_ct" />
         </do_if>
       </actions>
     </library>
@@ -28,7 +150,6 @@
   </patch>
   <attention min="unknown">
     <actions>
-      <!--Compatibility entry for saved calls and direct tools; live dispatch uses the action library.-->
       <set_value name="$mwtrace_diagnostic" exact="$diagnostic" />
       <set_value name="$mwtrace_text" exact="$text" />
       <set_value name="$mwtrace_file" exact="'lifecycle'" />

@@ -1,5 +1,5 @@
-<?xml version="1.0" encoding="utf-8"?>
-<aiscript name="mule.fleet.plan" version="13">
+<?xml version='1.0' encoding='utf-8'?>
+<aiscript name="mule.fleet.plan" version="20">
   <params>
     <param name="hub" />
     <param name="cfg" />
@@ -7,6 +7,8 @@
     <param name="debugWait" default="null" />
     <param name="debugWaitingSince" default="null" />
     <param name="debugWave" default="null" />
+    <param name="inputWaitAge" default="null" />
+    <param name="inputWaitingSince" default="null" />
   </params>
   <patch sinceversion="12">
     <return>
@@ -35,15 +37,74 @@
       <retval name="diagnostic" value="null" />
     </return>
   </patch>
+  <patch sinceversion="14">
+    <return>
+      <retval name="plan" value="[]" />
+      <retval name="failure" value="'ship_changed'" />
+      <retval name="diagnostic" value="null" />
+    </return>
+  </patch>
+  <patch sinceversion="15">
+    <return>
+      <retval name="plan" value="[]" />
+      <retval name="failure" value="'ship_changed'" />
+      <retval name="diagnostic" value="null" />
+    </return>
+  </patch>
+  <patch sinceversion="20">
+    <return>
+      <retval name="plan" value="[]" />
+      <retval name="failure" value="'ship_changed'" />
+      <retval name="diagnostic" value="null" />
+    </return>
+  </patch>
+  <patch sinceversion="19">
+    <return>
+      <retval name="plan" value="[]" />
+      <retval name="failure" value="'ship_changed'" />
+      <retval name="diagnostic" value="null" />
+    </return>
+  </patch>
+  <patch sinceversion="18">
+    <return>
+      <retval name="plan" value="[]" />
+      <retval name="failure" value="'ship_changed'" />
+      <retval name="diagnostic" value="null" />
+    </return>
+  </patch>
+  <patch sinceversion="17">
+    <return>
+      <retval name="plan" value="[]" />
+      <retval name="failure" value="'ship_changed'" />
+      <retval name="diagnostic" value="null" />
+    </return>
+  </patch>
+  <patch sinceversion="16">
+    <return>
+      <retval name="plan" value="[]" />
+      <retval name="failure" value="'ship_changed'" />
+      <retval name="diagnostic" value="null" />
+    </return>
+  </patch>
   <attention min="unknown">
     <actions>
-      <set_value name="$diagnostic" exact="table[$ship=$cfg.$ship,$relaxed=$relaxed,$price=0,$range=0,$route=0,$other=0,$checks=0,$lots=0,$volume=0,$capacity=0,$minGap=2147483647,$minExtra=2147483647,$loadRejected=false,$budgetExhausted=false,$expanded=0,$secondaryChecks=0,$secondaryAdded=0,$pool=0,$candidateBudget=false,$routeBudget=false,$noSource=0,$commitFailed=false,$lastFailure=null,$stop=0,$draft=[],$recorded=false,$rejectCounts=table[],$prefilterCounts=table[],$acceptedCandidates=0,$inputWait=$debugWait,$inputWaitingSince=$debugWaitingSince,$wave=$debugWave,$phase='prefilter',$logClosed=false]" />
+      <set_value name="$diagnostic" exact="table[$ship=$cfg.$ship,$relaxed=$relaxed,$price=0,$range=0,$route=0,$other=0,$checks=0,$lots=0,$volume=0,$capacity=0,$minGap=2147483647,$minExtra=2147483647,$loadRejected=false,$budgetExhausted=false,$expanded=0,$secondaryChecks=0,$secondaryAdded=0,$pool=0,$candidateBudget=false,$routeBudget=false,$noSource=0,$commitFailed=false,$lastFailure=null,$stop=0,$draft=[],$recorded=false,$rejectCounts=[],$prefilterCounts=[],$counterSchema=4,$candidateTotal=0,$prefilterTotal=0,$yieldCount=0,$yieldGameWait=0s,$yieldMaxGap=0s,$yieldPending=false,$phaseStarted=player.age,$acceptedCandidates=0,$inputWait=$debugWait,$inputWaitingSince=$debugWaitingSince,$wave=$debugWave,$phase='prefilter',$logClosed=false,$countsComplete=false,$countsLogged=false,$candidateEmitted=0,$prefilterEmitted=0,$refreshTotal=0,$refreshEmitted=0,$gradeTotal=0,$gradeEmitted=0,$logTextFailures=0]" />
       <set_value name="$ship" exact="$cfg.$ship" />
       <set_value name="$home" exact="$cfg.$home" />
       <set_value name="$waitAge" exact="0s" />
-      <do_if value="@$ship.pilot.$mwexFleetAttempt.$waitingSince? and @$ship.pilot.$mwexFleetAttempt.$waitingSince != null">
-        <set_value name="$waitAge" exact="[0s,player.age-$ship.pilot.$mwexFleetAttempt.$waitingSince].max" />
+      <do_if value="$inputWaitAge != null">
+        <set_value name="$waitAge" exact="[0s,$inputWaitAge].max" />
       </do_if>
+      <do_else>
+        <set_value name="$waitRecord" exact="@$ship.pilot.$mwexFleetAttempt" />
+        <do_if value="$waitRecord">
+          <do_if value="$waitRecord.$waitingSince?">
+            <do_if value="$waitRecord.$waitingSince != null">
+              <set_value name="$waitAge" exact="[0s,player.age-$waitRecord.$waitingSince].max" />
+            </do_if>
+          </do_if>
+        </do_if>
+      </do_else>
       <set_value name="$minLoad" exact="if $relaxed then 0 else if $waitAge ge 5min then [$cfg.$minCargoUsed,25].min else if $waitAge ge 2min then [$cfg.$minCargoUsed,50].min else $cfg.$minCargoUsed" />
       <set_value name="$diagnostic.$minLoad" exact="$minLoad" />
       <set_value name="$diagnostic.$waitAge" exact="$waitAge" />
@@ -61,24 +122,48 @@
         <do_if value="$ship.pilot.$mwexM4Search? and not @$ship.pilot.$mwexM4Search.$logClosed">
           <do_if value="@global.$mwexDebug">
             <set_value name="$mwtrace_diagnostic" exact="$diagnostic" />
-            <set_value name="$mwtrace_text" exact="'SEARCH_OVERLAP previousAttempt=%s previousPhase=%s previousActorAlive=%s previousProgressAt=%s previousChecks=%s previousExpanded=%s conclusion=overlap_not_proof_of_abort'.[@$ship.pilot.$mwexM4Search.$attempt,@$ship.pilot.$mwexM4Search.$phase,@$ship.pilot.$mwexM4Search.$actor.exists,@$ship.pilot.$mwexM4Search.$progressAt,@$ship.pilot.$mwexM4Search.$checks,@$ship.pilot.$mwexM4Search.$expanded]" />
+            <set_value name="$mwtrace_event" exact="'SEARCH_OVERLAP'" />
+            <set_value name="$mwtrace_fields" exact="'previousAttempt,previousPhase,previousObjectExists,previousProgressAt,previousChecks,previousExpanded,conclusion'" />
+            <set_value name="$mwtrace_text" exact="'SEARCH_OVERLAP previousAttempt=%s previousPhase=%s previousObjectExists=%s previousProgressAt=%s previousChecks=%s previousExpanded=%s conclusion=overlap_not_proof_of_abort'.[@$ship.pilot.$mwexM4Search.$attempt,@$ship.pilot.$mwexM4Search.$phase,@$ship.pilot.$mwexM4Search.$actor.exists,@$ship.pilot.$mwexM4Search.$progressAt,@$ship.pilot.$mwexM4Search.$checks,@$ship.pilot.$mwexM4Search.$expanded]" />
             <set_value name="$mwtrace_file" exact="'lifecycle'" />
             <include_interrupt_actions ref="MWEX_Fleet_trace" />
           </do_if>
         </do_if>
         <set_value name="$diagnostic.$actor" exact="this" />
+        <set_value name="$diagnostic.$logSession" exact="@global.$mwexM4Log" />
         <set_value name="$diagnostic.$progressAt" exact="player.age" />
         <set_value name="$ship.pilot.$mwexM4Search" exact="$diagnostic" />
       </do_if>
       <set_value name="$diagnostic.$started" exact="player.age" />
       <do_if value="@global.$mwexDebug">
         <set_value name="$mwtrace_diagnostic" exact="$diagnostic" />
-        <set_value name="$mwtrace_text" exact="'BEGIN build=beta.8 strategy=beta.7 home=%s minLoad=%s maxLots=%s maxJumps=%s corridor=%s preferOwned=%s wide=%s needOffset=%s sourceOffset=%s stockThreshold=%s allowAI=%s dedicated=%s corridorMarkup=%s'.[$home,$minLoad,$cfg.$maxTrades,$cfg.$maxDist,$cfg.$corridorDepth,$cfg.$allowPlayerSuppliers,@$ship.pilot.$mwexFleetSearchWide,@$ship.pilot.$mwexFleetNeedOffset,@$ship.pilot.$mwexFleetSearchOffset,$cfg.$playerStockThreshold,$cfg.$allowAiSuppliers,$cfg.$dedicatedServe,$cfg.$corridorMarkup]" />
+        <set_value name="$mwtrace_event" exact="'BEGIN'" />
+        <set_value name="$mwtrace_fields" exact="'mod,schema,strategy,home,minLoad,maxLots,maxJumps,corridor,sourceRanking,retiredPreferOwned,wide,needOffset,sourceOffset,stockPolicy,allowAI,supplierPolicy,dedicated,corridorMarkup'" />
+        <set_value name="$mwtrace_text" exact="'BEGIN mod=0.1.0-beta.20 schema=9 strategy=beta.19 home=%s minLoad=%s maxLots=%s maxJumps=%s corridor=%s sourceRanking=ownership_neutral retiredPreferOwned=%s wide=%s needOffset=%s sourceOffset=%s stockPolicy=native_sell_offer allowAI=%s supplierPolicy=all_native_eligible dedicated=%s corridorMarkup=%s'.[$home,$minLoad,$cfg.$maxTrades,$cfg.$maxDist,$cfg.$corridorDepth,false,@$ship.pilot.$mwexFleetSearchWide,@$ship.pilot.$mwexFleetNeedOffset,@$ship.pilot.$mwexFleetSearchOffset,true,$cfg.$dedicatedServe,$cfg.$corridorMarkup]" />
         <set_value name="$mwtrace_file" exact="'lifecycle'" />
         <include_interrupt_actions ref="MWEX_Fleet_trace" />
         <do_if value="@global.$mwexDebug">
           <set_value name="$mwtrace_diagnostic" exact="$diagnostic" />
-          <set_value name="$mwtrace_text" exact="'WAIT_INPUT waveWait=%s waveWaitingSince=%s planWait=%s planWaitingSince=%s presentExpression=%s failures=%s misses=%s configuredMinLoad=%s effectiveMinLoad=%s relaxed=%s gradeRelaxed=%s'.[$debugWait,$debugWaitingSince,$waitAge,@$ship.pilot.$mwexFleetAttempt.$waitingSince,@$ship.pilot.$mwexFleetAttempt.$waitingSince?,@$ship.pilot.$mwexFleetAttempt.$failures,@$ship.pilot.$mwexFleetAttempt.$misses,$cfg.$minCargoUsed,$minLoad,$relaxed,$gradeRelaxed]" />
+          <set_value name="$mwlog_waitPresent" exact="false" />
+          <set_value name="$mwlog_waitSince" exact="'unknown'" />
+          <set_value name="$mwlog_waitFailures" exact="'unknown'" />
+          <set_value name="$mwlog_waitMisses" exact="'unknown'" />
+          <do_if value="$ship.pilot.$mwexFleetAttempt?">
+            <set_value name="$mwlog_waitRecord" exact="$ship.pilot.$mwexFleetAttempt" />
+            <do_if value="$mwlog_waitRecord.$waitingSince?">
+              <set_value name="$mwlog_waitPresent" exact="true" />
+              <set_value name="$mwlog_waitSince" exact="$mwlog_waitRecord.$waitingSince" />
+            </do_if>
+            <do_if value="$mwlog_waitRecord.$failures?">
+              <set_value name="$mwlog_waitFailures" exact="$mwlog_waitRecord.$failures" />
+            </do_if>
+            <do_if value="$mwlog_waitRecord.$misses?">
+              <set_value name="$mwlog_waitMisses" exact="$mwlog_waitRecord.$misses" />
+            </do_if>
+          </do_if>
+          <set_value name="$mwtrace_event" exact="'WAIT_INPUT'" />
+          <set_value name="$mwtrace_fields" exact="'waveWait,inputWait,inputWaitingSince,waveWaitingSince,planWait,planWaitingSince,waitingSincePresent,failures,misses,configuredMinLoad,effectiveMinLoad,relaxed,gradeRelaxed'" />
+          <set_value name="$mwtrace_text" exact="'WAIT_INPUT waveWait=%s inputWait=%s inputWaitingSince=%s waveWaitingSince=%s planWait=%s planWaitingSince=%s waitingSincePresent=%s failures=%s misses=%s configuredMinLoad=%s effectiveMinLoad=%s relaxed=%s gradeRelaxed=%s'.[$debugWait,$inputWaitAge,$inputWaitingSince,$debugWaitingSince,$waitAge,$mwlog_waitSince,$mwlog_waitPresent,$mwlog_waitFailures,$mwlog_waitMisses,$cfg.$minCargoUsed,$minLoad,$relaxed,$gradeRelaxed]" />
           <set_value name="$mwtrace_file" exact="'lifecycle'" />
           <include_interrupt_actions ref="MWEX_Fleet_trace" />
         </do_if>
@@ -100,7 +185,26 @@
             <set_value name="$diagnostic.$checks" exact="if $checks? then $checks else 0" />
             <set_value name="$diagnostic.$needsVisited" exact="if $needStep? then $needStep else 0" />
           </do_if>
+          <do_if value="@global.$mwexDebug">
+            <set_value name="$diagnostic.$yieldPending" exact="true" />
+            <set_value name="$diagnostic.$yieldAt" exact="player.age" />
+            <set_value name="$diagnostic.$yieldWall" exact="player.systemtime.{'%Y-%m-%dT%H:%M:%S'}" />
+            <set_value name="$diagnostic.$yieldStage" exact="'prefilter'" />
+            <set_value name="$diagnostic.$yieldCount" operation="add" exact="1" />
+          </do_if>
           <wait exact="1ms" />
+          <do_if value="@global.$mwexDebug and @$diagnostic.$yieldPending">
+            <set_value name="$diagnostic.$yieldResumedAt" exact="player.age" />
+            <set_value name="$diagnostic.$yieldPending" exact="false" />
+            <set_value name="$diagnostic.$yieldGameWait" operation="add" exact="player.age-$diagnostic.$yieldAt" />
+            <set_value name="$diagnostic.$yieldMaxGap" exact="[$diagnostic.$yieldMaxGap,player.age-$diagnostic.$yieldAt].max" />
+            <set_value name="$mwtrace_diagnostic" exact="$diagnostic" />
+            <set_value name="$mwtrace_file" exact="'search'" />
+            <set_value name="$mwtrace_event" exact="'YIELD'" />
+            <set_value name="$mwtrace_fields" exact="'stage,count,requestedAt,resumedAt,gap,requestWall,resumeWall,checks'" />
+            <set_value name="$mwtrace_text" exact="'YIELD stage=%s count=%s requestedAt=%s resumedAt=%s gap=%s requestWall=%s resumeWall=%s checks=%s'.[$diagnostic.$yieldStage,$diagnostic.$yieldCount,$diagnostic.$yieldAt,player.age,player.age-$diagnostic.$yieldAt,$diagnostic.$yieldWall,player.systemtime.{'%Y-%m-%dT%H:%M:%S'},@$checks]" />
+            <include_interrupt_actions ref="MWEX_Fleet_trace" />
+          </do_if>
           <set_value name="$rankChecks" exact="0" />
         </do_if>
         <do_if value="not @$need.exists or $ship.cargo.{$need.ware}.max le 0">
@@ -110,14 +214,18 @@
             <set_value name="$prefilterCode" exact="if not @$need.exists then 'offer_missing' else 'cargo_incompatible'" />
           </do_if>
           <do_if value="@global.$mwexDebug">
-            <set_value name="$diagnostic.$prefilterCounts.{$prefilterCode}" exact="@$diagnostic.$prefilterCounts.{$prefilterCode}+1" />
+            <set_value name="$mwcounter_diagnostic" exact="$diagnostic" />
+            <set_value name="$mwcounter_kind" exact="'prefilter'" />
+            <set_value name="$mwcounter_code" exact="$prefilterCode" />
+            <include_interrupt_actions ref="MWEX_Fleet_count" />
           </do_if>
           <do_if value="@global.$mwexDebug">
-            <do_if value="@global.$mwexM4TraceCandidates or $diagnostic.$prefilterCounts.{$prefilterCode} le 2">
-              <set_value name="$mwtrace_text" exact="'PREFILTER code=%s need=%s ware=%s detail=%s'.[$prefilterCode,$need,@$need.ware,{61552,4376}]" />
-              <set_value name="$mwtrace_file" exact="'search'" />
-              <include_interrupt_actions ref="MWEX_Fleet_trace" />
-            </do_if>
+            <set_value name="$diagnostic.$prefilterEmitted" operation="add" exact="1" />
+            <set_value name="$mwtrace_event" exact="'PREFILTER'" />
+            <set_value name="$mwtrace_fields" exact="'code,need,ware,detail'" />
+            <set_value name="$mwtrace_text" exact="'PREFILTER code=%s need=%s ware=%s detail=%s'.[$prefilterCode,$need,@$need.ware,{61552,4376}]" />
+            <set_value name="$mwtrace_file" exact="'search'" />
+            <include_interrupt_actions ref="MWEX_Fleet_trace" />
           </do_if>
           <continue />
         </do_if>
@@ -128,14 +236,18 @@
             <set_value name="$prefilterCode" exact="'ware_not_selected'" />
           </do_if>
           <do_if value="@global.$mwexDebug">
-            <set_value name="$diagnostic.$prefilterCounts.{$prefilterCode}" exact="@$diagnostic.$prefilterCounts.{$prefilterCode}+1" />
+            <set_value name="$mwcounter_diagnostic" exact="$diagnostic" />
+            <set_value name="$mwcounter_kind" exact="'prefilter'" />
+            <set_value name="$mwcounter_code" exact="$prefilterCode" />
+            <include_interrupt_actions ref="MWEX_Fleet_count" />
           </do_if>
           <do_if value="@global.$mwexDebug">
-            <do_if value="@global.$mwexM4TraceCandidates or $diagnostic.$prefilterCounts.{$prefilterCode} le 2">
-              <set_value name="$mwtrace_text" exact="'PREFILTER code=%s need=%s ware=%s detail=%s'.[$prefilterCode,$need,@$need.ware,{61552,4361}.[$need.ware.name,$need.owner.knownname,{61552,4377}]]" />
-              <set_value name="$mwtrace_file" exact="'search'" />
-              <include_interrupt_actions ref="MWEX_Fleet_trace" />
-            </do_if>
+            <set_value name="$diagnostic.$prefilterEmitted" operation="add" exact="1" />
+            <set_value name="$mwtrace_event" exact="'PREFILTER'" />
+            <set_value name="$mwtrace_fields" exact="'code,need,ware,detail'" />
+            <set_value name="$mwtrace_text" exact="'PREFILTER code=%s need=%s ware=%s detail=%s'.[$prefilterCode,$need,@$need.ware,{61552,4361}.[$need.ware.name,$need.owner.knownname,{61552,4377}]]" />
+            <set_value name="$mwtrace_file" exact="'search'" />
+            <include_interrupt_actions ref="MWEX_Fleet_trace" />
           </do_if>
           <continue />
         </do_if>
@@ -154,14 +266,18 @@
             <set_value name="$prefilterCode" exact="'outside_dedicated_scope'" />
           </do_if>
           <do_if value="@global.$mwexDebug">
-            <set_value name="$diagnostic.$prefilterCounts.{$prefilterCode}" exact="@$diagnostic.$prefilterCounts.{$prefilterCode}+1" />
+            <set_value name="$mwcounter_diagnostic" exact="$diagnostic" />
+            <set_value name="$mwcounter_kind" exact="'prefilter'" />
+            <set_value name="$mwcounter_code" exact="$prefilterCode" />
+            <include_interrupt_actions ref="MWEX_Fleet_count" />
           </do_if>
           <do_if value="@global.$mwexDebug">
-            <do_if value="@global.$mwexM4TraceCandidates or $diagnostic.$prefilterCounts.{$prefilterCode} le 2">
-              <set_value name="$mwtrace_text" exact="'PREFILTER code=%s need=%s ware=%s detail=%s'.[$prefilterCode,$need,@$need.ware,{61552,4361}.[$need.ware.name,$need.owner.knownname,{61552,4378}]]" />
-              <set_value name="$mwtrace_file" exact="'search'" />
-              <include_interrupt_actions ref="MWEX_Fleet_trace" />
-            </do_if>
+            <set_value name="$diagnostic.$prefilterEmitted" operation="add" exact="1" />
+            <set_value name="$mwtrace_event" exact="'PREFILTER'" />
+            <set_value name="$mwtrace_fields" exact="'code,need,ware,detail'" />
+            <set_value name="$mwtrace_text" exact="'PREFILTER code=%s need=%s ware=%s detail=%s'.[$prefilterCode,$need,@$need.ware,{61552,4361}.[$need.ware.name,$need.owner.knownname,{61552,4378}]]" />
+            <set_value name="$mwtrace_file" exact="'search'" />
+            <include_interrupt_actions ref="MWEX_Fleet_trace" />
           </do_if>
           <continue />
         </do_if>
@@ -172,14 +288,18 @@
             <set_value name="$prefilterCode" exact="'outside_home_ownership'" />
           </do_if>
           <do_if value="@global.$mwexDebug">
-            <set_value name="$diagnostic.$prefilterCounts.{$prefilterCode}" exact="@$diagnostic.$prefilterCounts.{$prefilterCode}+1" />
+            <set_value name="$mwcounter_diagnostic" exact="$diagnostic" />
+            <set_value name="$mwcounter_kind" exact="'prefilter'" />
+            <set_value name="$mwcounter_code" exact="$prefilterCode" />
+            <include_interrupt_actions ref="MWEX_Fleet_count" />
           </do_if>
           <do_if value="@global.$mwexDebug">
-            <do_if value="@global.$mwexM4TraceCandidates or $diagnostic.$prefilterCounts.{$prefilterCode} le 2">
-              <set_value name="$mwtrace_text" exact="'PREFILTER code=%s need=%s ware=%s detail=%s'.[$prefilterCode,$need,@$need.ware,{61552,4361}.[$need.ware.name,$need.owner.knownname,{61552,4378}]]" />
-              <set_value name="$mwtrace_file" exact="'search'" />
-              <include_interrupt_actions ref="MWEX_Fleet_trace" />
-            </do_if>
+            <set_value name="$diagnostic.$prefilterEmitted" operation="add" exact="1" />
+            <set_value name="$mwtrace_event" exact="'PREFILTER'" />
+            <set_value name="$mwtrace_fields" exact="'code,need,ware,detail'" />
+            <set_value name="$mwtrace_text" exact="'PREFILTER code=%s need=%s ware=%s detail=%s'.[$prefilterCode,$need,@$need.ware,{61552,4361}.[$need.ware.name,$need.owner.knownname,{61552,4378}]]" />
+            <set_value name="$mwtrace_file" exact="'search'" />
+            <include_interrupt_actions ref="MWEX_Fleet_trace" />
           </do_if>
           <continue />
         </do_if>
@@ -190,14 +310,18 @@
             <set_value name="$prefilterCode" exact="'outside_home_ownership'" />
           </do_if>
           <do_if value="@global.$mwexDebug">
-            <set_value name="$diagnostic.$prefilterCounts.{$prefilterCode}" exact="@$diagnostic.$prefilterCounts.{$prefilterCode}+1" />
+            <set_value name="$mwcounter_diagnostic" exact="$diagnostic" />
+            <set_value name="$mwcounter_kind" exact="'prefilter'" />
+            <set_value name="$mwcounter_code" exact="$prefilterCode" />
+            <include_interrupt_actions ref="MWEX_Fleet_count" />
           </do_if>
           <do_if value="@global.$mwexDebug">
-            <do_if value="@global.$mwexM4TraceCandidates or $diagnostic.$prefilterCounts.{$prefilterCode} le 2">
-              <set_value name="$mwtrace_text" exact="'PREFILTER code=%s need=%s ware=%s detail=%s'.[$prefilterCode,$need,@$need.ware,{61552,4361}.[$need.ware.name,$need.owner.knownname,{61552,4378}]]" />
-              <set_value name="$mwtrace_file" exact="'search'" />
-              <include_interrupt_actions ref="MWEX_Fleet_trace" />
-            </do_if>
+            <set_value name="$diagnostic.$prefilterEmitted" operation="add" exact="1" />
+            <set_value name="$mwtrace_event" exact="'PREFILTER'" />
+            <set_value name="$mwtrace_fields" exact="'code,need,ware,detail'" />
+            <set_value name="$mwtrace_text" exact="'PREFILTER code=%s need=%s ware=%s detail=%s'.[$prefilterCode,$need,@$need.ware,{61552,4361}.[$need.ware.name,$need.owner.knownname,{61552,4378}]]" />
+            <set_value name="$mwtrace_file" exact="'search'" />
+            <include_interrupt_actions ref="MWEX_Fleet_trace" />
           </do_if>
           <continue />
         </do_if>
@@ -208,14 +332,18 @@
             <set_value name="$prefilterCode" exact="'outside_home_ownership'" />
           </do_if>
           <do_if value="@global.$mwexDebug">
-            <set_value name="$diagnostic.$prefilterCounts.{$prefilterCode}" exact="@$diagnostic.$prefilterCounts.{$prefilterCode}+1" />
+            <set_value name="$mwcounter_diagnostic" exact="$diagnostic" />
+            <set_value name="$mwcounter_kind" exact="'prefilter'" />
+            <set_value name="$mwcounter_code" exact="$prefilterCode" />
+            <include_interrupt_actions ref="MWEX_Fleet_count" />
           </do_if>
           <do_if value="@global.$mwexDebug">
-            <do_if value="@global.$mwexM4TraceCandidates or $diagnostic.$prefilterCounts.{$prefilterCode} le 2">
-              <set_value name="$mwtrace_text" exact="'PREFILTER code=%s need=%s ware=%s detail=%s'.[$prefilterCode,$need,@$need.ware,{61552,4361}.[$need.ware.name,$need.owner.knownname,{61552,4378}]]" />
-              <set_value name="$mwtrace_file" exact="'search'" />
-              <include_interrupt_actions ref="MWEX_Fleet_trace" />
-            </do_if>
+            <set_value name="$diagnostic.$prefilterEmitted" operation="add" exact="1" />
+            <set_value name="$mwtrace_event" exact="'PREFILTER'" />
+            <set_value name="$mwtrace_fields" exact="'code,need,ware,detail'" />
+            <set_value name="$mwtrace_text" exact="'PREFILTER code=%s need=%s ware=%s detail=%s'.[$prefilterCode,$need,@$need.ware,{61552,4361}.[$need.ware.name,$need.owner.knownname,{61552,4378}]]" />
+            <set_value name="$mwtrace_file" exact="'search'" />
+            <include_interrupt_actions ref="MWEX_Fleet_trace" />
           </do_if>
           <continue />
         </do_if>
@@ -228,14 +356,18 @@
               <set_value name="$prefilterCode" exact="'buildstorage_disabled'" />
             </do_if>
             <do_if value="@global.$mwexDebug">
-              <set_value name="$diagnostic.$prefilterCounts.{$prefilterCode}" exact="@$diagnostic.$prefilterCounts.{$prefilterCode}+1" />
+              <set_value name="$mwcounter_diagnostic" exact="$diagnostic" />
+              <set_value name="$mwcounter_kind" exact="'prefilter'" />
+              <set_value name="$mwcounter_code" exact="$prefilterCode" />
+              <include_interrupt_actions ref="MWEX_Fleet_count" />
             </do_if>
             <do_if value="@global.$mwexDebug">
-              <do_if value="@global.$mwexM4TraceCandidates or $diagnostic.$prefilterCounts.{$prefilterCode} le 2">
-                <set_value name="$mwtrace_text" exact="'PREFILTER code=%s need=%s ware=%s detail=%s'.[$prefilterCode,$need,@$need.ware,{61552,4361}.[$need.ware.name,$need.owner.knownname,{61552,4379}]]" />
-                <set_value name="$mwtrace_file" exact="'search'" />
-                <include_interrupt_actions ref="MWEX_Fleet_trace" />
-              </do_if>
+              <set_value name="$diagnostic.$prefilterEmitted" operation="add" exact="1" />
+              <set_value name="$mwtrace_event" exact="'PREFILTER'" />
+              <set_value name="$mwtrace_fields" exact="'code,need,ware,detail'" />
+              <set_value name="$mwtrace_text" exact="'PREFILTER code=%s need=%s ware=%s detail=%s'.[$prefilterCode,$need,@$need.ware,{61552,4361}.[$need.ware.name,$need.owner.knownname,{61552,4379}]]" />
+              <set_value name="$mwtrace_file" exact="'search'" />
+              <include_interrupt_actions ref="MWEX_Fleet_trace" />
             </do_if>
             <continue />
           </do_if>
@@ -252,14 +384,18 @@
                 <set_value name="$prefilterCode" exact="'resources_disabled'" />
               </do_if>
               <do_if value="@global.$mwexDebug">
-                <set_value name="$diagnostic.$prefilterCounts.{$prefilterCode}" exact="@$diagnostic.$prefilterCounts.{$prefilterCode}+1" />
+                <set_value name="$mwcounter_diagnostic" exact="$diagnostic" />
+                <set_value name="$mwcounter_kind" exact="'prefilter'" />
+                <set_value name="$mwcounter_code" exact="$prefilterCode" />
+                <include_interrupt_actions ref="MWEX_Fleet_count" />
               </do_if>
               <do_if value="@global.$mwexDebug">
-                <do_if value="@global.$mwexM4TraceCandidates or $diagnostic.$prefilterCounts.{$prefilterCode} le 2">
-                  <set_value name="$mwtrace_text" exact="'PREFILTER code=%s need=%s ware=%s detail=%s'.[$prefilterCode,$need,@$need.ware,{61552,4361}.[$need.ware.name,$need.owner.knownname,{61552,4379}]]" />
-                  <set_value name="$mwtrace_file" exact="'search'" />
-                  <include_interrupt_actions ref="MWEX_Fleet_trace" />
-                </do_if>
+                <set_value name="$diagnostic.$prefilterEmitted" operation="add" exact="1" />
+                <set_value name="$mwtrace_event" exact="'PREFILTER'" />
+                <set_value name="$mwtrace_fields" exact="'code,need,ware,detail'" />
+                <set_value name="$mwtrace_text" exact="'PREFILTER code=%s need=%s ware=%s detail=%s'.[$prefilterCode,$need,@$need.ware,{61552,4361}.[$need.ware.name,$need.owner.knownname,{61552,4379}]]" />
+                <set_value name="$mwtrace_file" exact="'search'" />
+                <include_interrupt_actions ref="MWEX_Fleet_trace" />
               </do_if>
               <continue />
             </do_if>
@@ -273,21 +409,24 @@
                 <set_value name="$prefilterCode" exact="'intermediates_disabled'" />
               </do_if>
               <do_if value="@global.$mwexDebug">
-                <set_value name="$diagnostic.$prefilterCounts.{$prefilterCode}" exact="@$diagnostic.$prefilterCounts.{$prefilterCode}+1" />
+                <set_value name="$mwcounter_diagnostic" exact="$diagnostic" />
+                <set_value name="$mwcounter_kind" exact="'prefilter'" />
+                <set_value name="$mwcounter_code" exact="$prefilterCode" />
+                <include_interrupt_actions ref="MWEX_Fleet_count" />
               </do_if>
               <do_if value="@global.$mwexDebug">
-                <do_if value="@global.$mwexM4TraceCandidates or $diagnostic.$prefilterCounts.{$prefilterCode} le 2">
-                  <set_value name="$mwtrace_text" exact="'PREFILTER code=%s need=%s ware=%s detail=%s'.[$prefilterCode,$need,@$need.ware,{61552,4361}.[$need.ware.name,$need.owner.knownname,{61552,4379}]]" />
-                  <set_value name="$mwtrace_file" exact="'search'" />
-                  <include_interrupt_actions ref="MWEX_Fleet_trace" />
-                </do_if>
+                <set_value name="$diagnostic.$prefilterEmitted" operation="add" exact="1" />
+                <set_value name="$mwtrace_event" exact="'PREFILTER'" />
+                <set_value name="$mwtrace_fields" exact="'code,need,ware,detail'" />
+                <set_value name="$mwtrace_text" exact="'PREFILTER code=%s need=%s ware=%s detail=%s'.[$prefilterCode,$need,@$need.ware,{61552,4361}.[$need.ware.name,$need.owner.knownname,{61552,4379}]]" />
+                <set_value name="$mwtrace_file" exact="'search'" />
+                <include_interrupt_actions ref="MWEX_Fleet_trace" />
               </do_if>
               <continue />
             </do_if>
             <set_value name="$category" exact="2" />
           </do_elseif>
           <do_else>
-            <!-- Trade-only stock is supplied from real buy offers, without a separate ware-class switch. -->
             <do_if value="$product or not $need.owner.tradewares.{$need.ware}.exists">
               <set_value name="$diagnostic.$other" operation="add" exact="1" />
               <do_if value="@global.$mwexDebug">
@@ -295,14 +434,18 @@
                 <set_value name="$prefilterCode" exact="'scope_or_category'" />
               </do_if>
               <do_if value="@global.$mwexDebug">
-                <set_value name="$diagnostic.$prefilterCounts.{$prefilterCode}" exact="@$diagnostic.$prefilterCounts.{$prefilterCode}+1" />
+                <set_value name="$mwcounter_diagnostic" exact="$diagnostic" />
+                <set_value name="$mwcounter_kind" exact="'prefilter'" />
+                <set_value name="$mwcounter_code" exact="$prefilterCode" />
+                <include_interrupt_actions ref="MWEX_Fleet_count" />
               </do_if>
               <do_if value="@global.$mwexDebug">
-                <do_if value="@global.$mwexM4TraceCandidates or $diagnostic.$prefilterCounts.{$prefilterCode} le 2">
-                  <set_value name="$mwtrace_text" exact="'PREFILTER code=%s need=%s ware=%s detail=%s'.[$prefilterCode,$need,@$need.ware,{61552,4361}.[$need.ware.name,$need.owner.knownname,{61552,4379}]]" />
-                  <set_value name="$mwtrace_file" exact="'search'" />
-                  <include_interrupt_actions ref="MWEX_Fleet_trace" />
-                </do_if>
+                <set_value name="$diagnostic.$prefilterEmitted" operation="add" exact="1" />
+                <set_value name="$mwtrace_event" exact="'PREFILTER'" />
+                <set_value name="$mwtrace_fields" exact="'code,need,ware,detail'" />
+                <set_value name="$mwtrace_text" exact="'PREFILTER code=%s need=%s ware=%s detail=%s'.[$prefilterCode,$need,@$need.ware,{61552,4361}.[$need.ware.name,$need.owner.knownname,{61552,4379}]]" />
+                <set_value name="$mwtrace_file" exact="'search'" />
+                <include_interrupt_actions ref="MWEX_Fleet_trace" />
               </do_if>
               <continue />
             </do_if>
@@ -314,15 +457,22 @@
         </do_if>
         <append_to_list name="$ranks.{$rank}" exact="$need" />
       </do_for_each>
-      <!-- One planner has a fixed expensive-query budget. Raw availability scans are cheap and shared by ware below. -->
+      <do_if value="@global.$mwexDebug">
+        <set_value name="$diagnostic.$checks" exact="if $checks? then $checks else 0" />
+        <set_value name="$mwphase_diagnostic" exact="$diagnostic" />
+        <include_interrupt_actions ref="MWEX_Fleet_phase" />
+      </do_if>
       <set_value name="$diagnostic.$phase" exact="'candidates'" />
       <do_if value="@global.$mwexDebug">
         <set_value name="$mwtrace_diagnostic" exact="$diagnostic" />
+        <set_value name="$mwtrace_event" exact="'PHASE'" />
+        <set_value name="$mwtrace_fields" exact="'phase,indexedNeeds,cacheUntil,cacheEpoch,cacheDirty'" />
         <set_value name="$mwtrace_text" exact="'PHASE phase=candidates indexedNeeds=%s cacheUntil=%s cacheEpoch=%s cacheDirty=%s'.[$hub.$needs.count,$hub.$cacheUntil,$hub.$cacheEpoch,$hub.$cacheDirty]" />
         <set_value name="$mwtrace_file" exact="'lifecycle'" />
         <include_interrupt_actions ref="MWEX_Fleet_trace" />
       </do_if>
       <set_value name="$checks" exact="0" />
+      <set_value name="$candidateBatch" exact="0" />
       <set_value name="$rawScans" exact="0" />
       <set_value name="$sourceLists" exact="table[]" />
       <set_value name="$pool" exact="[]" />
@@ -360,6 +510,8 @@
           <do_if value="@global.$mwexDebug">
             <set_value name="$mwtrace_diagnostic" exact="$diagnostic" />
             <set_value name="$mwtrace_file" exact="'search'" />
+            <set_value name="$mwtrace_event" exact="'NO_SOURCE_INDEX'" />
+            <set_value name="$mwtrace_fields" exact="'need,ware,scope'" />
             <set_value name="$mwtrace_text" exact="'NO_SOURCE_INDEX need=%s ware=%s scope=known_shared_index'.[$need,$need.ware]" />
             <include_interrupt_actions ref="MWEX_Fleet_trace" />
           </do_if>
@@ -386,35 +538,43 @@
                 <set_value name="$diagnostic.$checks" exact="if $checks? then $checks else 0" />
                 <set_value name="$diagnostic.$needsVisited" exact="if $needStep? then $needStep else 0" />
               </do_if>
+              <do_if value="@global.$mwexDebug">
+                <set_value name="$diagnostic.$yieldPending" exact="true" />
+                <set_value name="$diagnostic.$yieldAt" exact="player.age" />
+                <set_value name="$diagnostic.$yieldWall" exact="player.systemtime.{'%Y-%m-%dT%H:%M:%S'}" />
+                <set_value name="$diagnostic.$yieldStage" exact="'sources'" />
+                <set_value name="$diagnostic.$yieldCount" operation="add" exact="1" />
+              </do_if>
               <wait exact="1ms" />
+              <do_if value="@global.$mwexDebug and @$diagnostic.$yieldPending">
+                <set_value name="$diagnostic.$yieldResumedAt" exact="player.age" />
+                <set_value name="$diagnostic.$yieldPending" exact="false" />
+                <set_value name="$diagnostic.$yieldGameWait" operation="add" exact="player.age-$diagnostic.$yieldAt" />
+                <set_value name="$diagnostic.$yieldMaxGap" exact="[$diagnostic.$yieldMaxGap,player.age-$diagnostic.$yieldAt].max" />
+                <set_value name="$mwtrace_diagnostic" exact="$diagnostic" />
+                <set_value name="$mwtrace_file" exact="'search'" />
+                <set_value name="$mwtrace_event" exact="'YIELD'" />
+                <set_value name="$mwtrace_fields" exact="'stage,count,requestedAt,resumedAt,gap,requestWall,resumeWall,checks'" />
+                <set_value name="$mwtrace_text" exact="'YIELD stage=%s count=%s requestedAt=%s resumedAt=%s gap=%s requestWall=%s resumeWall=%s checks=%s'.[$diagnostic.$yieldStage,$diagnostic.$yieldCount,$diagnostic.$yieldAt,player.age,player.age-$diagnostic.$yieldAt,$diagnostic.$yieldWall,player.systemtime.{'%Y-%m-%dT%H:%M:%S'},@$checks]" />
+                <include_interrupt_actions ref="MWEX_Fleet_trace" />
+              </do_if>
               <set_value name="$rawScans" exact="0" />
             </do_if>
-            <do_if value="not @$source.available or ($source.owner.owner != $ship.owner and not $cfg.$allowAiSuppliers)">
+            <do_if value="not @$source.available">
               <do_if value="@global.$mwexDebug">
-                <set_value name="$sourceFilterCode" exact="if not @$source.available then 'source_unavailable' else 'source_ai_disabled'" />
-                <set_value name="$diagnostic.$prefilterCounts.{$sourceFilterCode}" exact="@$diagnostic.$prefilterCounts.{$sourceFilterCode}+1" />
+                <set_value name="$sourceFilterCode" exact="'source_unavailable'" />
+                <set_value name="$mwcounter_diagnostic" exact="$diagnostic" />
+                <set_value name="$mwcounter_kind" exact="'prefilter'" />
+                <set_value name="$mwcounter_code" exact="$sourceFilterCode" />
+                <include_interrupt_actions ref="MWEX_Fleet_count" />
                 <do_if value="@global.$mwexDebug">
-                  <do_if value="@global.$mwexM4TraceCandidates or $diagnostic.$prefilterCounts.{$sourceFilterCode} le 2">
-                    <set_value name="$mwtrace_diagnostic" exact="$diagnostic" />
-                    <set_value name="$mwtrace_file" exact="'search'" />
-                    <set_value name="$mwtrace_text" exact="'SOURCE_FILTER code=%s source=%s ware=%s rawAmount=%s needNet=unknown supplyNet=unknown'.[$sourceFilterCode,$source,$ware,$source.amount]" />
-                    <include_interrupt_actions ref="MWEX_Fleet_trace" />
-                  </do_if>
-                </do_if>
-              </do_if>
-              <continue />
-            </do_if>
-            <do_if value="$source.owner.owner == $ship.owner and ($source.owner.cargo.{$ware}.target le 0 or $source.owner.cargo.{$ware}.count*100 le $source.owner.cargo.{$ware}.target*$cfg.$playerStockThreshold)">
-              <do_if value="@global.$mwexDebug">
-                <set_value name="$sourceFilterCode" exact="'source_owned_stock_threshold'" />
-                <set_value name="$diagnostic.$prefilterCounts.{$sourceFilterCode}" exact="@$diagnostic.$prefilterCounts.{$sourceFilterCode}+1" />
-                <do_if value="@global.$mwexDebug">
-                  <do_if value="@global.$mwexM4TraceCandidates or $diagnostic.$prefilterCounts.{$sourceFilterCode} le 2">
-                    <set_value name="$mwtrace_diagnostic" exact="$diagnostic" />
-                    <set_value name="$mwtrace_file" exact="'search'" />
-                    <set_value name="$mwtrace_text" exact="'SOURCE_FILTER code=%s source=%s ware=%s rawAmount=%s needNet=unknown supplyNet=unknown stock=%s target=%s threshold=%s'.[$sourceFilterCode,$source,$ware,$source.amount,$source.owner.cargo.{$ware}.count,$source.owner.cargo.{$ware}.target,$cfg.$playerStockThreshold]" />
-                    <include_interrupt_actions ref="MWEX_Fleet_trace" />
-                  </do_if>
+                  <set_value name="$mwtrace_diagnostic" exact="$diagnostic" />
+                  <set_value name="$mwtrace_file" exact="'search'" />
+                  <set_value name="$diagnostic.$prefilterEmitted" operation="add" exact="1" />
+                  <set_value name="$mwtrace_event" exact="'SOURCE_FILTER'" />
+                  <set_value name="$mwtrace_fields" exact="'code,source,ware,rawAmount,needNet,supplyNet'" />
+                  <set_value name="$mwtrace_text" exact="'SOURCE_FILTER code=%s source=%s ware=%s rawAmount=%s needNet=not_queried supplyNet=not_queried'.[$sourceFilterCode,$source,$ware,$source.amount]" />
+                  <include_interrupt_actions ref="MWEX_Fleet_trace" />
                 </do_if>
               </do_if>
               <continue />
@@ -450,16 +610,6 @@
               </do_if>
             </do_for_each>
           </do_for_each>
-          <do_if value="$cfg.$allowPlayerSuppliers">
-            <do_for_each name="$source" in="$large">
-              <do_if value="$source.owner.owner == $ship.owner">
-                <do_if value="not $short.indexof.{$source}">
-                  <append_to_list name="$short" exact="$source" />
-                </do_if>
-                <break />
-              </do_if>
-            </do_for_each>
-          </do_if>
           <do_if value="$large.count">
             <set_value name="$offset" exact="@$ship.pilot.$mwexFleetSearchOffset" />
             <set_value name="$offset" exact="$offset-($offset/$large.count)i*$large.count" />
@@ -478,6 +628,8 @@
           <do_if value="@global.$mwexDebug">
             <set_value name="$mwtrace_diagnostic" exact="$diagnostic" />
             <set_value name="$mwtrace_file" exact="'search'" />
+            <set_value name="$mwtrace_event" exact="'SOURCE_SCAN'" />
+            <set_value name="$mwtrace_fields" exact="'ware,coarse,eligible,selected,rawYieldCounter'" />
             <set_value name="$mwtrace_text" exact="'SOURCE_SCAN ware=%s coarse=%s eligible=%s selected=%s rawYieldCounter=%s'.[$ware,$coarse.$large.count,$eligible.keys.count,$short.count,$rawScans]" />
             <include_interrupt_actions ref="MWEX_Fleet_trace" />
           </do_if>
@@ -501,16 +653,24 @@
           <set_value name="$failure" exact="$mwcandidate_out_failure" />
           <do_if value="@global.$mwexDebug">
             <set_value name="$candidateCode" exact="$mwcandidate_out_code" />
-            <set_value name="$diagnostic.$rejectCounts.{$candidateCode}" exact="@$diagnostic.$rejectCounts.{$candidateCode}+1" />
+            <set_value name="$mwcounter_diagnostic" exact="$diagnostic" />
+            <set_value name="$mwcounter_kind" exact="'candidate'" />
+            <set_value name="$mwcounter_code" exact="$candidateCode" />
+            <include_interrupt_actions ref="MWEX_Fleet_count" />
             <set_value name="$diagnostic.$checks" exact="$checks" />
             <set_value name="$diagnostic.$progressAt" exact="player.age" />
           </do_if>
           <do_if value="@global.$mwexDebug">
-            <do_if value="@global.$mwexM4TraceCandidates or $diagnostic.$rejectCounts.{$candidateCode} le 2">
-              <set_value name="$mwtrace_diagnostic" exact="$diagnostic" />
-              <set_value name="$mwtrace_text" exact="'CANDIDATE need=%s receiver=%s source=%s supplier=%s ware=%s accepted=%s amount=%s needNet=%s supplyNet=%s buy=%s sell=%s code=%s reason=%s'.[$need,$need.owner.idcode,$source,$source.owner.idcode,$ware,not not $candidate,if $candidate then $candidate.$amount else 0,if @$cache.{$need}.$netKnown then $cache.{$need}.$net else 'unknown',if @$cache.{$source}.$netKnown then $cache.{$source}.$net else 'unknown',if @$cache.{$source}.$priceKnown then $cache.{$source}.$price/1Cr else 'unknown',if @$cache.{$need}.$priceKnown then $cache.{$need}.$price/1Cr else 'unknown',$candidateCode,$failure]" />
-              <set_value name="$mwtrace_file" exact="'search'" />
-              <include_interrupt_actions ref="MWEX_Fleet_trace" />
+            <set_value name="$mwtrace_diagnostic" exact="$diagnostic" />
+            <set_value name="$mwtrace_raw_buy_ct" exact="if @$cache.{$source}.$priceKnown then $cache.{$source}.$price/1ct else null" />
+            <set_value name="$mwtrace_raw_sell_ct" exact="if @$cache.{$need}.$priceKnown then $cache.{$need}.$price/1ct else null" />
+            <set_value name="$mwtrace_event" exact="'CANDIDATE'" />
+            <set_value name="$mwtrace_fields" exact="'need,receiver,source,supplier,ware,accepted,amount,needNet,supplyNet,buyCr,buyCt,sellCr,sellCt,code,reason'" />
+            <set_value name="$mwtrace_text" exact="'CANDIDATE need=%s receiver=%s source=%s supplier=%s ware=%s accepted=%s amount=%s needNet=%s supplyNet=%s buyCr=%s buyCt=%s sellCr=%s sellCt=%s code=%s reason=%s'.[$need,$need.owner.idcode,$source,$source.owner.idcode,$ware,not not $candidate,if $candidate then $candidate.$amount else 0,if @$cache.{$need}.$netKnown then $cache.{$need}.$net else 'network_unavailable',if @$cache.{$source}.$netKnown then $cache.{$source}.$net else 'network_unavailable',if @$cache.{$source}.$priceKnown then '%s%s.%s%s'.[if ($cache.{$source}.$price) lt 0ct then '-' else '',(abs(($cache.{$source}.$price/1ct)L)/100)L,((abs(($cache.{$source}.$price/1ct)L)%100)/10)i,(abs(($cache.{$source}.$price/1ct)L)%10)i] else 'price_unavailable',@$mwtrace_raw_buy_ct,if @$cache.{$need}.$priceKnown then '%s%s.%s%s'.[if ($cache.{$need}.$price) lt 0ct then '-' else '',(abs(($cache.{$need}.$price/1ct)L)/100)L,((abs(($cache.{$need}.$price/1ct)L)%100)/10)i,(abs(($cache.{$need}.$price/1ct)L)%10)i] else 'price_unavailable',@$mwtrace_raw_sell_ct,$candidateCode,$failure]" />
+            <set_value name="$mwtrace_file" exact="'search'" />
+            <include_interrupt_actions ref="MWEX_Fleet_trace" />
+            <do_if value="$mwtrace_lastTextValid">
+              <set_value name="$diagnostic.$candidateEmitted" operation="add" exact="1" />
             </do_if>
           </do_if>
           <do_if value="$candidate">
@@ -523,29 +683,56 @@
             <set_value name="$diagnostic.$lastNeed" exact="$need" />
             <set_value name="$diagnostic.$lastFailure" exact="$failure" />
           </do_else>
-          <do_if value="$checks/16 == ($checks/16)i">
+          <set_value name="$candidateBatch" operation="add" exact="1" />
+          <do_if value="$candidateBatch ge 16">
+            <set_value name="$candidateBatch" exact="0" />
             <do_if value="@global.$mwexDebug">
               <set_value name="$diagnostic.$progressAt" exact="player.age" />
               <set_value name="$diagnostic.$checks" exact="if $checks? then $checks else 0" />
               <set_value name="$diagnostic.$needsVisited" exact="if $needStep? then $needStep else 0" />
             </do_if>
+            <do_if value="@global.$mwexDebug">
+              <set_value name="$diagnostic.$yieldPending" exact="true" />
+              <set_value name="$diagnostic.$yieldAt" exact="player.age" />
+              <set_value name="$diagnostic.$yieldWall" exact="player.systemtime.{'%Y-%m-%dT%H:%M:%S'}" />
+              <set_value name="$diagnostic.$yieldStage" exact="'candidates'" />
+              <set_value name="$diagnostic.$yieldCount" operation="add" exact="1" />
+            </do_if>
             <wait exact="1ms" />
+            <do_if value="@global.$mwexDebug and @$diagnostic.$yieldPending">
+              <set_value name="$diagnostic.$yieldResumedAt" exact="player.age" />
+              <set_value name="$diagnostic.$yieldPending" exact="false" />
+              <set_value name="$diagnostic.$yieldGameWait" operation="add" exact="player.age-$diagnostic.$yieldAt" />
+              <set_value name="$diagnostic.$yieldMaxGap" exact="[$diagnostic.$yieldMaxGap,player.age-$diagnostic.$yieldAt].max" />
+              <set_value name="$mwtrace_diagnostic" exact="$diagnostic" />
+              <set_value name="$mwtrace_file" exact="'search'" />
+              <set_value name="$mwtrace_event" exact="'YIELD'" />
+              <set_value name="$mwtrace_fields" exact="'stage,count,requestedAt,resumedAt,gap,requestWall,resumeWall,checks'" />
+              <set_value name="$mwtrace_text" exact="'YIELD stage=%s count=%s requestedAt=%s resumedAt=%s gap=%s requestWall=%s resumeWall=%s checks=%s'.[$diagnostic.$yieldStage,$diagnostic.$yieldCount,$diagnostic.$yieldAt,player.age,player.age-$diagnostic.$yieldAt,$diagnostic.$yieldWall,player.systemtime.{'%Y-%m-%dT%H:%M:%S'},@$checks]" />
+              <include_interrupt_actions ref="MWEX_Fleet_trace" />
+            </do_if>
           </do_if>
         </do_for_each>
         <do_if value="$diagnostic.$budgetExhausted">
           <break />
         </do_if>
       </do_all>
-      <!-- Continue at the uncompleted need next time; a large invalid bucket cannot starve later needs forever. -->
       <do_if value="$diagnostic.$budgetExhausted and $orderedNeeds.count">
         <set_value name="$ship.pilot.$mwexFleetNeedOffset" exact="$needIndex - 1" />
       </do_if>
       <do_else>
         <remove_value name="$ship.pilot.$mwexFleetNeedOffset" />
       </do_else>
+      <do_if value="@global.$mwexDebug">
+        <set_value name="$diagnostic.$checks" exact="if $checks? then $checks else 0" />
+        <set_value name="$mwphase_diagnostic" exact="$diagnostic" />
+        <include_interrupt_actions ref="MWEX_Fleet_phase" />
+      </do_if>
       <set_value name="$diagnostic.$phase" exact="'refresh_net'" />
       <do_if value="@global.$mwexDebug">
         <set_value name="$mwtrace_diagnostic" exact="$diagnostic" />
+        <set_value name="$mwtrace_event" exact="'PHASE'" />
+        <set_value name="$mwtrace_fields" exact="'phase,checks,pool,orderedNeeds,needsVisited,nextNeedOffset'" />
         <set_value name="$mwtrace_text" exact="'PHASE phase=refresh_net checks=%s pool=%s orderedNeeds=%s needsVisited=%s nextNeedOffset=%s'.[$checks,$pool.count,$orderedNeeds.count,@$needStep,@$ship.pilot.$mwexFleetNeedOffset]" />
         <set_value name="$mwtrace_file" exact="'lifecycle'" />
         <include_interrupt_actions ref="MWEX_Fleet_trace" />
@@ -561,8 +748,12 @@
           </do_if>
         </do_for_each>
         <do_if value="@global.$mwexDebug and ($candidate.$needNet != $liveNet.{$candidate.$need} or $candidate.$sourceNet != $liveNet.{$candidate.$source})">
+          <set_value name="$diagnostic.$refreshTotal" operation="add" exact="1" />
+          <set_value name="$diagnostic.$refreshEmitted" operation="add" exact="1" />
           <set_value name="$mwtrace_diagnostic" exact="$diagnostic" />
           <set_value name="$mwtrace_file" exact="'search'" />
+          <set_value name="$mwtrace_event" exact="'CANDIDATE_REFRESH'" />
+          <set_value name="$mwtrace_fields" exact="'source,need,ware,priorNeed,liveNeed,priorSupply,liveSupply,priorAmount'" />
           <set_value name="$mwtrace_text" exact="'CANDIDATE_REFRESH source=%s need=%s ware=%s priorNeed=%s liveNeed=%s priorSupply=%s liveSupply=%s priorAmount=%s'.[$candidate.$source,$candidate.$need,$candidate.$ware,$candidate.$needNet,$liveNet.{$candidate.$need},$candidate.$sourceNet,$liveNet.{$candidate.$source},$candidate.$amount]" />
           <include_interrupt_actions ref="MWEX_Fleet_trace" />
         </do_if>
@@ -578,9 +769,16 @@
       <set_value name="$mwgrade_relaxed" exact="$gradeRelaxed" />
       <set_value name="$mwgrade_diagnostic" exact="$diagnostic" />
       <include_interrupt_actions ref="MWEX_Fleet_grade" />
+      <do_if value="@global.$mwexDebug">
+        <set_value name="$diagnostic.$checks" exact="if $checks? then $checks else 0" />
+        <set_value name="$mwphase_diagnostic" exact="$diagnostic" />
+        <include_interrupt_actions ref="MWEX_Fleet_phase" />
+      </do_if>
       <set_value name="$diagnostic.$phase" exact="'routes'" />
       <do_if value="@global.$mwexDebug">
         <set_value name="$mwtrace_diagnostic" exact="$diagnostic" />
+        <set_value name="$mwtrace_event" exact="'PHASE'" />
+        <set_value name="$mwtrace_fields" exact="'phase,pool,gradeDeferred,gradeRelaxed'" />
         <set_value name="$mwtrace_text" exact="'PHASE phase=routes pool=%s gradeDeferred=%s gradeRelaxed=%s'.[$pool.count,$diagnostic.$gradeDeferred,$gradeRelaxed]" />
         <set_value name="$mwtrace_file" exact="'lifecycle'" />
         <include_interrupt_actions ref="MWEX_Fleet_trace" />
@@ -589,11 +787,12 @@
         <do_if value="not $ranks.{$rank}?">
           <continue />
         </do_if>
-        <set_value name="$empty" exact="table[$plan=[],$usedNeed=table[],$usedSource=table[],$volume=0,$capacity=0,$receiver=null,$cargoTag=null,$budget=$ship.money,$receiverBudget=0Cr,$travel=0,$time=1,$penalty=0Cr,$ownedVolume=0,$score=0]" />
+        <set_value name="$empty" exact="table[$plan=[],$usedNeed=table[],$usedSource=table[],$volume=0,$capacity=0,$receiver=null,$cargoTag=null,$budget=$ship.money,$receiverBudget=0Cr,$travel=0,$time=1,$penalty=0Cr,$score=0]" />
         <set_value name="$beam" exact="[$empty]" />
         <do_all exact="$cfg.$maxTrades" counter="$depth">
           <set_value name="$expanded" exact="[]" />
           <set_value name="$expandedScores" exact="table[]" />
+          <set_value name="$acceptedScores" exact="table[]" />
           <do_for_each name="$state" in="$beam">
             <set_value name="$sizes" exact="table[]" />
             <set_value name="$near" exact="table[]" />
@@ -620,10 +819,9 @@
               <do_if value="$available le 0">
                 <continue />
               </do_if>
-              <set_value name="$preference" exact="if $candidate.$supplierRank == 0 then 1000000000000 else 0" />
-              <set_value name="$sizes.{$candidateIndex}" exact="$available+$preference" />
-              <set_value name="$near.{$candidateIndex}" exact="$candidate.$distance-$preference" />
-              <set_value name="$efficiencies.{$candidateIndex}" exact="$available/(2*$candidate.$distance+2)+$preference" />
+              <set_value name="$sizes.{$candidateIndex}" exact="$available" />
+              <set_value name="$near.{$candidateIndex}" exact="$candidate.$distance" />
+              <set_value name="$efficiencies.{$candidateIndex}" exact="(($available)L*1000000L/(2*$candidate.$distance+2))L" />
             </do_for_each>
             <set_value name="$short" exact="[]" />
             <do_for_each name="$i" in="$sizes.keys.sorted" reverse="true" counter="$j">
@@ -648,7 +846,6 @@
                 <append_to_list name="$short" exact="$i" />
               </do_if>
             </do_for_each>
-            <!-- At most six route/quantity extensions per parent, three surviving parents. -->
             <do_for_each name="$i" in="$short">
               <set_value name="$candidate" exact="$pool.{$i}" />
               <do_if value="$diagnostic.$expanded ge 128">
@@ -676,6 +873,8 @@
                   <set_value name="$next.$logStateId" exact="$diagnostic.$logStateSerial" />
                 </do_if>
                 <set_value name="$mwtrace_diagnostic" exact="$diagnostic" />
+                <set_value name="$mwtrace_event" exact="'EXTEND'" />
+                <set_value name="$mwtrace_fields" exact="'depth,parentState,childState,shipBand,lotBand,main,source,need,ware,result,amount,volume,eta,score'" />
                 <set_value name="$mwtrace_text" exact="'EXTEND depth=%s parentState=%s childState=%s shipBand=%s lotBand=%s main=%s source=%s need=%s ware=%s result=%s amount=%s volume=%s eta=%s score=%s'.[$depth,@$state.$logStateId,@$next.$logStateId,$candidate.$ownGrade,$candidate.$grade,if $state.$plan.count then $state.$plan.{1}.$source else $candidate.$source,$candidate.$source,$candidate.$need,$candidate.$ware,$extensionReason,if $next then $next.$plan.{$next.$plan.count}.$amount else 0,if $next then $next.$volume else 0,if $next then $next.$time else 0,if $next then $next.$score else 0]" />
                 <set_value name="$mwtrace_file" exact="'search'" />
                 <include_interrupt_actions ref="MWEX_Fleet_trace" />
@@ -687,21 +886,35 @@
                 <set_value name="$diagnostic.$secondaryAdded" operation="add" exact="1" />
               </do_if>
               <set_value name="$next.$accepted" exact="$relaxed or $next.$volume*100 ge $next.$capacity*$minLoad" />
-              <set_value name="$quality" exact="(if $next.$accepted then 1000000000000 else 0)+(if $cfg.$allowPlayerSuppliers then $next.$ownedVolume/[$next.$capacity,1].max*1000000000 else 0)+$next.$score" />
+              <do_if value="@global.$mwexDebug">
+                <do_if value="$next.$accepted">
+                  <set_value name="$diagnostic.$logAcceptedStates" exact="@$diagnostic.$logAcceptedStates+1" />
+                </do_if>
+                <do_else>
+                  <set_value name="$diagnostic.$logLoadBlockedStates" exact="@$diagnostic.$logLoadBlockedStates+1" />
+                </do_else>
+              </do_if>
               <append_to_list name="$expanded" exact="$next" />
-              <set_value name="$expandedScores.{$expanded.count}" exact="$quality" />
+              <!-- Keep load acceptance ahead of throughput without packing priorities into a number. -->
+              <do_if value="$next.$accepted">
+                <set_value name="$acceptedScores.{$expanded.count}" exact="$next.$score" />
+              </do_if>
+              <do_else>
+                <set_value name="$expandedScores.{$expanded.count}" exact="$next.$score" />
+              </do_else>
               <do_if value="not $partial or $next.$volume gt $partial.$volume">
                 <set_value name="$partial" exact="$next" />
               </do_if>
-              <do_if value="$next.$accepted and (not $best or $quality gt $bestQuality or ($quality == $bestQuality and $next.$penalty lt $best.$penalty))">
+              <do_if value="$next.$accepted and (not $best or $next.$score gt $best.$score or ($next.$score == $best.$score and $next.$penalty lt $best.$penalty))">
                 <set_value name="$best" exact="$next" />
                 <do_if value="@global.$mwexDebug">
                   <set_value name="$mwtrace_diagnostic" exact="$diagnostic" />
-                  <set_value name="$mwtrace_text" exact="'BEST depth=%s volume=%s capacity=%s lots=%s ownedVolume=%s etaWeight=%s score=%s quality=%s penalty=%s'.[$depth,$next.$volume,$next.$capacity,$next.$plan.count,$next.$ownedVolume,$next.$time,$next.$score,$quality,$next.$penalty]" />
+                  <set_value name="$mwtrace_event" exact="'BEST'" />
+                  <set_value name="$mwtrace_fields" exact="'capacityBasis,stage,depth,volume,capacity,lots,etaWeight,score,scoreScale,penalty'" />
+                  <set_value name="$mwtrace_text" exact="'BEST stage=search depth=%s volume=%s capacity=%s lots=%s etaWeight=%s score=%s scoreScale=1000000 penalty=%s capacityBasis=last_ware_whole_unit_limit'.[$depth,$next.$volume,$next.$capacity,$next.$plan.count,$next.$time,$next.$score,$next.$penalty]" />
                   <set_value name="$mwtrace_file" exact="'search'" />
                   <include_interrupt_actions ref="MWEX_Fleet_trace" />
                 </do_if>
-                <set_value name="$bestQuality" exact="$quality" />
               </do_if>
             </do_for_each>
             <do_if value="$diagnostic.$routeBudget">
@@ -709,11 +922,13 @@
             </do_if>
           </do_for_each>
           <set_value name="$beam" exact="[]" />
-          <do_for_each name="$i" in="$expandedScores.keys.sorted" reverse="true" counter="$j">
-            <do_if value="$j gt 3">
-              <break />
-            </do_if>
-            <append_to_list name="$beam" exact="$expanded.{$i}" />
+          <do_for_each name="$scores" in="[$acceptedScores,$expandedScores]">
+            <do_for_each name="$i" in="$scores.keys.sorted" reverse="true">
+              <do_if value="$beam.count ge 3">
+                <break />
+              </do_if>
+              <append_to_list name="$beam" exact="$expanded.{$i}" />
+            </do_for_each>
           </do_for_each>
           <do_if value="not $beam.count or $diagnostic.$routeBudget">
             <break />
@@ -723,7 +938,26 @@
             <set_value name="$diagnostic.$checks" exact="if $checks? then $checks else 0" />
             <set_value name="$diagnostic.$needsVisited" exact="if $needStep? then $needStep else 0" />
           </do_if>
+          <do_if value="@global.$mwexDebug">
+            <set_value name="$diagnostic.$yieldPending" exact="true" />
+            <set_value name="$diagnostic.$yieldAt" exact="player.age" />
+            <set_value name="$diagnostic.$yieldWall" exact="player.systemtime.{'%Y-%m-%dT%H:%M:%S'}" />
+            <set_value name="$diagnostic.$yieldStage" exact="'routes'" />
+            <set_value name="$diagnostic.$yieldCount" operation="add" exact="1" />
+          </do_if>
           <wait exact="1ms" />
+          <do_if value="@global.$mwexDebug and @$diagnostic.$yieldPending">
+            <set_value name="$diagnostic.$yieldResumedAt" exact="player.age" />
+            <set_value name="$diagnostic.$yieldPending" exact="false" />
+            <set_value name="$diagnostic.$yieldGameWait" operation="add" exact="player.age-$diagnostic.$yieldAt" />
+            <set_value name="$diagnostic.$yieldMaxGap" exact="[$diagnostic.$yieldMaxGap,player.age-$diagnostic.$yieldAt].max" />
+            <set_value name="$mwtrace_diagnostic" exact="$diagnostic" />
+            <set_value name="$mwtrace_file" exact="'search'" />
+            <set_value name="$mwtrace_event" exact="'YIELD'" />
+            <set_value name="$mwtrace_fields" exact="'stage,count,requestedAt,resumedAt,gap,requestWall,resumeWall,checks'" />
+            <set_value name="$mwtrace_text" exact="'YIELD stage=%s count=%s requestedAt=%s resumedAt=%s gap=%s requestWall=%s resumeWall=%s checks=%s'.[$diagnostic.$yieldStage,$diagnostic.$yieldCount,$diagnostic.$yieldAt,player.age,player.age-$diagnostic.$yieldAt,$diagnostic.$yieldWall,player.systemtime.{'%Y-%m-%dT%H:%M:%S'},@$checks]" />
+            <include_interrupt_actions ref="MWEX_Fleet_trace" />
+          </do_if>
           <do_if value="$ship.orders.count or not $ship.isoperational or $ship.defaultorder != $cfg.$origin or $ship.pilot.$mwexFleetCfg.$signature != $cfg.$signature or ($cfg.$origin.id == 'SupplyMule' and $cfg.$origin.$home != $home)">
             <return>
               <retval name="plan" value="[]" />
@@ -736,6 +970,11 @@
           <break />
         </do_if>
       </do_all>
+      <do_if value="@global.$mwexDebug">
+        <set_value name="$diagnostic.$checks" exact="if $checks? then $checks else 0" />
+        <set_value name="$mwphase_diagnostic" exact="$diagnostic" />
+        <include_interrupt_actions ref="MWEX_Fleet_phase" />
+      </do_if>
       <set_value name="$diagnostic.$phase" exact="'plan_complete'" />
       <set_value name="$result" exact="if $best then $best else $partial" />
       <do_if value="$result">
@@ -752,24 +991,26 @@
         <set_value name="$failure" exact="{61552,4416}" />
       </do_if>
       <do_if value="@global.$mwexDebug">
-        <do_for_each name="$reasonCode" valuename="$reasonCount" in="$diagnostic.$rejectCounts">
-          <do_if value="@global.$mwexDebug">
-            <set_value name="$mwtrace_diagnostic" exact="$diagnostic" />
-            <set_value name="$mwtrace_text" exact="'CANDIDATE_COUNTS code=%s count=%s'.[$reasonCode,$reasonCount]" />
-            <set_value name="$mwtrace_file" exact="'search'" />
-            <include_interrupt_actions ref="MWEX_Fleet_trace" />
-          </do_if>
-        </do_for_each>
-        <do_for_each name="$reasonCode" valuename="$reasonCount" in="$diagnostic.$prefilterCounts">
-          <do_if value="@global.$mwexDebug">
-            <set_value name="$mwtrace_diagnostic" exact="$diagnostic" />
-            <set_value name="$mwtrace_text" exact="'PREFILTER_COUNTS code=%s count=%s'.[$reasonCode,$reasonCount]" />
-            <set_value name="$mwtrace_file" exact="'search'" />
-            <include_interrupt_actions ref="MWEX_Fleet_trace" />
-          </do_if>
-        </do_for_each>
+        <set_value name="$diagnostic.$countsComplete" exact="true" />
+        <set_value name="$mwtrace_diagnostic" exact="$diagnostic" />
+        <include_interrupt_actions ref="MWEX_Fleet_counts" />
       </do_if>
       <set_value name="$diagnostic.$draft" exact="if $result then $result.$plan else []" />
+      <do_if value="@global.$mwexDebug">
+        <set_value name="$diagnostic.$logHasAcceptedPlan" exact="$best != null" />
+        <set_value name="$diagnostic.$logPartialLoadBlocked" exact="$result != null and not $best" />
+        <set_value name="$mwload_volume" exact="if $result then $result.$volume else null" />
+        <set_value name="$mwload_capacity" exact="if $result then $result.$capacity else null" />
+        <include_interrupt_actions ref="MWEX_Log_load" />
+        <!-- Immutable values: commit repair must not overwrite the search observation. -->
+        <set_value name="$diagnostic.$logSearchSnapshot" exact="table[$volume=$mwload_volume,$capacity=$mwload_capacity,$lots=if $result then $result.$plan.count else 0,$loadPercent=$mwload_out_percent,$loadBps=$mwload_out_bps,$loadState=if $result then $mwload_out_code else 'no_search_plan',$session=@global.$mwexM4Log]" />
+        <set_value name="$mwtrace_diagnostic" exact="$diagnostic" />
+        <set_value name="$mwtrace_event" exact="'SEARCH_CONSTRAINTS'" />
+        <set_value name="$mwtrace_fields" exact="'capacityBasis,enumerationTruncated,candidateBudget,routeBudget,acceptedPlan,acceptedStates,loadBlockedStates,partialBelowLoad,searchLoadPercent,minLoad,gradeDeferred,searchVolume,searchCapacity,searchLots,searchLoadState'" />
+        <set_value name="$mwtrace_text" exact="'SEARCH_CONSTRAINTS enumerationTruncated=%s candidateBudget=%s routeBudget=%s acceptedPlan=%s acceptedStates=%s loadBlockedStates=%s partialBelowLoad=%s searchLoadPercent=%s minLoad=%s gradeDeferred=%s searchVolume=%s searchCapacity=%s searchLots=%s searchLoadState=%s capacityBasis=last_ware_whole_unit_limit'.[$diagnostic.$budgetExhausted,$diagnostic.$candidateBudget,$diagnostic.$routeBudget,$diagnostic.$logHasAcceptedPlan,@$diagnostic.$logAcceptedStates,@$diagnostic.$logLoadBlockedStates,$diagnostic.$logPartialLoadBlocked,$diagnostic.$logSearchSnapshot.$loadPercent,$minLoad,$diagnostic.$gradeDeferred,$diagnostic.$logSearchSnapshot.$volume,$diagnostic.$logSearchSnapshot.$capacity,$diagnostic.$logSearchSnapshot.$lots,$diagnostic.$logSearchSnapshot.$loadState]" />
+        <set_value name="$mwtrace_file" exact="'search'" />
+        <include_interrupt_actions ref="MWEX_Fleet_trace" />
+      </do_if>
       <set_value name="$diagnostic.$status" exact="if $best then 'planned' else if $diagnostic.$budgetExhausted then 'budget' else if $diagnostic.$loadRejected then 'load' else if $diagnostic.$gradeDeferred gt 0 then 'grade_wait' else 'no_candidate'" />
       <set_value name="$diagnostic.$lotLimited" exact="$result and $result.$plan.count ge $cfg.$maxTrades" />
       <do_if value="$diagnostic.$status == 'grade_wait'">
@@ -777,6 +1018,8 @@
       </do_if>
       <do_if value="@global.$mwexDebug">
         <set_value name="$mwtrace_diagnostic" exact="$diagnostic" />
+        <set_value name="$mwtrace_event" exact="'LIMITS'" />
+        <set_value name="$mwtrace_fields" exact="'wait,minLoad,gradeRelaxed,gradeDeferred,demand,supply,receiverRejects,corridorRejects,lotLimit,budget,coarseBuilds,coarseHits'" />
         <set_value name="$mwtrace_text" exact="'LIMITS wait=%s minLoad=%s gradeRelaxed=%s gradeDeferred=%s demand=%sm3 supply=%sm3 receiverRejects=%s corridorRejects=%s lotLimit=%s budget=%s coarseBuilds=%s coarseHits=%s'.[$waitAge,$minLoad,$gradeRelaxed,$diagnostic.$gradeDeferred,$diagnostic.$demandVolume,$diagnostic.$supplyVolume,$diagnostic.$receiverBlocked,$diagnostic.$range,$diagnostic.$lotLimited,$diagnostic.$budgetExhausted,$diagnostic.$coarseBuilds,$diagnostic.$coarseHits]" />
         <set_value name="$mwtrace_file" exact="'search'" />
         <include_interrupt_actions ref="MWEX_Fleet_trace" />
@@ -787,14 +1030,18 @@
       </do_if>
       <do_if value="@global.$mwexDebug">
         <set_value name="$mwtrace_diagnostic" exact="$diagnostic" />
-        <set_value name="$mwtrace_text" exact="'END status=%s elapsed=%s checks=%s pool=%s extensions=%s secondaryTried=%s secondaryAdded=%s candidateBudget=%s routeBudget=%s volume=%s eta=%s score=%s'.[$diagnostic.$status,player.age-$diagnostic.$started,$checks,$pool.count,$diagnostic.$expanded,$diagnostic.$secondaryChecks,$diagnostic.$secondaryAdded,$diagnostic.$candidateBudget,$diagnostic.$routeBudget,$diagnostic.$volume,@$diagnostic.$eta,@$diagnostic.$score]" />
+        <set_value name="$mwtrace_event" exact="'END'" />
+        <set_value name="$mwtrace_fields" exact="'stage,status,elapsed,checks,pool,extensions,secondaryTried,secondaryAdded,candidateBudget,routeBudget,volume,eta,score,yieldCount,yieldGameWait,yieldMaxGap'" />
+        <set_value name="$mwtrace_text" exact="'END stage=search status=%s elapsed=%s checks=%s pool=%s extensions=%s secondaryTried=%s secondaryAdded=%s candidateBudget=%s routeBudget=%s volume=%s eta=%s score=%s yieldCount=%s yieldGameWait=%s yieldMaxGap=%s'.[$diagnostic.$status,player.age-$diagnostic.$started,$checks,$pool.count,$diagnostic.$expanded,$diagnostic.$secondaryChecks,$diagnostic.$secondaryAdded,$diagnostic.$candidateBudget,$diagnostic.$routeBudget,$diagnostic.$volume,@$diagnostic.$eta,@$diagnostic.$score,$diagnostic.$yieldCount,$diagnostic.$yieldGameWait,$diagnostic.$yieldMaxGap]" />
         <set_value name="$mwtrace_file" exact="'search'" />
         <include_interrupt_actions ref="MWEX_Fleet_trace" />
       </do_if>
       <do_if value="@global.$mwexDebug">
         <do_for_each name="$leg" in="$diagnostic.$draft" counter="$i">
           <set_value name="$mwtrace_diagnostic" exact="$diagnostic" />
-          <set_value name="$mwtrace_text" exact="'DRAFT_LEG index=%s source=%s need=%s ware=%s amount=%s buy=%sCr sell=%sCr'.[$i,$leg.$source,$leg.$need,$leg.$ware,$leg.$amount,$leg.$buyprice/1Cr,$leg.$sellprice/1Cr]" />
+          <set_value name="$mwtrace_event" exact="'DRAFT_LEG'" />
+          <set_value name="$mwtrace_fields" exact="'stage,index,source,need,ware,amount,buyCr,buyCt,sellCr,sellCt'" />
+          <set_value name="$mwtrace_text" exact="'DRAFT_LEG stage=search index=%s source=%s need=%s ware=%s amount=%s buyCr=%s buyCt=%s sellCr=%s sellCt=%s'.[$i,$leg.$source,$leg.$need,$leg.$ware,$leg.$amount,'%s%s.%s%s'.[if ($leg.$buyprice) lt 0ct then '-' else '',(abs(($leg.$buyprice/1ct)L)/100)L,((abs(($leg.$buyprice/1ct)L)%100)/10)i,(abs(($leg.$buyprice/1ct)L)%10)i],$leg.$buyprice/1ct,'%s%s.%s%s'.[if ($leg.$sellprice) lt 0ct then '-' else '',(abs(($leg.$sellprice/1ct)L)/100)L,((abs(($leg.$sellprice/1ct)L)%100)/10)i,(abs(($leg.$sellprice/1ct)L)%10)i],$leg.$sellprice/1ct]" />
           <set_value name="$mwtrace_file" exact="'search'" />
           <include_interrupt_actions ref="MWEX_Fleet_trace" />
         </do_for_each>
@@ -811,7 +1058,9 @@
     <do_if value="@global.$mwexDebug and $diagnostic? and $diagnostic and not @$diagnostic.$logClosed">
       <do_if value="@global.$mwexDebug">
         <set_value name="$mwtrace_diagnostic" exact="$diagnostic" />
-        <set_value name="$mwtrace_text" exact="'RESULT status=aborted success=false reason=script_interrupted stage=plan phase=%s checks=%s expanded=%s progressAt=%s actor=%s cause=unknown'.[@$diagnostic.$phase,@$diagnostic.$checks,@$diagnostic.$expanded,@$diagnostic.$progressAt,this]" />
+        <set_value name="$mwtrace_event" exact="'RESULT'" />
+        <set_value name="$mwtrace_fields" exact="'status,success,reason,stage,phase,checks,expanded,progressAt,actor,cause'" />
+        <set_value name="$mwtrace_text" exact="'RESULT status=aborted success=false reason=script_interrupted stage=plan phase=%s checks=%s expanded=%s progressAt=%s actor=%s cause=engine_reason_not_provided'.[@$diagnostic.$phase,@$diagnostic.$checks,@$diagnostic.$expanded,@$diagnostic.$progressAt,this]" />
         <set_value name="$mwtrace_file" exact="'lifecycle'" />
         <set_value name="$mwtrace_diagnostic.$logClosed" exact="true" />
         <set_value name="$mwtrace_diagnostic.$phase" exact="'finished'" />

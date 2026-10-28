@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<aiscript xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="supplymule" xsi:noNamespaceSchemaLocation="http://x4dynlib.access.ly\libraries\aiscripts.xsd" version="15">
+<aiscript xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="supplymule" xsi:noNamespaceSchemaLocation="http://x4dynlib.access.ly\libraries\aiscripts.xsd" version="18">
   <!-- Setup context menu order-->
   <order id="SupplyMule" name="{61552,4001}" description="{61552,4101}" category="trade" infinite="true">
     <params>
@@ -21,12 +21,13 @@
       </param>
       <!-- menu option: Serve Source Only (will only serve the source station if used)-->
       <param name="dedicatedServe" type="bool" default="false" text="{61552,4005}" comment="{61552,4105}" />
-      <!-- Keep allowPlayerSuppliers for saved orders; it now prefers eligible owned sources. -->
-      <param name="allowPlayerSuppliers" type="bool" default="true" text="{61552,4006}" comment="{61552,4106}">
+      <!-- Retired preference: retained only for loading old orders and mimic calls. -->
+      <param name="allowPlayerSuppliers" type="internal" default="false">
         <patch sinceversion="2" value="true" />
       </param>
-      <param name="allowAiSuppliers" type="bool" default="true" text="{61552,4007}" comment="{61552,4107}">
-        <patch sinceversion="2" value="not $tradeWithOwn" />
+      <!-- Retired toggle: saved values are ignored; all native-eligible sources participate. -->
+      <param name="allowAiSuppliers" type="internal" default="true">
+        <patch sinceversion="2" value="true" />
       </param>
       <!-- menu option: include buildstorage, resources, intermediates, and tradewares as possible options to supply -->
       <param name="allowBuildstorage" type="bool" default="true" text="{61552,4008}" comment="{61552,4108}">
@@ -64,12 +65,8 @@
       </param>
       <!-- menu option: Profit Override Percentage (Used when buying/selling at own warehouses mostly) -->
       <param name="playerBuyMod" type="internal" default="100" />
-      <param name="playerStockThreshold" default="50" type="number" text="{61552,4026}" comment="{61552,4126}">
-        <input_param name="startvalue" value="50" />
-        <input_param name="min" value="0" />
-        <input_param name="max" value="100" />
-        <input_param name="step" value="5" />
-      </param>
+      <!-- Retained only to load old orders; native sell offers control available stock. -->
+      <param name="playerStockThreshold" default="0" type="internal" />
       <param name="searchDepth" type="internal" default="100" />
       <param name="corridorDepth" default="2" type="number" text="{61552,4024}" comment="{61552,4124}">
         <input_param name="startvalue" value="2" />
@@ -116,6 +113,15 @@
     <set_command_action commandaction="commandaction.searchingtrades" />
     <!-- Station binding is handled once in mule.fleet.run, including reloads and parameter edits. -->
   </init>
+  <patch sinceversion="18">
+    <resume label="start" />
+  </patch>
+  <patch sinceversion="17">
+    <resume label="start" />
+  </patch>
+  <patch sinceversion="16">
+    <resume label="start" />
+  </patch>
   <patch sinceversion="15">
     <resume label="start" />
   </patch>
@@ -180,7 +186,7 @@
       </do_if>
       <!--here we want to copy settings to subordinates-->
       <set_value name="$subordinateShipCopyType" exact="[shiptype.courier, shiptype.transporter, shiptype.freighter, shiptype.miner, shiptype.largeminer, this.ship.type]" />
-      <set_value name="$copySignature" exact="'%s/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s/v16'.[$home,$maxDist,$dedicatedServe,$allowPlayerSuppliers,$allowAiSuppliers,$allowBuildstorage,$allowResources,$allowIntermediates,$allowTradewares,$lockWares,$maxTrades,$minCargoUsed,$playerStockThreshold,100,$corridorDepth,$corridorMarkup,if $lockWares then $specialWareBasket else []]" />
+      <set_value name="$copySignature" exact="'%s/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s/%s/v19'.[$home,$maxDist,$dedicatedServe,false,true,$allowBuildstorage,$allowResources,$allowIntermediates,$allowTradewares,$lockWares,$maxTrades,$minCargoUsed,0,100,$corridorDepth,$corridorMarkup,if $lockWares then $specialWareBasket else []]" />
       <do_for_each name="$subordinate" in="this.ship.subordinates">
         <do_if value="@$subordinate.pilot.$mwexFleetCopySignature == $copySignature and @$subordinate.pilot.$mwexFleetCopiedFrom == this.ship and @$subordinate.pilot.$mwexFleetCopiedOrder == $subordinate.defaultorder">
           <continue />
@@ -239,8 +245,8 @@
           <param name="maxDist" value="[$subordinate.pilot.skill.piloting * 2, $maxDist].min" />
           <param name="assignHome" value="false" />
           <param name="dedicatedServe" value="$dedicatedServe" />
-          <param name="allowPlayerSuppliers" value="$allowPlayerSuppliers" />
-          <param name="allowAiSuppliers" value="$allowAiSuppliers" />
+          <param name="allowPlayerSuppliers" value="false" />
+          <param name="allowAiSuppliers" value="true" />
           <param name="allowBuildstorage" value="$allowBuildstorage" />
           <param name="allowResources" value="$allowResources" />
           <param name="allowIntermediates" value="$allowIntermediates" />
@@ -248,7 +254,7 @@
           <param name="specialWareBasket" value="$specialWareBasket" />
           <param name="maxTrades" value="$maxTrades" />
           <param name="minCargoUsed" value="$minCargoUsed" />
-          <param name="playerStockThreshold" value="$playerStockThreshold" />
+          <param name="playerStockThreshold" value="0" />
           <param name="corridorDepth" value="$corridorDepth" />
           <param name="corridorMarkup" value="$corridorMarkup" />
         </create_order>
@@ -260,7 +266,7 @@
       <set_value name="this.ship.pilot.$mwexFleetCopySignature" exact="$copySignature" />
       <!-- Shared capacity dispatcher is the sole M4 search implementation. -->
       <run_script name="'mule.fleet.run'">
-        <param name="cfg" value="table[$ship=this.ship,$origin=this.ship.defaultorder,$home=$home,$maxDist=$maxDist,$dedicatedServe=$dedicatedServe,$allowPlayerSuppliers=$allowPlayerSuppliers,$allowAiSuppliers=$allowAiSuppliers,$allowBuildstorage=$allowBuildstorage,$allowResources=$allowResources,$allowIntermediates=$allowIntermediates,$allowTradewares=$allowTradewares,$lockWares=$lockWares,$maxTrades=$maxTrades,$minCargoUsed=$minCargoUsed,$playerStockThreshold=$playerStockThreshold,$corridorDepth=$corridorDepth,$corridorMarkup=$corridorMarkup,$wares=$specialWareBasket]" />
+        <param name="cfg" value="table[$ship=this.ship,$origin=this.ship.defaultorder,$home=$home,$maxDist=$maxDist,$dedicatedServe=$dedicatedServe,$allowPlayerSuppliers=false,$allowAiSuppliers=true,$allowBuildstorage=$allowBuildstorage,$allowResources=$allowResources,$allowIntermediates=$allowIntermediates,$allowTradewares=$allowTradewares,$lockWares=$lockWares,$maxTrades=$maxTrades,$minCargoUsed=$minCargoUsed,$playerStockThreshold=0,$corridorDepth=$corridorDepth,$corridorMarkup=$corridorMarkup,$wares=$specialWareBasket]" />
       </run_script>
       <return />
     </actions>
